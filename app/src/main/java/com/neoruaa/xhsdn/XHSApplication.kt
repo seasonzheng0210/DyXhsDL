@@ -12,8 +12,6 @@ class XHSApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // Initial setup only
-
     }
 
     companion object {

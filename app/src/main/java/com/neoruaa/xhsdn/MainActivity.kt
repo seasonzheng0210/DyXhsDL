@@ -270,11 +270,8 @@ class MainActivity : ComponentActivity() {
                                 // A. Auto Download Priority
                                 lastHandledUrl = dedupeKey
                                 viewModel.updateUrl(clipText)
-                                
-                                // ... (Auto download logic)
                                 Log.d("XHS_Debug", "Triggering Auto Download")
-                                
-                                // Trigger Download
+
                                 if (selectiveDownload) {
                                     viewModel.startSelectiveDownload { showToast(it) }
                                 } else {
@@ -286,7 +283,7 @@ class MainActivity : ComponentActivity() {
                                     context,
                                     System.currentTimeMillis().toInt(),
                                     "开始下载",
-                                    clipText, // Full content
+                                    clipText,
                                     false
                                 )
                                 
@@ -331,7 +328,7 @@ class MainActivity : ComponentActivity() {
                 android.content.ClipboardManager.OnPrimaryClipChangedListener {
                      // 延迟检测，解决 listener 触发时 ClipData 可能尚未准备好的问题
                      scope.launch {
-                         kotlinx.coroutines.delay(300) // 300ms 延迟
+                         kotlinx.coroutines.delay(300)
                          checkClipboard()
                      }
                 }
@@ -684,9 +681,6 @@ class MainActivity : ComponentActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == WEBVIEW_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
-            // Debug: Show that we received the result
-//            showToast("收到WebView结果")
-
             val urls = data.getStringArrayListExtra("image_urls") ?: emptyList()
             val content = data.getStringExtra("content_text")
             val taskId = data.getLongExtra("task_id", -1L).takeIf { it > 0 }
@@ -705,9 +699,6 @@ class MainActivity : ComponentActivity() {
             }
 
             if (urls.isNotEmpty()) {
-                // Debug: Show how many URLs were received
-//                showToast("收到${urls.size}个URL")
-
                 // Check if a task ID was passed from WebViewActivity (meaning task was already created)
                 val taskToUse = if (taskId != null) {
                     // Task was already created in WebViewActivity
@@ -724,24 +715,14 @@ class MainActivity : ComponentActivity() {
 
                     // Update the task status to DOWNLOADING immediately since we have the URLs
                     com.neoruaa.xhsdn.data.TaskManager.updateTaskStatus(newTaskId, com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING)
-
-                    // Debug: Show that task was created
-//                    showToast("已创建任务ID: $newTaskId")
                     newTaskId
                 }
 
-//                showToast("开始爬取，请等待任务完成")
-//                showToast("准备调用viewModel.onWebCrawlResult，URL数量: ${urls.size}")
                 viewModel.onWebCrawlResult(urls, content, taskToUse)
                 // 网页爬取同样需要在后台持续，转派前台服务执行
                 com.neoruaa.xhsdn.DownloadService.startWebCrawl(this, urls, content, taskToUse)
             } else {
                 showToast("未发现可下载的资源")
-            }
-        } else {
-            // Debug: Show that result was not as expected
-            if (requestCode == WEBVIEW_REQUEST_CODE) {
-//                showToast("WebView返回结果异常: resultCode=$resultCode")
             }
         }
     }
@@ -1080,17 +1061,6 @@ private fun SelectiveDownloadSheet(
                             )
                         }
                     }
-//                    if (selectiveState.status.isNotBlank() &&
-//                        selectiveState.phase != SelectiveDownloadPhase.Ready
-//                    ) {
-//                        Text(
-//                            text = selectiveState.status,
-//                            fontSize = 12.sp,
-//                            color = Color.Gray,
-//                            maxLines = 2,
-//                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-//                        )
-//                    }
                 }
             }
 
@@ -1773,20 +1743,6 @@ private fun TaskCell(
                         }
                     }
                 } else {
-//                    // 复制链接按钮
-//                    TextButton(
-//                        text = "复制链接",
-//                        onClick = onCopyUrl,
-//                        modifier = Modifier.weight(1f)
-//                    )
-//
-//                    // 爬取按钮（通过网页爬取功能打开）
-//                    TextButton(
-//                        text = "网页爬取",
-//                        onClick = onWebCrawl,
-//                        modifier = Modifier.weight(1f)
-//                    )
-
                     // 重试按钮（仅失败任务显示）
                     if (task.status == com.neoruaa.xhsdn.data.TaskStatus.FAILED) {
                         Button(

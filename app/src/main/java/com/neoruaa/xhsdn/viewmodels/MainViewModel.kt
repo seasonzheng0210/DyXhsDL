@@ -779,7 +779,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val desc = XHSDownloader(getApplication(), null).getNoteDescription(targetUrl)
             withContext(Dispatchers.Main) {
                 if (!desc.isNullOrEmpty()) {
-//                    copyToClipboard(desc)
                     appendStatus("已提取文案：\n$desc")
 
                     // 如果当前有任务ID，则更新任务的笔记内容
@@ -948,7 +947,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     } else {
                         appendStatus("网页爬取出错: ${e.message}")
-                        e.printStackTrace() // Print stack trace for debugging
+                        e.printStackTrace()
                         // Mark task as failed if myTaskId was provided
                         if (myTaskId > 0) {
                             TaskManager.completeTask(myTaskId, false, "网页爬取出错: ${e.message}")

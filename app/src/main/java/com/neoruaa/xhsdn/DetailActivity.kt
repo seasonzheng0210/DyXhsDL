@@ -295,8 +295,7 @@ private fun DetailScreen(
                         )
 
                         val menuItems = listOf(
-                            stringResource(R.string.copy_link),
-//                            stringResource(R.string.web_crawl_action)
+                            stringResource(R.string.copy_link)
                         )
 
                         WindowListPopup(
