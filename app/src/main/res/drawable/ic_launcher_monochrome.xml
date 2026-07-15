@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 抖音音符（左侧，单色：白色） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M28,62 C28,72 38,76 46,70 C47,69 48,67 48,64 L48,34 C48,32 49,31 50,30 L54,28 L54,22 L42,24 C38,25 36,28 36,32 L36,56 C34,57 32,57 30,56 C28,55 26,58 28,62 Z" />
+    <!-- 小红书书形（右侧，单色：白色） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M60,28 L78,28 C80,28 82,30 82,32 L82,72 C82,74 80,76 78,76 L60,76 C58,76 56,74 56,72 L56,32 C56,30 58,28 60,28 Z M72,34 L62,34 L62,70 L72,70 L72,34 Z M76,34 L76,70 L78,70 L78,34 L76,34 Z" />
+    <!-- 下载箭头（下方居中） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M52,52 L56,52 L56,70 L64,62 L67,65 L54,78 L41,65 L44,62 L52,70 Z" />
+    <!-- 下载托盘 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,82 L70,82 L70,86 L38,86 Z" />
+</vector>

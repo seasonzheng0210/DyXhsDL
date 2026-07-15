@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">抖音小红书下载器</string>
+    <string name="enter_xhs_url">輸入小紅書貼文分享連結</string>
+    <string name="download_button">下載媒體</string>
+    <string name="ready_to_download">點擊底部按鈕開始下載</string>
+    <string name="please_enter_url">請輸入連結</string>
+    <string name="grant_all_files_access">請授予「所有檔案存取權限」以獲得更好的功能體驗</string>
+    <string name="storage_permission_granted">儲存權限已授予</string>
+    <string name="storage_permission_denied">儲存權限被拒絕。下載功能可能受限。</string>
+    <string name="processing_url">正在處理 「%1$s」</string>
+    <string name="initializing_download">正在初始化下載...</string>
+    <string name="error_occurred">錯誤: %1$s</string>
+    <string name="download_completed_successfully">下載成功完成！</string>
+    <string name="download_failed">下載失敗！</string>
+    <string name="clear_input">清除輸入</string>
+    <string name="downloaded_files_title">已下載檔案：</string>
+    <string name="app_description"><![CDATA[無損解析度 & 無浮水印]]></string>
+    <string name="settings">設定</string>
+    <string name="default_save_path_info">所有檔案將儲存到內建儲存空間的Pictures或Movies + 「xhsdn」子資料夾</string>
+    <string name="cancel">取消</string>
+    <string name="apply">確認</string>
+    <string name="settings_saved">設定儲存成功</string>
+    <string name="open_github_repository">開啟GitHub倉庫</string>
+    <string name="create_live_photos">建立Android動態照片</string>
+    <string name="enable_custom_naming">啟用自訂命名格式</string>
+    <string name="custom_format_label">目前命名格式</string>
+    <string name="custom_format_hint">例如：{title}_{publishTime}_{downloadTimestamp}</string>
+    <string name="custom_format_description">可將任意字元與大括號欄位組合，系統會自動在末尾附加編號以確保唯一性。</string>
+    <string name="reset_format">重設為預設格式</string>
+    <string name="available_tokens_label">可用欄位</string>
+    <string name="custom_format_drag_hint">長按欄位可拖曳到上方，點選則在游標位置插入。</string>
+    <string name="token_username">使用者名稱</string>
+    <string name="token_user_id">小紅書號</string>
+    <string name="token_title">標題</string>
+    <string name="token_post_id">筆記ID</string>
+    <string name="token_publish_time">發布時間</string>
+    <string name="token_index">第幾張（自然數）</string>
+    <string name="token_index_padded">第幾張（二位數）</string>
+    <string name="token_download_timestamp">開始下載時的時間戳</string>
+    <string name="webview_title">透過網頁爬取</string>
+    <string name="webview_enter_url">網頁連結</string>
+    <string name="webview_go">前往</string>
+    <string name="webview_crawl">爬取</string>
+    <string name="no_urls_found_javascript_null">頁面上未找到URL（JavaScript回傳空值）</string>
+    <string name="no_accessible_urls_found">頁面上未找到可存取的URL</string>
+    <string name="error_parsing_urls">解析URL時發生錯誤：%1$s</string>
+    <string name="invalid_url_format">無效的URL格式</string>
+    <string name="no_url_to_process">沒有要處理的URL</string>
+    <string name="cannot_open_image">無法開啟圖片：%1$s</string>
+    <string name="cannot_open_video">無法開啟影片：%1$s</string>
+    <string name="cannot_open_file">無法開啟檔案：%1$s</string>
+    <string name="found_images_via_web_crawl">透過網頁爬取找到%1$d個媒體：</string>
+    <string name="json_parsing_failed_web_crawl">JSON解析失敗。點選「%1$s」嘗試基於網頁的擷取。</string>
+    <string name="web_crawl">透過網頁爬取</string>
+    <string name="converted_cdn_original_images">已轉換CDN無壓縮連結，下載中...</string>
+    <string name="no_images_found_via_web_crawl">透過網頁爬取未找到媒體。</string>
+    <string name="download_error_for_url">下載錯誤：%1$s，URL：%2$s</string>
+    <string name="all_downloads_completed">所有下載已完成。</string>
+    <string name="error_processing_image_urls">處理圖片URL時發生錯誤：%1$s</string>
+    <string name="crawl_medias">爬取網頁上的媒體</string>
+    <string name="copy_text_button">複製文案</string>
+    <string name="fetching_desc">正在取得文案...</string>
+    <string name="desc_copied">文案已複製到剪貼簿！</string>
+    <string name="desc_not_found">未找到文案！</string>
+    <string name="individual_file_download_progress">目前檔案下載進度：%1$d%%</string>
+    <string name="overall_download_progress">整體下載進度：%1$d%%</string>
+    <string name="items_completed">個項目已完成</string>
+    <string name="items_remaining">個項目剩餘</string>
+    <string name="accessibility_service_description">啟用此服務以允許小紅書下載器在背景監聽您的剪貼簿，自動偵測小紅書連結並開始下載。</string>
+
+    <!-- Settings category titles -->
+    <string name="download_options">下載選項</string>
+    <string name="clipboard">剪貼簿</string>
+    <string name="file_naming">檔案命名</string>
+    <string name="about">關於</string>
+
+    <!-- Download option strings -->
+    <string name="create_live_photos_desc">關閉後 Live Photo 將作為圖片+影片分別下載</string>
+    <string name="selective_download">選擇性下載</string>
+    <string name="selective_download_desc">先快取媒體，再選擇要儲存的內容</string>
+    <string name="selective_download_caching">正在快取媒體...</string>
+    <string name="selective_download_ready">已選擇 %1$d/%2$d</string>
+    <string name="selective_download_saving">正在儲存選中內容...</string>
+    <string name="selective_download_error">選擇性下載失敗</string>
+    <string name="debug_notifications">調試通知</string>
+    <string name="debug_notifications_desc">顯示詳細的下載調試資訊</string>
+    <string name="keep_screen_on">保持螢幕常亮</string>
+    <string name="keep_screen_on_desc">App 在前台時防止手機自動鎖定螢幕</string>
+
+    <!-- Clipboard option strings -->
+    <string name="show_clipboard_bubble">顯示剪貼簿氣泡</string>
+    <string name="show_clipboard_bubble_desc">偵測到連結時顯示提示卡片</string>
+    <string name="auto_read_clipboard">自動讀取剪貼簿並下載</string>
+    <string name="auto_read_clipboard_desc">偵測到連結時自動開始下載</string>
+    <string name="manual_input_links">手動輸入連結</string>
+    <string name="manual_input_links_desc">開啟後不再自動擷取剪貼簿內容</string>
+
+    <!-- File naming option strings -->
+    <string name="enable_custom_naming_desc">使用範本命名檔案</string>
+    <string name="naming_template">命名範本</string>
+    <string name="reset_template">重設範本</string>
+    <string name="insert_placeholder_hint">點選下方預留位置可插入到游標處</string>
+
+    <!-- About section strings -->
+    <string name="version">版本號</string>
+    <string name="visit_github">前往 GitHub</string>
+    <string name="github_link">GitHub 連結</string>
+
+    <!-- Additional strings for i18n -->
+    <string name="back">返回</string>
+    <string name="version_with_prefix">v%s</string>
+    <string name="more_options">更多選項</string>
+    <string name="copy_link">複製分享連結</string>
+    <string name="web_crawl_action">網頁爬取</string>
+
+    <!-- Strings extracted from layouts -->
+    <string name="go_button">前往</string>
+    <string name="enter_url_hint">輸入網址</string>
+
+    <!-- Toast messages -->
+    <string name="unable_to_open_file">無法開啟檔案: %1$s</string>
+    <string name="link_copied">連結已複製</string>
+    <string name="no_valid_link_found">未找到有效連結</string>
+    <string name="storage_permission_required">缺少儲存權限，請開啟 App 授予权限</string>
+    <string name="clipboard_no_xhs_link">剪貼簿中未偵測到小紅書連結</string>
+    <string name="copied_description">已複製文案</string>
+    <string name="unable_to_open_browser">無法開啟瀏覽器: %1$s</string>
+    <string name="invalid_link_please_reenter">未找到有效連結，請重新輸入</string>
+    <string name="storage_permission_granted_continue">已獲得儲存權限，可繼續下載</string>
+    <string name="storage_permission_missing_unable_save">缺少儲存權限，無法儲存檔案</string>
+    <string name="file_does_not_exist">檔案不存在：%1$s</string>
+    <string name="unable_to_open_file_error">無法開啟檔案：%1$s</string>
+    <string name="grant_all_files_access_retry">請授予所有檔案存取權限後重試</string>
+    <string name="task_ignored_downloading">任務忽略，連結正在下載中，請勿重複複製</string>
+    <string name="task_ignored_recently_downloaded">任務忽略，該連結最近已下載過，請在歷史頁面查看</string>
+    <string name="auto_download_unavailable">無法自動下載</string>
+    <string name="preparing_download">正在準備下載...</string>
+    <string name="downloading_files_count">正在下載... 共 %1$d 個檔案</string>
+    <string name="download_completed_files_count">下載完成，成功下載 %1$d 個檔案</string>
+    <string name="download_failed_no_files">下載失敗，未能下載檔案</string>
+    <string name="download_failed_check_network">下載失敗，請檢查網路或連結</string>
+    <string name="download_cancelled_by_user">下載已取消，使用者操作</string>
+    <string name="download_error_message">下載發生錯誤：%1$s</string>
+    <string name="user_manually_stopped">使用者手動停止</string>
+    <string name="delete_file_dialog_title">刪除檔案</string>
+    <string name="delete_file_dialog_message">是否刪除 \"%1$s\" 媒體檔案？</string>
+    <string name="notes_content_title">筆記文案</string>
+    <string name="downloaded_files_title_lower">已下載檔案</string>
+    <string name="no_downloaded_files">暫無已下載項目</string>
+    <string name="play_content_description">播放</string>
+    <string name="delete_content_description">刪除</string>
+    <string name="back_content_description">返回</string>
+    <string name="retry">重試</string>
+    <string name="task_info_format">%1$s · %2$d 個檔案</string>
+    <string name="failed_files_format">· %1$d 失敗</string>
+    <string name="files_completed_format">%1$d/%2$d</string>
+    <string name="official_limitation_tip">因官方限制，僅能下載低畫質版本。如需高畫質，選網頁爬取。</string>
+    <string name="download_completed_notification_title">下載完成</string>
+    <string name="download_failed_notification_title">下載失敗</string>
+    <string name="download_cancelled_notification_title">下載已取消</string>
+    <string name="download_error_notification_title">下載發生錯誤</string>
+    <string name="media_type_image">圖片</string>
+    <string name="media_type_video">影片</string>
+    <string name="media_type_other">其他</string>
+    <string name="note_type_image">圖文</string>
+    <string name="note_type_video">影片</string>
+    <string name="note_type_unknown">未知</string>
+    <string name="note_type_web_crawl">網頁爬取</string>
+    <string name="task_status_queued">排隊中</string>
+    <string name="task_status_downloading">下載中</string>
+    <string name="task_status_completed">已完成</string>
+    <string name="task_status_failed">下載失敗</string>
+    <string name="task_status_waiting_for_user">等待選擇</string>
+    <string name="progress_format">%1$d%%</string>
+    <string name="progress_speed_format">%1$s｜%2$s</string>
+
+    <!-- Additional UI texts -->
+    <string name="app_full_name">抖音小紅書下載器</string>
+    <string name="tab_all">全部</string>
+    <string name="tab_waiting_for_selection">等待選擇(%1$d)</string>
+    <string name="tab_failed">失敗(%1$d)</string>
+    <string name="start_download_from_clipboard">從剪貼簿開始下載</string>
+    <string name="clear_history_dialog_title">清除歷史記錄</string>
+    <string name="clear_history_dialog_message">確定要刪除全部下載記錄嗎？已下載的檔案不會被刪除。</string>
+    <string name="delete_task_dialog_title">刪除任務</string>
+    <string name="delete_task_dialog_message">確定要刪除這條下載記錄嗎？已下載的檔案不會被刪除。</string>
+    <string name="copy_description">提取文案</string>
+    <string name="web_crawl_option">從網頁爬取</string>
+    <string name="clear_history">清除歷史記錄</string>
+    <string name="download_detail_title">下載詳情</string>
+    <string name="downloading_files">正在下載...</string>
+    <string name="clipboard_xhs_link_detected">偵測到小紅書連結</string>
+    <string name="clipboard_douyin_link_detected">偵測到抖音連結</string>
+    <string name="menu_failure_log">失敗日誌</string>
+    <string name="failure_log_title">下載失敗日誌</string>
+    <string name="failure_log_empty">暫無失敗記錄</string>
+    <string name="copy_log">複製</string>
+    <string name="log_copied">日誌已複製</string>
+    <string name="fg_channel_name">背景下載</string>
+    <string name="fg_service_running">正在背景下載</string>
+
+    <!-- 解析不一致診斷（issue #37） -->
+    <string name="retry_inconsistent_dialog_title">解析結果不一致</string>
+    <string name="retry_inconsistent_dialog_message">注意到您正在重試上一次下載，但本次解析到的數量與上次不同（上次 %1$d 項，本次 %2$d 項）。是否將兩次的詳細日誌儲存到 Download 資料夾，以便回報給開發者？</string>
+    <string name="retry_inconsistent_save_button">儲存日誌</string>
+    <string name="retry_inconsistent_save_success">日誌已儲存到 %1$s</string>
+    <string name="retry_inconsistent_save_failed">日誌儲存失敗</string>
+</resources>

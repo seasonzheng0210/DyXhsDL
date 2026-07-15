@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">抖音小红书下载器</string>
+    <string name="enter_xhs_url">Enter XHS post share URL</string>
+    <string name="download_button">Download Media</string>
+    <string name="ready_to_download">Press the button below to download</string>
+    <string name="please_enter_url">Please enter a URL</string>
+    <string name="grant_all_files_access">Please grant \'All files access\' permission for better functionality</string>
+    <string name="storage_permission_granted">Storage permission granted</string>
+    <string name="storage_permission_denied">Storage permission denied. Download functionality may be limited.</string>
+    <string name="processing_url">Processing ‘%1$s’</string>
+    <string name="initializing_download">Initializing download...</string>
+    <string name="error_occurred">Error: %1$s</string>
+    <string name="download_completed_successfully">Download completed successfully!</string>
+    <string name="download_failed">Download failed!</string>
+    <string name="downloaded_files_title">Downloaded files:</string>
+    <string name="clear_input">Clear input</string>
+    <string name="app_description"><![CDATA[origin resolution & no watermark]]></string>
+    <string name="settings">Settings</string>
+    <string name="default_save_path_info">All files will be saved to MediaStore\'s Pictures or Movies + \"xhsdn\" subfolder</string>
+    <string name="cancel">Cancel</string>
+    <string name="apply">Apply</string>
+    <string name="settings_saved">Settings saved successfully</string>
+    <string name="open_github_repository">Open GitHub Repository</string>
+    <string name="create_live_photos">Create Android Live Photos</string>
+    <string name="enable_custom_naming">Enable custom naming format</string>
+    <string name="custom_format_label">Current naming template</string>
+    <string name="custom_format_hint">Example: {title}_{publishTime}_{downloadTimestamp}</string>
+    <string name="custom_format_description">Combine any characters with fields wrapped in braces; an index is appended automatically to keep files unique.</string>
+    <string name="reset_format">Reset to default</string>
+    <string name="available_tokens_label">Available fields</string>
+    <string name="custom_format_drag_hint">Long press a field to drag it above, tap to insert at the cursor.</string>
+    <string name="token_username">Username</string>
+    <string name="token_user_id">Xiaohongshu ID</string>
+    <string name="token_title">Title</string>
+    <string name="token_post_id">Note ID</string>
+    <string name="token_publish_time">Publish time</string>
+    <string name="token_index">Index (natural number)</string>
+    <string name="token_index_padded">Index (two digits)</string>
+    <string name="token_download_timestamp">Download start timestamp</string>
+    <string name="webview_title">Fetch Via WebView</string>
+    <string name="webview_enter_url">Enter a URL</string>
+    <string name="webview_go">Go</string>
+    <string name="webview_crawl">Crawl</string>
+    <string name="no_urls_found_javascript_null">No URLs found on the page (JavaScript returned null)</string>
+    <string name="no_accessible_urls_found">No accessible URLs found on the page</string>
+    <string name="error_parsing_urls">Error parsing URLs: %1$s</string>
+    <string name="invalid_url_format">Invalid URL format</string>
+    <string name="no_url_to_process">No URL to process</string>
+    <string name="cannot_open_image">Cannot open image: %1$s</string>
+    <string name="cannot_open_video">Cannot open video: %1$s</string>
+    <string name="cannot_open_file">Cannot open file: %1$s</string>
+    <string name="found_images_via_web_crawl">Found %1$d medias via web crawl:</string>
+    <string name="json_parsing_failed_web_crawl">JSON parsing failed. Click 「%1$s」 to try web-based extraction.</string>
+    <string name="web_crawl">Fetch via Web Crawl</string>
+    <string name="converted_cdn_original_images">Converted CDN original files, downloading...</string>
+    <string name="no_images_found_via_web_crawl">No medias found via web crawl.</string>
+    <string name="download_error_for_url">Download Error: %1$s for URL: %2$s</string>
+    <string name="all_downloads_completed">All downloads completed.</string>
+    <string name="error_processing_image_urls">Error processing image URLs: %1$s</string>
+    <string name="crawl_medias">Crawl Medias On Page</string>
+    <string name="copy_text_button">Copy Text</string>
+    <string name="fetching_desc">Fetching description...</string>
+    <string name="desc_copied">Description copied to clipboard!</string>
+    <string name="desc_not_found">Description not found!</string>
+    <string name="individual_file_download_progress">Current file download progress: %1$d%%</string>
+    <string name="overall_download_progress">Overall download progress: %1$d%%</string>
+    <string name="items_completed">items completed</string>
+    <string name="items_remaining">items remaining</string>
+    <string name="accessibility_service_description">Enable this utility to allow XHS Downloader to monitor your clipboard in the background, automatically detect Xiaohongshu links, and start downloading.</string>
+
+    <!-- Settings category titles -->
+    <string name="download_options">Download Options</string>
+    <string name="clipboard">Clipboard</string>
+    <string name="file_naming">File Naming</string>
+    <string name="about">About</string>
+
+    <!-- Download option strings -->
+    <string name="create_live_photos_desc">Live Photos will be saved as image+video separately when disabled</string>
+    <string name="selective_download">Selective Download</string>
+    <string name="selective_download_desc">Cache media first, then choose which items to save</string>
+    <string name="selective_download_caching">Caching media...</string>
+    <string name="selective_download_ready">%1$d/%2$d selected</string>
+    <string name="selective_download_saving">Saving selected media...</string>
+    <string name="selective_download_error">Selective download failed</string>
+    <string name="debug_notifications">Debug Notifications</string>
+    <string name="debug_notifications_desc">Show detailed download debugging information</string>
+    <string name="keep_screen_on">Keep Screen On</string>
+    <string name="keep_screen_on_desc">Prevent the phone from auto-locking while the app is in the foreground</string>
+
+    <!-- Clipboard option strings -->
+    <string name="show_clipboard_bubble">Show Clipboard Bubble</string>
+    <string name="show_clipboard_bubble_desc">Show hint card when link is detected</string>
+    <string name="auto_read_clipboard">Auto Read Clipboard and Download</string>
+    <string name="auto_read_clipboard_desc">Automatically start downloading when link is detected</string>
+    <string name="manual_input_links">Manual Input Links</string>
+    <string name="manual_input_links_desc">Enable manual input instead of auto-reading clipboard content</string>
+
+    <!-- File naming option strings -->
+    <string name="enable_custom_naming_desc">Use template to name files</string>
+    <string name="naming_template">Naming Template</string>
+    <string name="reset_template">Reset Template</string>
+    <string name="insert_placeholder_hint">Click on placeholders below to insert at cursor position</string>
+
+    <!-- About section strings -->
+    <string name="version">Version</string>
+    <string name="visit_github">Visit GitHub</string>
+    <string name="github_link">GitHub Link</string>
+
+    <!-- Additional strings for i18n -->
+    <string name="back">Back</string>
+    <string name="version_with_prefix">v%s</string>
+    <string name="more_options">More options</string>
+    <string name="copy_link">Copy Link</string>
+    <string name="web_crawl_action">Web Crawl</string>
+
+    <!-- Strings extracted from layouts -->
+    <string name="go_button">Go</string>
+    <string name="enter_url_hint">Enter URL</string>
+
+    <!-- Toast messages -->
+    <string name="unable_to_open_file">Unable to open file: %1$s</string>
+    <string name="link_copied">Link copied</string>
+    <string name="no_valid_link_found">No valid link found</string>
+    <string name="storage_permission_required">Storage permission required, please open the app to grant permission</string>
+    <string name="clipboard_no_xhs_link">No Xiaohongshu link detected in clipboard</string>
+    <string name="copied_description">Description copied</string>
+    <string name="unable_to_open_browser">Unable to open browser: %1$s</string>
+    <string name="invalid_link_please_reenter">Invalid link, please re-enter</string>
+    <string name="storage_permission_granted_continue">Storage permission granted, you can continue downloading</string>
+    <string name="storage_permission_missing_unable_save">Missing storage permission, unable to save files</string>
+    <string name="file_does_not_exist">File does not exist: %1$s</string>
+    <string name="unable_to_open_file_error">Unable to open file: %1$s</string>
+    <string name="grant_all_files_access_retry">Please grant all files access permission and try again</string>
+    <string name="task_ignored_downloading">Task ignored, link is downloading, please do not copy repeatedly</string>
+    <string name="task_ignored_recently_downloaded">Task ignored, this link was recently downloaded, please check the history page</string>
+    <string name="auto_download_unavailable">Automatic download unavailable</string>
+    <string name="preparing_download">Preparing download...</string>
+    <string name="downloading_files_count">Downloading... %1$d files in total</string>
+    <string name="download_completed_files_count">Download completed, %1$d files downloaded successfully</string>
+    <string name="download_failed_no_files">Download failed, no files downloaded</string>
+    <string name="download_failed_check_network">Download failed, please check network or link</string>
+    <string name="download_cancelled_by_user">Download cancelled by user</string>
+    <string name="download_error_message">Download error: %1$s</string>
+    <string name="user_manually_stopped">User manually stopped</string>
+    <string name="delete_file_dialog_title">Delete file</string>
+    <string name="delete_file_dialog_message">Are you sure you want to delete \"%1$s\" media file?</string>
+    <string name="notes_content_title">Notes Content</string>
+    <string name="downloaded_files_title_lower">Downloaded files</string>
+    <string name="no_downloaded_files">No downloaded files yet</string>
+    <string name="play_content_description">Play</string>
+    <string name="delete_content_description">Delete</string>
+    <string name="back_content_description">Back</string>
+    <string name="retry">Retry</string>
+    <string name="task_info_format">%1$s · %2$d files</string>
+    <string name="failed_files_format">· %1$d failed</string>
+    <string name="files_completed_format">%1$d/%2$d</string>
+    <string name="official_limitation_tip">Due to official restrictions, only low-resolution versions can be downloaded. For high-definition, select web crawl.</string>
+    <string name="download_completed_notification_title">Download completed</string>
+    <string name="download_failed_notification_title">Download failed</string>
+    <string name="download_cancelled_notification_title">Download cancelled</string>
+    <string name="download_error_notification_title">Download error</string>
+    <string name="media_type_image">IMAGE</string>
+    <string name="media_type_video">VIDEO</string>
+    <string name="media_type_other">OTHER</string>
+    <string name="note_type_image">Image</string>
+    <string name="note_type_video">Video</string>
+    <string name="note_type_unknown">Unknown</string>
+    <string name="note_type_web_crawl">Web Crawl</string>
+    <string name="task_status_queued">Queued</string>
+    <string name="task_status_downloading">Downloading</string>
+    <string name="task_status_completed">Completed</string>
+    <string name="task_status_failed">Download Failed</string>
+    <string name="task_status_waiting_for_user">Waiting for Selection</string>
+    <string name="progress_format">%1$d%%</string>
+    <string name="progress_speed_format">%1$s｜%2$s</string>
+
+    <!-- Additional UI texts -->
+    <string name="app_full_name">抖音小红书下载器</string>
+    <string name="tab_all">All</string>
+    <string name="tab_waiting_for_selection">Waiting for Selection (%1$d)</string>
+    <string name="tab_failed">Failed (%1$d)</string>
+    <string name="start_download_from_clipboard">Start Download from Clipboard</string>
+    <string name="clear_history_dialog_title">Clear History</string>
+    <string name="clear_history_dialog_message">Are you sure you want to delete all download records? Downloaded files will not be deleted.</string>
+    <string name="delete_task_dialog_title">Delete Task</string>
+    <string name="delete_task_dialog_message">Are you sure you want to delete this download record? Downloaded files will not be deleted.</string>
+    <string name="copy_description">Copy Description</string>
+    <string name="web_crawl_option">Web Crawl</string>
+    <string name="clear_history">Clear History</string>
+    <string name="download_detail_title">Download Details</string>
+    <string name="downloading_files">Downloading...</string>
+    <string name="clipboard_xhs_link_detected">XHS Link Detected</string>
+    <string name="clipboard_douyin_link_detected">Douyin Link Detected</string>
+    <string name="menu_failure_log">Failure Log</string>
+    <string name="failure_log_title">Download Failure Log</string>
+    <string name="failure_log_empty">No failures recorded</string>
+    <string name="copy_log">Copy</string>
+    <string name="log_copied">Log copied</string>
+    <string name="fg_channel_name">Background Download</string>
+    <string name="fg_service_running">Downloading in background</string>
+
+    <!-- Parse inconsistency diagnostic (issue #37) -->
+    <string name="retry_inconsistent_dialog_title">Inconsistent parse result</string>
+    <string name="retry_inconsistent_dialog_message">It looks like you\'re retrying the previous download, but the app found a different number of items this time (previously %1$d, now %2$d). Save the detailed logs of both attempts to your Download folder so you can report this to the developer?</string>
+    <string name="retry_inconsistent_save_button">Save logs</string>
+    <string name="retry_inconsistent_save_success">Logs saved to %1$s</string>
+    <string name="retry_inconsistent_save_failed">Failed to save logs</string>
+</resources>
