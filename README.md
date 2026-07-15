@@ -2,8 +2,6 @@
 
 一个 Android 应用，支持 **抖音** 与 **小红书** 无水印内容下载。抖音走直链去水印下载，小红书支持图片、视频、文案与 Live Photo 提取。
 
-> 小红书 iOS 版本仓库 ➡️ [点我](https://github.com/NEORUAA/XHS_Downloader_iOS)
-
 ## 主要功能
 
 ### 抖音
