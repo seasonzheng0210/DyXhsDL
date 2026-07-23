@@ -14,7 +14,7 @@ object UrlUtils {
      */
     fun isXhsLink(url: String?): Boolean {
         if (url == null) return false
-        return url.contains("xhslink.com") || url.contains("xiaohongshu.com")
+        return url.contains("xhslink.com") || url.contains("xhslink.cn") || url.contains("xiaohongshu.com")
     }
 
     /**

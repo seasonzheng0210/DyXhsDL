@@ -119,9 +119,11 @@ class DownloadService : Service() {
 
         scope.launch {
             try {
-                val myTaskId = taskIdExtra ?: TaskManager.createTask(
-                    targetUrl, null, NoteType.VIDEO, 1, source = "douyin"
-                ).also { TaskManager.startTask(it) }
+                val myTaskId = taskIdExtra
+                    ?: TaskManager.findActiveTaskIdByUrl(targetUrl)
+                    ?: TaskManager.createTask(
+                        targetUrl, null, NoteType.VIDEO, 1, source = "douyin"
+                    ).also { TaskManager.startTask(it) }
                 activeJobs[myTaskId] = coroutineContext[Job]!!
 
                 updateNotification(getString(R.string.downloading_files), "抖音解析中…", true)
@@ -171,6 +173,7 @@ class DownloadService : Service() {
     private fun startXhs(rawUrl: String, taskIdExtra: Long?) {
         val targetUrl = UrlUtils.extractFirstUrl(rawUrl) ?: rawUrl
         if (!targetUrl.startsWith("http://", true) && !targetUrl.startsWith("https://", true)) {
+            DownloadLogger.logFailure(this, "xhs", rawUrl, "无法从剪贴板提取有效链接")
             TaskManager.createTask(targetUrl, null, NoteType.IMAGE, 1).also {
                 TaskManager.startTask(it)
                 TaskManager.completeTask(it, false, "无法提取有效链接")
@@ -184,10 +187,16 @@ class DownloadService : Service() {
 
         scope.launch {
             try {
-                val mediaCount = runCatching { XHSDownloader(this@DownloadService).getMediaCount(targetUrl) }.getOrElse { 0 }
-                val myTaskId = taskIdExtra ?: TaskManager.createTask(
-                    targetUrl, null, NoteType.IMAGE, if (mediaCount > 0) mediaCount else 1
-                ).also { TaskManager.startTask(it) }
+                val mediaCount = runCatching { XHSDownloader(this@DownloadService).getMediaCount(targetUrl) }.getOrElse { e ->
+                    DownloadLogger.logFailure(this@DownloadService, "xhs", targetUrl, "获取媒体数量失败: ${e.message}")
+                    Log.e(TAG, "xhs getMediaCount failed", e)
+                    0
+                }
+                val myTaskId = taskIdExtra
+                    ?: TaskManager.findActiveTaskIdByUrl(targetUrl)
+                    ?: TaskManager.createTask(
+                        targetUrl, null, NoteType.IMAGE, if (mediaCount > 0) mediaCount else 1
+                    ).also { TaskManager.startTask(it) }
                 activeJobs[myTaskId] = coroutineContext[Job]!!
 
                 updateNotification(getString(R.string.downloading_files),
@@ -205,6 +214,8 @@ class DownloadService : Service() {
                         if (isTerminalError(status)) {
                             failed.incrementAndGet()
                             TaskManager.updateProgress(myTaskId, completed.get(), failed.get(), 0f)
+                            // 小红书失败也要落日志，方便排查（之前这里没有日志）
+                            DownloadLogger.logFailure(this@DownloadService, "xhs", originalUrl, "下载单个文件失败: $status")
                         }
                     }
                     override fun onDownloadProgress(status: String) {}
@@ -218,7 +229,11 @@ class DownloadService : Service() {
                 })
                 downloader.setShouldStopOnVideo(false)
 
-                val success = runCatching { downloader.downloadContent(targetUrl) }.getOrElse { false }
+                val success = runCatching { downloader.downloadContent(targetUrl) }.getOrElse { e ->
+                    DownloadLogger.logFailure(this@DownloadService, "xhs", targetUrl, "下载过程异常: ${e.message}")
+                    Log.e(TAG, "xhs downloadContent error", e)
+                    false
+                }
 
                 val c = completed.get()
                 val f = failed.get()
@@ -235,6 +250,9 @@ class DownloadService : Service() {
                                 getString(R.string.failed_files_format, f), false)
                     }
                     else -> {
+                        // 0 个文件：解析或下载全部失败，记一条日志便于定位（小红书接口被风控时高频出现）
+                        DownloadLogger.logFailure(this@DownloadService, "xhs", targetUrl,
+                            "未获取到任何可下载文件（解析或下载失败，无媒体可保存）。多为小红书接口风控/返回空内容导致")
                         TaskManager.completeTask(myTaskId, false, getString(R.string.download_failed_no_files))
                         updateNotification(getString(R.string.download_failed_notification_title),
                             getString(R.string.download_failed_no_files), false)

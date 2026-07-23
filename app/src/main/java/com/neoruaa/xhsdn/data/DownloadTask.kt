@@ -330,6 +330,16 @@ object TaskManager {
     }
     
     /**
+     * 根据 URL 查找最近的非终态任务 ID（用于下载入口去重，避免同链接创建多条记录）
+     * @return 匹配的任务 ID，若无匹配则返回 null
+     */
+    fun findActiveTaskIdByUrl(url: String): Long? {
+        return _tasks.value.find { task ->
+            task.noteUrl == url && !task.isCompleted
+        }?.id
+    }
+    
+    /**
      * Update task type (e.g., when video is detected)
      */
     fun updateTaskType(taskId: Long, noteType: NoteType) {

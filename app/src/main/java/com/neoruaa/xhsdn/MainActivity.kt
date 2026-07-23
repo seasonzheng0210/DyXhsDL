@@ -157,8 +157,9 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         // 切后台下载不被打断：所有下载改由前台服务执行
-        val dispatchDownload: (String, String?) -> Unit = { rawLink, source ->
-            com.neoruaa.xhsdn.DownloadService.startDownload(this, rawLink, source)
+        // taskId 透传：重试时复用同一任务，避免旧失败记录变成无人更新的僵尸记录
+        fun dispatchDownload(rawLink: String, source: String?, taskId: Long? = null) {
+            com.neoruaa.xhsdn.DownloadService.startDownload(this, rawLink, source, taskId)
         }
 
         // 防止自动锁屏
@@ -454,7 +455,7 @@ class MainActivity : ComponentActivity() {
                             // 复用同一任务（重置进度），重新派发到前台服务下载
                             com.neoruaa.xhsdn.data.TaskManager.resetTask(task.id)
                             com.neoruaa.xhsdn.data.TaskManager.startTask(task.id)
-                            dispatchDownload(task.noteUrl, if (task.source == "douyin") "douyin" else "xhs")
+                            dispatchDownload(task.noteUrl, if (task.source == "douyin") "douyin" else "xhs", task.id)
                         }
                     },
                     onDeleteTask = { task ->

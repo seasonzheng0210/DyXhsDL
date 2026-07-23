@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import com.neoruaa.xhsdn.XHSApplication
 import com.neoruaa.xhsdn.R
 import com.neoruaa.xhsdn.XHSDownloader
+import com.neoruaa.xhsdn.utils.DownloadLogger
 import com.neoruaa.xhsdn.utils.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -97,7 +98,11 @@ object BackgroundDownloadManager {
 
                 // 1. Get info
                 // We run this inside runCatching because getMediaCount might throw or do network ops
-                val mediaCount = runCatching { XHSDownloader(appContext).getMediaCount(url) }.getOrElse { 0 }
+                val mediaCount = runCatching { XHSDownloader(appContext).getMediaCount(url) }.getOrElse { e ->
+                    DownloadLogger.logFailure(appContext, "xhs", url, "获取媒体数量失败: ${e.message}")
+                    Log.e(TAG, "xhs getMediaCount failed", e)
+                    0
+                }
                 // Default to IMAGE, update later if video detected
                 val noteType = NoteType.IMAGE
                 
@@ -132,6 +137,8 @@ object BackgroundDownloadManager {
                             val failed = failedFiles.incrementAndGet()
                             taskCurrentFileProgress[taskId] = 0f
                             TaskManager.updateProgress(taskId, completedFiles.get(), failed, 0f)
+                            // 小红书失败也要落日志
+                            DownloadLogger.logFailure(appContext, "xhs", originalUrl, "下载单个文件失败: $status")
                         }
                         Log.w(TAG, "Download error for task $taskId: $status ($originalUrl)")
                     }
@@ -184,10 +191,13 @@ object BackgroundDownloadManager {
                         TaskManager.completeTask(taskId, false, "部分文件下载失败")
                         NotificationHelper.showDownloadNotification(appContext, taskId.toInt(), appContext.getString(R.string.download_failed_notification_title), partialMessage, false)
                     } else {
+                        // 0 个文件：解析/下载全失败，记日志（小红书接口风控高频出现）
+                        DownloadLogger.logFailure(appContext, "xhs", url, "解析/下载完成但未获取到任何文件（小红书接口风控导致无媒体）")
                         TaskManager.completeTask(taskId, false, appContext.getString(R.string.download_failed_no_files))
                         NotificationHelper.showDownloadNotification(appContext, taskId.toInt(), appContext.getString(R.string.download_failed_notification_title), appContext.getString(R.string.download_failed_no_files), false)
                     }
                 } else {
+                    DownloadLogger.logFailure(appContext, "xhs", url, "下载过程出错（downloader.downloadContent 返回 false）")
                     TaskManager.completeTask(taskId, false, appContext.getString(R.string.download_error_message, "下载过程出错"))
                     NotificationHelper.showDownloadNotification(appContext, taskId.toInt(), appContext.getString(R.string.download_error_notification_title), appContext.getString(R.string.download_failed_check_network), false)
                 }
@@ -204,6 +214,7 @@ object BackgroundDownloadManager {
                     Log.e(TAG, "Download error for task $taskId", e)
                     // If task was created, fail it
                     if (taskId != -1L) {
+                        DownloadLogger.logFailure(appContext, "xhs", url, "下载异常: ${e.message}")
                         TaskManager.completeTask(taskId, false, e.message ?: appContext.getString(R.string.download_error_message, "未知错误"))
                     }
                     NotificationHelper.showDownloadNotification(appContext, if (taskId != -1L) taskId.toInt() else prepId, appContext.getString(R.string.download_error_notification_title), e.message ?: appContext.getString(R.string.download_error_message, "未知错误"), false)
