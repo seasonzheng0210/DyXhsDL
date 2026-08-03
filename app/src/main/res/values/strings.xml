@@ -197,6 +197,13 @@
     <string name="failure_log_empty">No failures recorded</string>
     <string name="copy_log">Copy</string>
     <string name="log_copied">Log copied</string>
+    <string name="menu_normal_log">Normal Log</string>
+    <string name="normal_log_title">Download Normal Log</string>
+    <string name="normal_log_empty">No normal logs recorded</string>
+    <string name="menu_package_log">Package Logs</string>
+    <string name="package_log_share">Share logs</string>
+    <string name="package_log_success">Logs packaged: %1$s</string>
+    <string name="package_log_failed">Failed to package logs</string>
     <string name="fg_channel_name">Background Download</string>
     <string name="fg_service_running">Downloading in background</string>
 

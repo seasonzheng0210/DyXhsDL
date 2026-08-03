@@ -31,6 +31,7 @@ import com.neoruaa.xhsdn.FileDownloader
 import com.neoruaa.xhsdn.R
 import com.neoruaa.xhsdn.XHSDownloader
 import com.neoruaa.xhsdn.data.DownloadTask
+import com.neoruaa.xhsdn.douyin.DouyinMediaType
 import com.neoruaa.xhsdn.douyin.DouyinParser
 import com.neoruaa.xhsdn.utils.NotificationHelper
 import com.neoruaa.xhsdn.utils.DownloadLogger
@@ -1352,11 +1353,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
+            // 图集/图文：更新任务类型为图片，并刷新总数（用于进度显示）
+            if (info.type == DouyinMediaType.IMAGE) {
+                TaskManager.updateTask(myTaskId) { t ->
+                    t.copy(noteType = NoteType.IMAGE, totalFiles = info.imageUrls.size)
+                }
+                totalMediaCount = info.imageUrls.size
+                updateProgress()
+            }
+
             withContext(Dispatchers.Main) {
                 appendStatus("抖音解析成功，开始下载：${info.title}")
             }
+            DownloadLogger.logInfo(
+                getApplication(),
+                "douyin",
+                targetUrl,
+                "解析成功: ${info.title} (${if (info.type == DouyinMediaType.IMAGE) "${info.imageUrls.size} 张图" else "视频"})"
+            )
 
-            val fileName = "${info.title}.mp4"
             val callback = createDownloadCallback(
                 myTaskId,
                 java.util.concurrent.atomic.AtomicInteger(0),
@@ -1365,20 +1380,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             val downloader = FileDownloader(getApplication(), callback)
             // 照搬 DouyinDL：下载只用随机 UA，不带 Referer（传空字符串）
-            val success = runCatching {
-                downloader.downloadFile(info.videoUrl, fileName, "", info.userAgent)
-            }.getOrElse { e ->
-                DownloadLogger.logFailure(getApplication(), "douyin", info.videoUrl, "下载异常: ${e.message}")
-                withContext(Dispatchers.Main) { appendStatus("❌ 抖音下载出错: ${e.message}") }
-                false
+            val success = if (info.type == DouyinMediaType.IMAGE) {
+                var okAll = true
+                info.imageUrls.forEachIndexed { index, url ->
+                    val ext = DouyinParser.mediaExtension(url)
+                    val fileName = "${info.title}_${index + 1}.$ext"
+                    val ok = runCatching {
+                        downloader.downloadFile(url, fileName, "", info.userAgent)
+                    }.getOrElse { e ->
+                        DownloadLogger.logFailure(getApplication(), "douyin", url, "下载图片异常: ${e.message}")
+                        withContext(Dispatchers.Main) { appendStatus("❌ 抖音图片下载出错: ${e.message}") }
+                        false
+                    }
+                    if (!ok) okAll = false
+                }
+                okAll
+            } else {
+                val fileName = "${info.title}.mp4"
+                runCatching {
+                    downloader.downloadFile(info.videoUrl, fileName, "", info.userAgent)
+                }.getOrElse { e ->
+                    DownloadLogger.logFailure(getApplication(), "douyin", info.videoUrl ?: targetUrl, "下载异常: ${e.message}")
+                    withContext(Dispatchers.Main) { appendStatus("❌ 抖音下载出错: ${e.message}") }
+                    false
+                }
             }
 
             withContext(Dispatchers.Main) {
                 if (!success) {
-                    DownloadLogger.logFailure(getApplication(), "douyin", info.videoUrl, "下载失败(返回false)")
+                    DownloadLogger.logFailure(getApplication(), "douyin", info.videoUrl ?: targetUrl, "下载失败(返回false)")
                     appendStatus("❌ 抖音下载失败，日志已保存至: ${DownloadLogger.getLogFilePath(getApplication())}")
                 } else {
                     appendStatus("✅ 抖音下载完成")
+                    DownloadLogger.logInfo(getApplication(), "douyin", targetUrl, "下载完成(成功): ${info.title}")
                 }
                 TaskManager.completeTask(myTaskId, success, if (success) null else "下载失败")
                 resetDownloadTracking()

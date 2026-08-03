@@ -14,6 +14,8 @@ import androidx.core.app.NotificationCompat
 import com.neoruaa.xhsdn.data.NoteType
 import com.neoruaa.xhsdn.data.TaskManager
 import com.neoruaa.xhsdn.data.TaskStatus
+import com.neoruaa.xhsdn.douyin.DouyinMediaInfo
+import com.neoruaa.xhsdn.douyin.DouyinMediaType
 import com.neoruaa.xhsdn.douyin.DouyinParser
 import com.neoruaa.xhsdn.utils.DownloadLogger
 import com.neoruaa.xhsdn.utils.UrlUtils
@@ -136,20 +138,38 @@ class DownloadService : Service() {
                     return@launch
                 }
 
+                // 图集/图文：更新任务类型为图片，文件总数为图片数量
+                if (info.type == DouyinMediaType.IMAGE) {
+                    TaskManager.updateTask(myTaskId) { t ->
+                        t.copy(noteType = NoteType.IMAGE, totalFiles = info.imageUrls.size)
+                    }
+                }
+
                 updateNotification(getString(R.string.downloading_files), info.title, true)
+                val mediaDesc = if (info.type == DouyinMediaType.IMAGE) "${info.imageUrls.size} 张图" else "视频"
+                DownloadLogger.logInfo(this@DownloadService, "douyin", targetUrl, "解析成功: ${info.title} ($mediaDesc)")
 
-                val fileName = "${info.title}.mp4"
                 val downloader = FileDownloader(this@DownloadService, createCallback(myTaskId))
-                val success = runCatching {
-                    downloader.downloadFile(info.videoUrl, fileName, "", info.userAgent)
-                }.getOrElse { e ->
-                    DownloadLogger.logFailure(this@DownloadService, "douyin", info.videoUrl, "下载异常: ${e.message}")
-                    false
+                val success = if (info.type == DouyinMediaType.IMAGE) {
+                    downloadImages(downloader, info, myTaskId)
+                } else {
+                    val fileName = "${info.title}.mp4"
+                    runCatching {
+                        downloader.downloadFile(info.videoUrl, fileName, "", info.userAgent)
+                    }.getOrElse { e ->
+                        DownloadLogger.logFailure(this@DownloadService, "douyin", info.videoUrl ?: targetUrl, "下载异常: ${e.message}")
+                        false
+                    }.also { ok ->
+                        if (!ok) {
+                            DownloadLogger.logFailure(this@DownloadService, "douyin", info.videoUrl ?: targetUrl, "下载失败(返回false)")
+                        }
+                    }
                 }
 
-                if (!success) {
-                    DownloadLogger.logFailure(this@DownloadService, "douyin", info.videoUrl, "下载失败(返回false)")
+                if (success) {
+                    DownloadLogger.logInfo(this@DownloadService, "douyin", targetUrl, "下载完成(成功): ${info.title}")
                 }
+
                 TaskManager.completeTask(myTaskId, success,
                     if (success) null else "下载失败")
                 updateNotification(
@@ -166,6 +186,31 @@ class DownloadService : Service() {
                 maybeStop()
             }
         }
+    }
+    // endregion
+
+    // region 抖音图集下载
+    /**
+     * 逐张下载图集图片，复用 createCallback 统计进度。
+     * 全部成功返回 true，任一张失败返回 false（失败项已落日志）。
+     */
+    private fun downloadImages(downloader: FileDownloader, info: DouyinMediaInfo, taskId: Long): Boolean {
+        var okAll = true
+        info.imageUrls.forEachIndexed { index, url ->
+            val ext = DouyinParser.mediaExtension(url)
+            val fileName = "${info.title}_${index + 1}.$ext"
+            val ok = runCatching {
+                downloader.downloadFile(url, fileName, "", info.userAgent)
+            }.getOrElse { e ->
+                DownloadLogger.logFailure(this@DownloadService, "douyin", url, "下载图片异常: ${e.message}")
+                false
+            }
+            if (!ok) {
+                okAll = false
+                DownloadLogger.logFailure(this@DownloadService, "douyin", url, "图片下载失败(返回false)")
+            }
+        }
+        return okAll
     }
     // endregion
 
@@ -237,6 +282,9 @@ class DownloadService : Service() {
 
                 val c = completed.get()
                 val f = failed.get()
+                if (success && f == 0 && c > 0) {
+                    DownloadLogger.logInfo(this@DownloadService, "xhs", targetUrl, "下载完成(成功): $c 个文件")
+                }
                 when {
                     success && f == 0 && c > 0 -> {
                         TaskManager.completeTask(myTaskId, true)
@@ -345,6 +393,9 @@ class DownloadService : Service() {
                 val c = completed.get()
                 val f = failed.get()
                 val success = c > 0 && f == 0
+                if (success) {
+                    DownloadLogger.logInfo(this@DownloadService, "web", finalUrls.first(), "网页爬取完成(成功): $c 个文件")
+                }
                 TaskManager.completeTask(myTaskId, success,
                     if (success) null else if (c > 0) "部分文件下载失败" else "下载失败")
                 updateNotification(

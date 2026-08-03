@@ -9,21 +9,38 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * 抖音直链解析。逻辑完整照搬可独立工作的 DouyinDL 项目（com.noctiro.douyindl）：
- *  - 使用随机 iPhone UA（Safari/CriOS/EdgiOS/FxiOS），抖音对固定安卓 Chrome UA 更敏感；
- *  - 解析重定向时手动读取 Location 头（不自动跟随），与 DouyinDL 一致；
- *  - 请求分享页时只带 UA、不带 Referer（DouyinDL 实测可用，带 Referer 易被抖音 security 风控拦截）。
- * 流程：解析重定向拿到 videoId → 请求 iesdouyin 分享页 → 提取 window._ROUTER_DATA
- * 中的 play_addr.url_list 并替换 playwm→play（去水印）。
+ * 抖音媒体类型：视频 或 图集/图文（图片）。
  */
-data class DouyinVideoInfo(
-    val videoUrl: String,
+enum class DouyinMediaType { VIDEO, IMAGE }
+
+/**
+ * 抖音解析结果。
+ *  - VIDEO：videoUrl 不为空，imageUrls 为空；
+ *  - IMAGE ：imageUrls 不为空，videoUrl 为 null。
+ */
+data class DouyinMediaInfo(
+    val type: DouyinMediaType,
     val title: String,
+    val videoUrl: String?,
+    val imageUrls: List<String>,
     val coverUrl: String?,
     val videoId: String,
     val userAgent: String
 )
 
+/**
+ * 抖音直链解析。逻辑完整照搬可独立工作的 DouyinDL 项目（com.noctiro.douyindl）：
+ *  - 使用随机 iPhone UA（Safari/CriOS/EdgiOS/FxiOS），抖音对固定安卓 Chrome UA 更敏感；
+ *  - 解析重定向时手动读取 Location 头（不自动跟随），与 DouyinDL 一致；
+ *  - 请求分享页时只带 UA、不带 Referer（DouyinDL 实测可用，带 Referer 易被抖音 security 风控拦截）。
+ * 流程：解析重定向拿到 id → 请求 iesdouyin 分享页 → 提取 window._ROUTER_DATA
+ * 中的 play_addr.url_list（视频，替换 playwm→play 去水印）或 image_post_info.image_list
+ * （图集，逐张取 url_list 第一张）。
+ *
+ * 注意：抖音图集/图文笔记的媒体不在 video 字段，而在 image_post_info 下；旧逻辑只取 video
+ * 字段会在图集上抛 "video 字段缺失"。本实现同时支持视频与图集，并在 share/video 拿不到媒体时
+ * 回退到 share/note 端点。
+ */
 object DouyinParser {
     private const val TAG = "DouyinParser"
     const val MOBILE_UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Mobile Safari/537.36"
@@ -70,15 +87,97 @@ object DouyinParser {
         return url.contains("douyin.com") || url.contains("iesdouyin.com")
     }
 
-    suspend fun parse(url: String): DouyinVideoInfo = withContext(Dispatchers.IO) {
+    suspend fun parse(url: String): DouyinMediaInfo = withContext(Dispatchers.IO) {
         val ua = randomUserAgent()
         val finalUrl = resolveRedirects(url, ua)
-        val videoId = finalUrl.split("?")[0].trimEnd('/').split("/").last()
-        val shareUrl = "https://www.iesdouyin.com/share/video/$videoId"
+        val id = extractId(finalUrl)
+        Log.d(TAG, "finalUrl=$finalUrl id=$id ua=$ua")
 
-        Log.d(TAG, "finalUrl=$finalUrl videoId=$videoId shareUrl=$shareUrl ua=$ua")
+        // 优先用官方 iteminfo 接口（返回干净结构化 JSON，图集字段为 images[]）；
+        // 失败再回退到分享页 _ROUTER_DATA（share/video、share/note 都试）。
+        val candidates = listOf(
+            "https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids=$id",
+            "https://www.iesdouyin.com/share/video/$id",
+            "https://www.iesdouyin.com/share/note/$id"
+        )
+        var lastErr: String? = null
+        for (c in candidates) {
+            try {
+                val info = if (c.contains("iteminfo")) parseFromItemInfo(c, ua, id)
+                           else parseFromShare(c, ua, id)
+                if (info != null) return@withContext info
+            } catch (e: Exception) {
+                lastErr = e.message
+                Log.w(TAG, "解析失败 candidate=$c err=${e.message}")
+            }
+        }
+        throw Exception(lastErr ?: "抖音解析失败：未在接口或分享页找到视频/图片")
+    }
 
-        // 照搬 DouyinDL：只带 UA，不带 Referer
+    /**
+     * 从抖音长链接中提取作品 id（aweme_id）。
+     * 兼容 video/、note/ 路径，以及 discover?modal_id= 形式；
+     * 最后回退到「最后一个纯数字路径段」。
+     */
+    private fun extractId(url: String): String {
+        Regex("""(?:video|note)/(\d+)""").find(url)?.groupValues?.getOrNull(1)?.let { return it }
+        Regex("""modal_id=(\d+)""").find(url)?.groupValues?.getOrNull(1)?.let { return it }
+        val last = url.split("?")[0].trimEnd('/').split("/").last()
+        return last
+    }
+
+    /**
+     * 解析官方 iteminfo 接口返回的 JSON（干净结构化数据，图集字段为 images[]）。
+     *  - 拿到媒体返回 [DouyinMediaInfo]；
+     *  - item_list 为空 / 无媒体返回 null，让调用方试下一个源。
+     */
+    private fun parseFromItemInfo(apiUrl: String, ua: String, id: String): DouyinMediaInfo? {
+        val request = Request.Builder()
+            .url(apiUrl)
+            .header("User-Agent", ua)
+            .header("Referer", REFERER)
+            .build()
+
+        val body = client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw Exception("iteminfo 接口失败: HTTP ${response.code}")
+            response.body.string()
+        }
+
+        val json = JSONObject(body)
+        val itemList = json.optJSONArray("item_list")
+            ?: json.optJSONObject("data")?.optJSONArray("item_list")
+            ?: return null
+        if (itemList.length() == 0) return null
+
+        val data = itemList.getJSONObject(0)
+        val safeTitle = safeTitleOf(data.optString("desc", "").trim().ifEmpty { "douyin_$id" }, id)
+
+        // 图集优先（抖音字段 images[]，回退 image_post_info）
+        val imageUrls = extractDouyinImages(data)
+        if (imageUrls.isNotEmpty()) {
+            val coverUrl = data.optJSONObject("video")
+                ?.optJSONObject("cover")?.optJSONArray("url_list")?.optString(0)
+            return DouyinMediaInfo(DouyinMediaType.IMAGE, safeTitle, null, imageUrls, coverUrl, id, ua)
+        }
+
+        // 视频
+        val video = data.optJSONObject("video")
+        if (video != null) {
+            val vUrl = extractVideoUrl(video) ?: return null
+            val coverUrl = video.optJSONObject("cover")?.optJSONArray("url_list")?.optString(0)
+            return DouyinMediaInfo(DouyinMediaType.VIDEO, safeTitle, vUrl, emptyList(), coverUrl, id, ua)
+        }
+
+        return null
+    }
+
+    /**
+     * 解析单个分享页 HTML（_ROUTER_DATA），提取视频或图集。
+     *  - 拿到媒体返回 [DouyinMediaInfo]；
+     *  - 页面存在但本端点不含媒体（如 video 端点不含图集字段）返回 null，让调用方试下一个端点；
+     *  - 风控页 / HTTP 失败等硬错误直接抛异常。
+     */
+    private fun parseFromShare(shareUrl: String, ua: String, id: String): DouyinMediaInfo? {
         val request = Request.Builder()
             .url(shareUrl)
             .header("User-Agent", ua)
@@ -86,58 +185,135 @@ object DouyinParser {
 
         val html = client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw Exception("获取抖音页面失败: HTTP ${response.code}")
-            response.body?.string() ?: throw Exception("页面内容为空")
+            response.body.string()
         }
 
         val pattern = Regex("""window\._ROUTER_DATA\s*=\s*(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
         val match = pattern.find(html) ?: throw Exception(
-            "未找到 _ROUTER_DATA（疑似抖音 security 风控页）；finalUrl=$finalUrl；html前300字=${(html.take(300)).replace("\n", " ")}"
+            "未找到 _ROUTER_DATA（疑似抖音 security 风控页）；shareUrl=$shareUrl；html前300字=${(html.take(300)).replace("\n", " ")}"
         )
         val jsonStr = match.groupValues[1].trim()
 
         val json = JSONObject(jsonStr)
-        val loaderData = json.optJSONObject("loaderData") ?: throw Exception("loaderData 缺失")
+        val loaderData = json.optJSONObject("loaderData") ?: return null
 
         val pageKey = loaderData.keys().asSequence().firstOrNull { k ->
             (k.startsWith("video_") || k.startsWith("note_")) && k.endsWith("/page")
-        } ?: throw Exception("未找到视频页面数据")
+        } ?: return null
 
-        val page = loaderData.optJSONObject(pageKey) ?: throw Exception("页面对象缺失")
-        val videoInfoRes = page.optJSONObject("videoInfoRes") ?: throw Exception("videoInfoRes 缺失")
-        val itemList = videoInfoRes.optJSONArray("item_list") ?: throw Exception("item_list 缺失")
-        if (itemList.length() == 0) throw Exception("item_list 为空")
+        val page = loaderData.optJSONObject(pageKey) ?: return null
+        val videoInfoRes = page.optJSONObject("videoInfoRes") ?: return null
+        val itemList = videoInfoRes.optJSONArray("item_list") ?: return null
+        if (itemList.length() == 0) return null
 
         val data = itemList.getJSONObject(0)
-        val video = data.optJSONObject("video") ?: throw Exception("video 字段缺失")
 
-        var videoUrl: String? = video.optJSONObject("play_addr")
+        val desc = data.optString("desc", "").trim().ifEmpty { "douyin_$id" }
+        val safeTitle = safeTitleOf(desc, id)
+
+        // 图集 / 图文笔记优先：抖音图集字段为 images[]（官方 iteminfo 同结构），
+        // 旧版 / TikTok 风格为 image_post_info.image_list[]。先取图片，取不到才回退 video。
+        val imageUrls = extractDouyinImages(data)
+        if (imageUrls.isNotEmpty()) {
+            val coverUrl = data.optJSONObject("image_post_info")
+                ?.optJSONObject("first_frame_image")
+                ?.optJSONArray("url_list")?.optString(0)
+                ?: data.optJSONObject("video")
+                    ?.optJSONObject("cover")?.optJSONArray("url_list")?.optString(0)
+            return DouyinMediaInfo(DouyinMediaType.IMAGE, safeTitle, null, imageUrls, coverUrl, id, ua)
+        }
+
+        // 视频
+        val video = data.optJSONObject("video")
+        if (video != null) {
+            val vUrl = extractVideoUrl(video) ?: return null
+            val coverUrl = video.optJSONObject("cover")?.optJSONArray("url_list")?.optString(0)
+            return DouyinMediaInfo(DouyinMediaType.VIDEO, safeTitle, vUrl, emptyList(), coverUrl, id, ua)
+        }
+
+        // 本端点既无图集字段也无 video：返回 null，调用方会试下一个源
+        return null
+    }
+
+    /**
+     * 从作品 JSON 中提取图集图片地址。
+     *  - 抖音官方字段 images[i].url_list[0]（优先）；
+     *  - 旧版 / TikTok 风格 image_post_info.image_list[i] 的
+     *    origin_image / display_image / url_list（清晰度优先）。
+     * 任一结构取到图片即返回，顺序：images[] 在前。
+     */
+    private fun extractDouyinImages(data: JSONObject): List<String> {
+        val result = mutableListOf<String>()
+
+        // 1) 抖音官方 images[] 字段
+        val images = data.optJSONArray("images")
+        if (images != null) {
+            for (i in 0 until images.length()) {
+                val it = images.optJSONObject(i) ?: continue
+                val u = it.optJSONArray("url_list")?.optString(0)?.takeIf { s -> s.isNotBlank() }
+                if (u != null) result.add(u)
+            }
+        }
+        if (result.isNotEmpty()) return result
+
+        // 2) 旧版 / TikTok 风格 image_post_info.image_list[]
+        val ipi = data.optJSONObject("image_post_info") ?: return result
+        val imageList = ipi.optJSONArray("image_list") ?: return result
+        for (i in 0 until imageList.length()) {
+            val img = imageList.optJSONObject(i) ?: continue
+            val urlList = img.optJSONObject("origin_image")?.optJSONArray("url_list")
+                ?: img.optJSONObject("display_image")?.optJSONArray("url_list")
+                ?: img.optJSONArray("url_list")
+            val u = urlList?.optString(0)?.takeIf { s -> s.isNotBlank() }
+            if (u != null) result.add(u)
+        }
+        return result
+    }
+
+    /** 把作品描述清洗成安全的文件名（保留前 80 字）。 */
+    private fun safeTitleOf(desc: String, id: String): String {
+        val raw = desc.ifEmpty { "douyin_$id" }
+        return raw
+            .replace(Regex("""[\\/:*?"<>|#\n\r]"""), "_")
+            .replace(Regex("""\.{2,}"""), ".")
+            .trim(' ', '.')
+            .take(80)
+    }
+
+    private fun extractVideoUrl(video: JSONObject): String? {
+        var vUrl = video.optJSONObject("play_addr")
             ?.optJSONArray("url_list")
             ?.optString(0)
             ?.takeIf { it.isNotBlank() }
             ?.replace("playwm", "play")
 
-        if (videoUrl == null) {
+        if (vUrl == null) {
             val bitRate = video.optJSONArray("bit_rate")
             if (bitRate != null && bitRate.length() > 0) {
-                videoUrl = bitRate.getJSONObject(0)
+                vUrl = bitRate.getJSONObject(0)
                     .optJSONObject("play_addr")
                     ?.optJSONArray("url_list")
                     ?.optString(0)
                     ?.replace("playwm", "play")
             }
         }
-        if (videoUrl == null) throw Exception("未提取到视频地址")
+        return vUrl
+    }
 
-        val coverUrl = video.optJSONObject("cover")?.optJSONArray("url_list")?.optString(0)
-
-        val desc = data.optString("desc", "").trim().ifEmpty { "douyin_$videoId" }
-        val safeTitle = desc
-            .replace(Regex("""[\\/:*?"<>|#\n\r]"""), "_")
-            .replace(Regex("""\.{2,}"""), ".")
-            .trim(' ', '.')
-            .take(80)
-
-        DouyinVideoInfo(videoUrl, safeTitle, coverUrl, videoId, ua)
+    /**
+     * 根据图片 URL 推断文件扩展名（去水印图集通常为 jpg/webp/png）。
+     */
+    fun mediaExtension(url: String): String {
+        val path = url.split("?")[0]
+        val ext = path.substringAfterLast('.', "")
+        return when (ext.lowercase()) {
+            "jpg", "jpeg" -> "jpg"
+            "png" -> "png"
+            "webp" -> "webp"
+            "gif" -> "gif"
+            "bmp" -> "bmp"
+            else -> "jpg"
+        }
     }
 
     /**

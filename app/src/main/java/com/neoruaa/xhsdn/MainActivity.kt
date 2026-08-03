@@ -778,6 +778,10 @@ private fun MainScreen(
     var showClearHistoryDialog by remember { mutableStateOf(false) }
     // 下载失败日志查看对话框状态
     var showFailureLogDialog by remember { mutableStateOf(false) }
+    // 正常日志查看对话框状态
+    var showNormalLogDialog by remember { mutableStateOf(false) }
+    // 在 Composable 作用域取一次 Context，供菜单 onClick（非 Composable）复用
+    val ctx = LocalContext.current
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -802,7 +806,7 @@ private fun MainScreen(
 //                                modifier = Modifier.size(24.dp)
                             )
 
-                            val menuItems = listOf(stringResource(R.string.copy_description), stringResource(R.string.web_crawl_option), stringResource(R.string.clear_history), stringResource(R.string.menu_failure_log))
+                            val menuItems = listOf(stringResource(R.string.copy_description), stringResource(R.string.web_crawl_option), stringResource(R.string.clear_history), stringResource(R.string.menu_failure_log), stringResource(R.string.menu_normal_log), stringResource(R.string.menu_package_log))
 
                             WindowListPopup(
                                 show = menuExpanded && !uiState.isDownloading,
@@ -830,6 +834,42 @@ private fun MainScreen(
                                                     }
                                                     3 -> {
                                                         showFailureLogDialog = true
+                                                    }
+                                                    4 -> {
+                                                        showNormalLogDialog = true
+                                                    }
+                                                    5 -> {
+                                                        // 打包日志：压缩 正常日志 + 失败日志，并通过分享面板导出
+                                                        val zip = DownloadLogger.packageLogs(ctx)
+                                                        if (zip == null) {
+                                                            android.widget.Toast.makeText(
+                                                                ctx,
+                                                                ctx.getString(R.string.package_log_failed),
+                                                                android.widget.Toast.LENGTH_SHORT
+                                                            ).show()
+                                                        } else {
+                                                            val uri = androidx.core.content.FileProvider.getUriForFile(
+                                                                ctx,
+                                                                "${ctx.packageName}.fileprovider",
+                                                                zip
+                                                            )
+                                                            val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                                                type = "application/zip"
+                                                                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                            }
+                                                            ctx.startActivity(
+                                                                android.content.Intent.createChooser(
+                                                                    shareIntent,
+                                                                    ctx.getString(R.string.package_log_share)
+                                                                )
+                                                            )
+                                                            android.widget.Toast.makeText(
+                                                                ctx,
+                                                                ctx.getString(R.string.package_log_success, zip.absolutePath),
+                                                                android.widget.Toast.LENGTH_LONG
+                                                            ).show()
+                                                        }
                                                     }
                                                 }
                                             },
@@ -913,6 +953,56 @@ private fun MainScreen(
                                             onClick = {
                                                 val cm = logCtx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                                 cm.setPrimaryClip(android.content.ClipData.newPlainText("failure_log", logContent))
+                                                android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 正常日志查看对话框（与失败日志对称，便于对照排查）
+                        if (showNormalLogDialog) {
+                            val logCtx = LocalContext.current
+                            val logContent = DownloadLogger.getNormalLogContent(logCtx)
+                            WindowDialog(
+                                title = stringResource(R.string.normal_log_title),
+                                show = true,
+                                onDismissRequest = { showNormalLogDialog = false }
+                            ) {
+                                Column(modifier = Modifier.padding(top = 8.dp)) {
+                                    if (logContent.isBlank()) {
+                                        Text(
+                                            text = stringResource(R.string.normal_log_empty),
+                                            fontSize = 14.sp,
+                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                        )
+                                    } else {
+                                        Text(
+                                            text = logContent,
+                                            fontSize = 12.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = 320.dp)
+                                                .verticalScroll(rememberScrollState())
+                                        )
+                                    }
+                                    Spacer(Modifier.height(12.dp))
+                                    Row(
+                                        horizontalArrangement = Arrangement.End,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        TextButton(
+                                            text = stringResource(R.string.cancel),
+                                            onClick = { showNormalLogDialog = false }
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        TextButton(
+                                            text = stringResource(R.string.copy_log),
+                                            onClick = {
+                                                val cm = logCtx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                                cm.setPrimaryClip(android.content.ClipData.newPlainText("normal_log", logContent))
                                                 android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
                                             }
                                         )
