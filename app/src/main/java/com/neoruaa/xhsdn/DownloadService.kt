@@ -17,6 +17,9 @@ import com.neoruaa.xhsdn.data.TaskStatus
 import com.neoruaa.xhsdn.douyin.DouyinMediaInfo
 import com.neoruaa.xhsdn.douyin.DouyinMediaType
 import com.neoruaa.xhsdn.douyin.DouyinParser
+import com.neoruaa.xhsdn.taobao.TaobaoMediaInfo
+import com.neoruaa.xhsdn.taobao.TaobaoMediaType
+import com.neoruaa.xhsdn.taobao.TaobaoParser
 import com.neoruaa.xhsdn.utils.DownloadLogger
 import com.neoruaa.xhsdn.utils.UrlUtils
 import kotlinx.coroutines.CoroutineScope
@@ -88,6 +91,7 @@ class DownloadService : Service() {
             }
             else -> when (source) {
                 "douyin" -> startDouyin(url, mode, taskIdExtra)
+                "taobao" -> startTaobao(url, mode, taskIdExtra)
                 else -> startXhs(url, taskIdExtra)
             }
         }
@@ -208,6 +212,124 @@ class DownloadService : Service() {
             if (!ok) {
                 okAll = false
                 DownloadLogger.logFailure(this@DownloadService, "douyin", url, "图片下载失败(返回false)")
+            }
+        }
+        return okAll
+    }
+    // endregion
+
+    // region 淘宝下载
+    /**
+     * 淘宝/天猫分享短链下载：复用 TaobaoParser 解短链拿商品 id 并提取主图（best-effort 视频）。
+     * 流程与 startDouyin 同构。
+     */
+    private fun startTaobao(rawUrl: String, mode: String, taskIdExtra: Long?) {
+        val targetUrl = UrlUtils.extractFirstUrl(rawUrl) ?: rawUrl
+        if (!targetUrl.startsWith("http://", true) && !targetUrl.startsWith("https://", true)) {
+            DownloadLogger.logFailure(this, "taobao", rawUrl, "无法从剪贴板提取有效链接: $rawUrl")
+            TaskManager.createTask(targetUrl, null, NoteType.IMAGE, 1, source = "taobao").also {
+                TaskManager.startTask(it)
+                TaskManager.completeTask(it, false, "无法提取有效链接")
+            }
+            updateNotification(getString(R.string.download_failed_notification_title),
+                getString(R.string.no_valid_link_found), false)
+            return
+        }
+
+        if (!activeUrls.add(targetUrl)) return
+
+        scope.launch {
+            try {
+                val myTaskId = taskIdExtra
+                    ?: TaskManager.findActiveTaskIdByUrl(targetUrl)
+                    ?: TaskManager.createTask(
+                        targetUrl, null, NoteType.IMAGE, 1, source = "taobao"
+                    ).also { TaskManager.startTask(it) }
+                activeJobs[myTaskId] = coroutineContext[Job]!!
+
+                updateNotification(getString(R.string.downloading_files), "淘宝解析中…", true)
+
+                val info = runCatching { TaobaoParser.parse(targetUrl) }.getOrElse { e ->
+                    DownloadLogger.logFailure(this@DownloadService, "taobao", targetUrl, "解析失败: ${e.message}")
+                    TaskManager.completeTask(myTaskId, false, "解析失败: ${e.message}")
+                    updateNotification(getString(R.string.download_failed_notification_title),
+                        "淘宝解析失败: ${e.message}", false)
+                    return@launch
+                }
+
+                // 主图数量 + 若有视频直链再 +1
+                val hasVideo = !info.videoUrl.isNullOrBlank()
+                val totalFiles = info.imageUrls.size + if (hasVideo) 1 else 0
+                TaskManager.updateTask(myTaskId) { t ->
+                    t.copy(
+                        noteType = if (info.imageUrls.isNotEmpty()) NoteType.IMAGE else NoteType.VIDEO,
+                        totalFiles = if (totalFiles > 0) totalFiles else 1
+                    )
+                }
+
+                updateNotification(getString(R.string.downloading_files), info.title, true)
+                val mediaDesc = buildString {
+                    if (info.imageUrls.isNotEmpty()) append("${info.imageUrls.size} 张图")
+                    if (hasVideo) append(if (info.imageUrls.isNotEmpty()) " + 视频" else "视频")
+                }
+                DownloadLogger.logInfo(this@DownloadService, "taobao", targetUrl, "解析成功: ${info.title} ($mediaDesc)")
+
+                val downloader = FileDownloader(this@DownloadService, createCallback(myTaskId))
+                val success = downloadTaobaoMedia(downloader, info, myTaskId)
+
+                if (success) {
+                    DownloadLogger.logInfo(this@DownloadService, "taobao", targetUrl, "下载完成(成功): ${info.title}")
+                }
+
+                TaskManager.completeTask(myTaskId, success,
+                    if (success) null else "下载失败")
+                updateNotification(
+                    if (success) getString(R.string.download_completed_notification_title)
+                    else getString(R.string.download_failed_notification_title),
+                    if (success) info.title else getString(R.string.download_failed_check_network),
+                    false
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "taobao download error", e)
+            } finally {
+                activeUrls.remove(targetUrl)
+                taskIdExtra?.let { activeJobs.remove(it) }
+                maybeStop()
+            }
+        }
+    }
+
+    /**
+     * 下载淘宝主图（逐张），若解析到视频直链则一并下载。
+     * 全部成功返回 true，任一项失败返回 false（失败项已落日志）。
+     */
+    private fun downloadTaobaoMedia(downloader: FileDownloader, info: TaobaoMediaInfo, taskId: Long): Boolean {
+        var okAll = true
+        info.imageUrls.forEachIndexed { index, url ->
+            val ext = TaobaoParser.mediaExtension(url)
+            val fileName = "${info.title}_${index + 1}.$ext"
+            val ok = runCatching {
+                downloader.downloadFile(url, fileName, "", info.userAgent)
+            }.getOrElse { e ->
+                DownloadLogger.logFailure(this@DownloadService, "taobao", url, "下载图片异常: ${e.message}")
+                false
+            }
+            if (!ok) {
+                okAll = false
+                DownloadLogger.logFailure(this@DownloadService, "taobao", url, "图片下载失败(返回false)")
+            }
+        }
+        // 主图之外若拿到视频直链，一并下载
+        if (!info.videoUrl.isNullOrBlank()) {
+            val vOk = runCatching {
+                downloader.downloadFile(info.videoUrl, "${info.title}_video.mp4", "", info.userAgent)
+            }.getOrElse { e ->
+                DownloadLogger.logFailure(this@DownloadService, "taobao", info.videoUrl, "下载视频异常: ${e.message}")
+                false
+            }
+            if (!vOk) {
+                okAll = false
+                DownloadLogger.logFailure(this@DownloadService, "taobao", info.videoUrl, "视频下载失败(返回false)")
             }
         }
         return okAll

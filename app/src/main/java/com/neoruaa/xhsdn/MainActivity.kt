@@ -475,8 +475,11 @@ class MainActivity : ComponentActivity() {
                     onClearHistory = { viewModel.clearHistory() },
                     onManualInputDownload = { inputLink ->
                         ensureStoragePermission {
-                            if (UrlUtils.detectPlatform(inputLink) == "douyin") {
+                            val plat = UrlUtils.detectPlatform(inputLink)
+                            if (plat == "douyin") {
                                 dispatchDownload(inputLink, "douyin")
+                            } else if (plat == "taobao") {
+                                dispatchDownload(inputLink, "taobao")
                             } else {
                                 viewModel.updateUrl(inputLink)
                                 if (selectiveDownload) {
@@ -492,10 +495,12 @@ class MainActivity : ComponentActivity() {
                     onClipboardBubbleActivate = {
                         val link = detectedXhsLink
                         if (!link.isNullOrBlank()) {
-                            val platform = detectedPlatform ?: UrlUtils.detectPlatform(link)
+                                val platform = detectedPlatform ?: UrlUtils.detectPlatform(link)
                             ensureStoragePermission {
                                 if (platform == "douyin") {
                                     dispatchDownload(link, "douyin")
+                                } else if (platform == "taobao") {
+                                    dispatchDownload(link, "taobao")
                                 } else {
                                     viewModel.updateUrl(link)
                                     if (selectiveDownload) {
