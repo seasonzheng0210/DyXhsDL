@@ -40,3 +40,4 @@ python/
 *.bak
 # Local build logs (transient)
 build*.err
+_ks.txt
