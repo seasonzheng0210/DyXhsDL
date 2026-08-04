@@ -224,6 +224,9 @@ class DownloadService : Service() {
      * 流程与 startDouyin 同构。
      */
     private fun startTaobao(rawUrl: String, mode: String, taskIdExtra: Long?) {
+        // 读取可选淘宝登录态 cookie（App 设置中填入，用于视频 mtop 接口）
+        TaobaoParser.cookie = getSharedPreferences("XHSDownloaderPrefs", MODE_PRIVATE)
+            .getString("taobao_cookie", "") ?: ""
         val targetUrl = UrlUtils.extractFirstUrl(rawUrl) ?: rawUrl
         if (!targetUrl.startsWith("http://", true) && !targetUrl.startsWith("https://", true)) {
             DownloadLogger.logFailure(this, "taobao", rawUrl, "无法从剪贴板提取有效链接: $rawUrl")
