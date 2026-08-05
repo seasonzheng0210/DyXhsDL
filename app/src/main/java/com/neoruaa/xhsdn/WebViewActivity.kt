@@ -7,12 +7,15 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
+import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import com.neoruaa.xhsdn.taobao.TaobaoParser
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -374,6 +377,20 @@ private fun WebViewScreen(
         }
 
         if (!initialUrl.isNullOrBlank()) {
+            // 淘宝：若用户在设置中填入了登录态 cookie，注入到 WebView，
+            // 否则匿名 WebView 会撞登录墙（实测匿名 item.taobao.com 仅返回 5KB 登录页）。
+            if (source == "taobao" && TaobaoParser.cookie.isNotBlank()) {
+                try {
+                    val cm = CookieManager.getInstance()
+                    cm.setAcceptCookie(true)
+                    cm.setCookie("https://item.taobao.com", TaobaoParser.cookie)
+                    cm.setCookie("https://detail.tmall.com", TaobaoParser.cookie)
+                    cm.setCookie(".taobao.com", TaobaoParser.cookie)
+                    cm.flush()
+                } catch (e: Exception) {
+                    Log.e("WebViewActivity", "inject taobao cookie failed: ${e.message}")
+                }
+            }
             loadUrl(webView, initialUrl)
         } else {
             webView.loadUrl("about:blank")

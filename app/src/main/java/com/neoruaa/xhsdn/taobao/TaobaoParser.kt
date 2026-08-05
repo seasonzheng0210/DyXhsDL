@@ -168,9 +168,17 @@ object TaobaoParser {
         // 主图：详情页内嵌 auctionImages: ["//img.alicdn.com/imgextra/i1/...", ...]
         val imageUrls = extractMainImages(html)
         if (imageUrls.isEmpty()) {
+            val hint = if (cookie.isBlank()) {
+                "淘宝对匿名访问返回登录墙（实测 item.taobao.com 仅返回约 5KB 登录页），主图无法获取。" +
+                    "解决方法二选一：① 在 App 设置 → 淘宝 cookie 中粘贴【已登录】淘宝网页版 cookie" +
+                    "（浏览器 F12 → Network → 复制请求里的 Cookie 头），填好后重测；" +
+                    "② 用 WebView 入口打开链接，在页面内登录淘宝后点「爬取」。"
+            } else {
+                "已带 cookie 仍取不到主图，可能 cookie 失效/权限不足，或该商品主图走 mtop 异步加载。" +
+                    "请更新 cookie，或改用 WebView 入口在页面内登录后重试。"
+            }
             throw Exception(
-                "未从淘宝详情页提取到主图（可能触发风控/登录校验，或该商品无主图）。itemId=$itemId。" +
-                    "可尝试在已登录的浏览器里打开该链接，确认页面正常；若需登录态才能抓取，请在 App 设置中填入淘宝网页版 cookie。"
+                "未从淘宝详情页提取到主图。itemId=$itemId。$hint"
             )
         }
 

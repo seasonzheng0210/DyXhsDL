@@ -150,25 +150,47 @@ class DownloadService : Service() {
 
                 updateNotification(getString(R.string.downloading_files), "视频直链下载中…", true)
 
-                val downloader = FileDownloader(this@DownloadService, createCallback(myTaskId))
                 // 淘宝视频云需带淘宝 Referer，其余（抖音系等第三方直链）只带移动 UA 不送 Referer
                 val (referer, ua) = if (targetUrl.contains("taobao", true)) {
                     TaobaoParser.TAOBAO_REFERER to TaobaoParser.MOBILE_UA
                 } else {
                     null to DIRECT_UA
                 }
+
+                // 解析最终直链（跟随 snssdk/douyinvod 等的 302），避免 OkHttp 透明跨 host 重定向
+                // 在部分安卓网络栈下失效。解析失败则回退原 URL。
+                val resolved = resolveFinalUrl(targetUrl, ua) ?: targetUrl
+
+                // 包装回调：同时驱动 TaskManager 进度，并记录真实失败原因用于诊断
+                val baseCb = createCallback(myTaskId)
+                var lastErr = ""
+                val diagCb = object : DownloadCallback {
+                    override fun onFileDownloaded(path: String) = baseCb.onFileDownloaded(path)
+                    override fun onDownloadError(status: String, originalUrl: String) {
+                        lastErr = status
+                        baseCb.onDownloadError(status, originalUrl)
+                    }
+                    override fun onDownloadProgress(status: String) = baseCb.onDownloadProgress(status)
+                    override fun onDownloadProgressUpdate(downloaded: Long, total: Long) =
+                        baseCb.onDownloadProgressUpdate(downloaded, total)
+                    override fun onVideoDetected() = baseCb.onVideoDetected()
+                }
+                val downloader = FileDownloader(this@DownloadService, diagCb)
+
                 val ok = runCatching {
-                    downloader.downloadFile(targetUrl, "direct_video_${System.currentTimeMillis()}.mp4", referer, ua)
+                    // 先用解析出的 CDN 直链下；失败重试一次（回退原 snssdk URL）
+                    downloader.downloadFile(resolved, "direct_video_${System.currentTimeMillis()}.mp4", referer, ua)
+                        || downloader.downloadFile(targetUrl, "direct_video_${System.currentTimeMillis()}.mp4", referer, ua)
                 }.getOrElse { e ->
-                    DownloadLogger.logFailure(this@DownloadService, "direct", targetUrl, "下载异常: ${e.message}")
+                    lastErr = "下载异常: ${e.message}"
                     false
                 }
                 if (ok) {
-                    DownloadLogger.logInfo(this@DownloadService, "direct", targetUrl, "视频直链下载完成")
+                    DownloadLogger.logInfo(this@DownloadService, "direct", targetUrl, "视频直链下载完成 (resolved=$resolved)")
                 } else {
-                    DownloadLogger.logFailure(this@DownloadService, "direct", targetUrl, "视频直链下载失败(返回false)")
+                    DownloadLogger.logFailure(this@DownloadService, "direct", targetUrl, "视频直链下载失败: ${lastErr.ifBlank { "返回false" }}")
                 }
-                TaskManager.completeTask(myTaskId, ok, if (ok) null else "下载失败")
+                TaskManager.completeTask(myTaskId, ok, if (ok) null else lastErr.ifBlank { "下载失败" })
                 updateNotification(
                     if (ok) getString(R.string.download_completed_notification_title)
                     else getString(R.string.download_failed_notification_title),
@@ -183,6 +205,19 @@ class DownloadService : Service() {
                 taskIdExtra?.let { activeJobs.remove(it) }
                 maybeStop()
             }
+        }
+    }
+
+    /** 跟随重定向拿到最终直链（不读取响应体，仅取最终 URL）。失败返回 null。 */
+    private fun resolveFinalUrl(url: String, ua: String): String? {
+        return try {
+            val req = okhttp3.Request.Builder().url(url).header("User-Agent", ua).build()
+            FileDownloader.getSharedHttpClient().newCall(req).execute().use { resp ->
+                resp.request.url.toString()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "resolveFinalUrl failed for $url: ${e.message}")
+            null
         }
     }
 
