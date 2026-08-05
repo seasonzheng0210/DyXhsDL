@@ -146,6 +146,26 @@
             }
         } catch (e) {}
 
+        // ---- 3.5) 主图数组（PC 详情页内联 auctionImages JSON）----
+        // PC 详情页主图不直接放在 <img> 上，而是内联在 <script> 的 auctionImages:["..."] 里（与 HTTP 直解同一数据源）。
+        try {
+            var aScripts = document.querySelectorAll('script');
+            for (var asx = 0; asx < aScripts.length; asx++) {
+                var aText = aScripts[asx].textContent || '';
+                var am = aText.match(/auctionImages["']?\s*:\s*\[(.*?)\]/s);
+                if (am) {
+                    var arrStr = am[1];
+                    var items = arrStr.match(/"([^"]+)"/g);
+                    if (items) {
+                        for (var ai = 0; ai < items.length; ai++) {
+                            var u = items[ai].replace(/^"/, '').replace(/"$/, '');
+                            add(u);
+                        }
+                    }
+                }
+            }
+        } catch (e) {}
+
         // ---- 4) 兜底：扫描页面所有 <img>（含懒加载 data-src），只要阿里系 CDN 都收 ----
         var allImgs = document.querySelectorAll('img');
         for (var a = 0; a < allImgs.length; a++) {

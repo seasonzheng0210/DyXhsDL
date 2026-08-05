@@ -601,10 +601,20 @@ class MainActivity : ComponentActivity() {
             return
         }
         viewModel.resetWebCrawlFlag()
-        val intent = Intent(this, WebViewActivity::class.java)
-        intent.putExtra("url", cleanUrl)
-        intent.putExtra("source", "taobao")
-        startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
+        // 先把短链解析成真实商品详情页 URL，避免 WebView 卡在 e.tb.cn 落地/跳转中间页
+        lifecycleScope.launch(Dispatchers.IO) {
+            val targetUrl = try {
+                com.neoruaa.xhsdn.taobao.TaobaoParser.resolveItemPageUrl(cleanUrl)
+            } catch (_: Exception) {
+                cleanUrl
+            }
+            withContext(Dispatchers.Main) {
+                val intent = Intent(this@MainActivity, WebViewActivity::class.java)
+                intent.putExtra("url", targetUrl)
+                intent.putExtra("source", "taobao")
+                startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
+            }
+        }
     }
 
 

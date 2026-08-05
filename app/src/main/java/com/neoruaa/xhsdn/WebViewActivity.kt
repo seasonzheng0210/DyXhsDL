@@ -307,13 +307,19 @@ private fun WebViewScreen(
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 loading = false
-                // 抖音：页面加载完成后自动尝试提取（优先 WebView），失败再走直链兜底
+                // 抖音/淘宝：页面加载完成后自动尝试提取（优先 WebView），失败再走直链兜底
                 if ((source == "douyin" || source == "taobao") && !finished.value) {
-                    view?.postDelayed({
-                        if (!finished.value) {
-                            extractImages(context, webView, sniffedVideoUrls, source, finished, onResult)
-                        }
-                    }, 2500)
+                    // 淘宝短链落地页（tb.cn/h）还没跳到真实商品页时不抠，等 onPageFinished 再次触发再抠
+                    val isTaobaoLanding = source == "taobao" && url != null && url.contains("tb.cn/h")
+                    if (!isTaobaoLanding) {
+                        // SPA 二次水合/懒加载图片需更久，延时拉长到 3500ms；
+                        // 若页面发生二次加载，onPageFinished 会再触发一次，自然形成一次重试。
+                        view?.postDelayed({
+                            if (!finished.value) {
+                                extractImages(context, webView, sniffedVideoUrls, source, finished, onResult)
+                            }
+                        }, 3500)
+                    }
                 }
             }
 

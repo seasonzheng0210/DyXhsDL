@@ -85,6 +85,16 @@ object TaobaoParser {
         return u.contains("tb.cn") || u.contains("taobao.com") || u.contains("tmall.com")
     }
 
+    /**
+     * 解析短链，返回可直接加载的真实商品详情页 URL（item.taobao.com/item.htm?id=）。
+     * 供 WebView 入口使用：先解析成直链，跳过 e.tb.cn 落地/跳转中间页（WebView 里可能停在落地页或触发打开 App）。
+     * 解析失败（短链失效/需登录）时抛异常，由调用方回退到原始链接。
+     */
+    fun resolveItemPageUrl(shortUrl: String): String {
+        val id = resolveItemId(shortUrl)
+        return "https://item.taobao.com/item.htm?id=$id"
+    }
+
     suspend fun parse(rawUrl: String): TaobaoMediaInfo = withContext(Dispatchers.IO) {
         val targetUrl = rawUrl.trim()
         Log.d(TAG, "input=$targetUrl cookieSet=${cookie.isNotBlank()}")
