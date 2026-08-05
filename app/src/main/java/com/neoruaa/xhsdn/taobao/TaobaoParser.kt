@@ -46,9 +46,14 @@ data class TaobaoMediaInfo(
  *     mtop.media.operator.queryVideoList，带 x-sign（基于 _m_h5_tk 的 MD5）拿真实视频直链。
  *
  * 已知边界（务必了解）：
+ *  - 现代淘宝商品详情页是 JS 渲染的 SPA（h5.m.taobao.com/awp/core/detail.htm），主图/视频数据在
+ *    页面加载后才通过 mtop 接口异步填充，原始 HTML 里通常没有 auctionImages / videoId。
+ *    因此本解析器的匿名 HTML 正则方案对多数新商品会取不到主图而抛异常——这是平台机制，非代码 bug。
+ *    真正稳健的「免登录」路径是 App 内用 WebView 加载商品页、等 JS 渲染后从 DOM 抠图（与 GitHub 上
+ *    Vossera/TaobaoCrawler、answer2c/imgDown 用浏览器渲染同理），该方案为后续迭代点。
  *  - 淘宝 mtop 接口还要求 x-mini-wua / x-sgext 等抗刷参数，这些是淘宝 App native so 生成的，
- *    纯 Kotlin 无法复现。因此第 2 档在多数新商品上仍可能被风控拦截；能成则成，不成自动回退主图。
- *  - 若详情页触发风控/登录校验（返回滑块页），auctionImages 与 videoId 都取不到，parse 会抛明确异常，
+ *    纯 Kotlin 无法复现。因此第 2 档（带 cookie 走 mtop）在多数新商品上仍可能被风控拦截；能成则成，不成自动回退主图。
+ *  - 若详情页触发风控/登录校验（返回滑块页或登录墙），auctionImages 与 videoId 都取不到，parse 会抛明确异常，
  *    届时需补更完整的 cookie / 签名才能继续——这是后续迭代点。
  */
 object TaobaoParser {
@@ -56,6 +61,9 @@ object TaobaoParser {
 
     // 手机淘宝分享 UA（AliApp(AP/...)）。淘宝对这类 UA 返回移动版详情，且对 PC Chrome UA 更敏感。
     const val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 AliApp(AP/10.0.1.123008) AlipayClient/10.0.1.123008 Language/zh-Hans"
+
+    // 下载淘宝图/视频时必带的 Referer，否则图片/视频 CDN（img.alicdn.com / cloud.video.taobao.com）防盗链会 403。
+    const val TAOBAO_REFERER = "https://item.taobao.com/"
 
     /** 可选登录态 cookie（含 _m_h5_tk）。由 App 设置注入；为空时只走第 1 档规律直链。 */
     var cookie: String = ""
@@ -136,6 +144,7 @@ object TaobaoParser {
             .url(url)
             .header("User-Agent", MOBILE_UA)
             .header("Accept", "text/html,application/xhtml+xml")
+            .header("Referer", TAOBAO_REFERER)
             .also { if (cookie.isNotBlank()) it.header("Cookie", cookie) }
             .build()
 
@@ -293,10 +302,17 @@ object TaobaoParser {
         return raw.ifBlank { "taobao_$itemId" }
     }
 
-    /** 兜底：只抓详情页内联的 cloud.video.taobao.com 播放地址。 */
+    /** 兜底：抓详情页内联的视频直链（多模式，任一命中即返回）。 */
     private fun extractVideoUrlInline(html: String): String? {
-        Regex("""https?://cloud\.video\.taobao\.com/[^\s"\\]+""")
-            .find(html)?.groupValues?.getOrNull(0)?.let { return it }
+        // 1) 淘宝视频云直链（最常见）
+        Regex("""https?://cloud\.video\.taobao\.com/[^\s"\\]+?(?:\.mp4|\.mov)?""")
+            .find(html)?.groupValues?.getOrNull(0)?.let { return it.trimEnd('"', '\\', ')') }
+        // 2) 协议相对的视频云直链
+        Regex("""//cloud\.video\.taobao\.com/[^\s"\\]+?(?:\.mp4|\.mov)?""")
+            .find(html)?.groupValues?.getOrNull(0)?.let { return "https:${it.trimEnd('"', '\\', ')')}" }
+        // 3) <video ... src="..."> 标签（部分页面直接内联）
+        Regex("""<video[^>]*\ssrc=["']([^"']+)["']""")
+            .find(html)?.groupValues?.getOrNull(1)?.let { return it }
         return null
     }
 

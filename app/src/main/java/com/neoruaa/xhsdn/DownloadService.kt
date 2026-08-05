@@ -312,7 +312,7 @@ class DownloadService : Service() {
             val ext = TaobaoParser.mediaExtension(url)
             val fileName = "${info.title}_${index + 1}.$ext"
             val ok = runCatching {
-                downloader.downloadFile(url, fileName, "", info.userAgent)
+                downloader.downloadFile(url, fileName, TaobaoParser.TAOBAO_REFERER, info.userAgent)
             }.getOrElse { e ->
                 DownloadLogger.logFailure(this@DownloadService, "taobao", url, "下载图片异常: ${e.message}")
                 false
@@ -325,7 +325,7 @@ class DownloadService : Service() {
         // 主图之外若拿到视频直链，一并下载
         if (!info.videoUrl.isNullOrBlank()) {
             val vOk = runCatching {
-                downloader.downloadFile(info.videoUrl, "${info.title}_video.mp4", "", info.userAgent)
+                downloader.downloadFile(info.videoUrl, "${info.title}_video.mp4", TaobaoParser.TAOBAO_REFERER, info.userAgent)
             }.getOrElse { e ->
                 DownloadLogger.logFailure(this@DownloadService, "taobao", info.videoUrl, "下载视频异常: ${e.message}")
                 false
