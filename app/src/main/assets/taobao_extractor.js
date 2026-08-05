@@ -127,8 +127,8 @@
             var scripts = document.querySelectorAll('script');
             for (var sc = 0; sc < scripts.length; sc++) {
                 var txt = scripts[sc].textContent || '';
-                var ids = txt.match(/videoId['":\s=]+['"]?(\d+)/i) ||
-                          txt.match(/['"](https?:)?//cloud\.video\.taobao\.com/[^'"]+/gi);
+                var ids = txt.match(/videoId["':\s=]+["']?(\d{6,})/i) ||
+                          txt.match(/https?:\/\/cloud\.video\.taobao\.com[^"'\s]*/gi);
                 if (ids) {
                     for (var idxx = 0; idxx < ids.length; idxx++) {
                         var raw = ids[idxx];
