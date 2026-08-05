@@ -41,6 +41,8 @@ import kotlin.coroutines.CoroutineContext
  * 完成解析与下载，并通过 TaskManager 持久化任务状态（回到 App 进度照常显示）。
  */
 class DownloadService : Service() {
+    // 视频直链下载用的移动 UA（iPhone），对抖音系/第三方直链最稳
+    private val DIRECT_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
 
     private val serviceJob = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.IO + serviceJob)
@@ -83,6 +85,14 @@ class DownloadService : Service() {
         val mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_NORMAL
         val taskIdExtra = intent.getLongExtra(EXTRA_TASK_ID, -1L).takeIf { it > 0 }
 
+        // 中立的「视频直链」短路：任何视频直链（.mp4、aweme.snssdk.com 播放接口、
+        // douyinvod.com、cloud.video.taobao.com 等）都不走平台解析器，直接下载跟随 302 的本体。
+        // 这样淘宝页面内嵌的第三方视频、用户粘贴的直链都能下，且不会误归属到抖音/其他平台。
+        if (isDirectVideoUrl(url)) {
+            downloadDirectVideo(url, taskIdExtra)
+            return START_NOT_STICKY
+        }
+
         when (mode) {
             MODE_WEBCRAWL -> {
                 val urls = intent.getStringArrayListExtra(EXTRA_URLS) ?: emptyList()
@@ -97,6 +107,83 @@ class DownloadService : Service() {
         }
 
         return START_NOT_STICKY
+    }
+
+    /** 视频直链判定：命中即走中立的 downloadDirectVideo，不进任何平台解析器。 */
+    private fun isDirectVideoUrl(url: String): Boolean {
+        val u = url.lowercase()
+        if (u.contains(".mp4") || u.contains(".mov") || u.contains(".m4v") || u.contains(".webm")) return true
+        if (u.contains("aweme.snssdk.com/aweme/v1/play/")) return true
+        if (u.contains("douyinvod.com")) return true
+        if (u.contains("cloud.video.taobao.com")) return true
+        return false
+    }
+
+    /**
+     * 中立的「视频直链」下载：不归属任何平台解析器。
+     * 用于用户粘贴的视频直链，或某平台 WebView 提取出的第三方视频直链
+     * （如淘宝商品页内嵌的 aweme.snssdk.com 抖音系播放直链）。
+     * 这类 URL 的 video_id 已是真实文件 id，直接下载（跟随 302）即得 mp4。
+     */
+    private fun downloadDirectVideo(rawUrl: String, taskIdExtra: Long?) {
+        val targetUrl = UrlUtils.extractFirstUrl(rawUrl) ?: rawUrl
+        if (!targetUrl.startsWith("http://", true) && !targetUrl.startsWith("https://", true)) {
+            DownloadLogger.logFailure(this, "direct", rawUrl, "非有效视频直链: $rawUrl")
+            TaskManager.createTask(targetUrl, null, NoteType.VIDEO, 1, source = "direct").also {
+                TaskManager.startTask(it)
+                TaskManager.completeTask(it, false, "非有效链接")
+            }
+            updateNotification(getString(R.string.download_failed_notification_title),
+                getString(R.string.no_valid_link_found), false)
+            return
+        }
+
+        if (!activeUrls.add(targetUrl)) return
+
+        scope.launch {
+            try {
+                val myTaskId = taskIdExtra
+                    ?: TaskManager.createTask(targetUrl, null, NoteType.VIDEO, 1, source = "direct").also {
+                        TaskManager.startTask(it)
+                    }
+                activeJobs[myTaskId] = coroutineContext[Job]!!
+
+                updateNotification(getString(R.string.downloading_files), "视频直链下载中…", true)
+
+                val downloader = FileDownloader(this@DownloadService, createCallback(myTaskId))
+                // 淘宝视频云需带淘宝 Referer，其余（抖音系等第三方直链）只带移动 UA 不送 Referer
+                val (referer, ua) = if (targetUrl.contains("taobao", true)) {
+                    TaobaoParser.TAOBAO_REFERER to TaobaoParser.MOBILE_UA
+                } else {
+                    null to DIRECT_UA
+                }
+                val ok = runCatching {
+                    downloader.downloadFile(targetUrl, "direct_video_${System.currentTimeMillis()}.mp4", referer, ua)
+                }.getOrElse { e ->
+                    DownloadLogger.logFailure(this@DownloadService, "direct", targetUrl, "下载异常: ${e.message}")
+                    false
+                }
+                if (ok) {
+                    DownloadLogger.logInfo(this@DownloadService, "direct", targetUrl, "视频直链下载完成")
+                } else {
+                    DownloadLogger.logFailure(this@DownloadService, "direct", targetUrl, "视频直链下载失败(返回false)")
+                }
+                TaskManager.completeTask(myTaskId, ok, if (ok) null else "下载失败")
+                updateNotification(
+                    if (ok) getString(R.string.download_completed_notification_title)
+                    else getString(R.string.download_failed_notification_title),
+                    if (ok) getString(R.string.download_completed_files_count, 1)
+                    else getString(R.string.download_failed_check_network),
+                    false
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "direct video download error", e)
+            } finally {
+                activeUrls.remove(targetUrl)
+                taskIdExtra?.let { activeJobs.remove(it) }
+                maybeStop()
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -496,10 +583,9 @@ class DownloadService : Service() {
                 })
 
                 finalUrls.forEach { rawUrl ->
-                    val transformed = downloader.run {
-                        // transformXhsCdnUrl 为 XHSDownloader 的扩展，这里用原始 URL 直连
-                        rawUrl
-                    }
+                    val transformed = rawUrl
+                    val isVideoUrl = transformed.contains(".mp4") || transformed.contains("sns-video")
+                        || transformed.contains("aweme.snssdk.com") || transformed.contains("douyinvod.com")
                     val extension = when {
                         transformed.contains(".mp4") -> "mp4"
                         transformed.contains(".png") -> "png"
@@ -508,7 +594,12 @@ class DownloadService : Service() {
                         else -> "jpg"
                     }
                     val fileName = "webview_${System.currentTimeMillis()}_${completed.get() + 1}.$extension"
-                    val ok = runCatching { downloader.downloadFile(transformed, fileName) }.getOrElse { false }
+                    // 视频类（含第三方直链如抖音系 CDN）用移动 UA 直连，避免默认 Referer 被拦
+                    val ok = if (isVideoUrl) {
+                        runCatching { downloader.downloadFile(transformed, fileName, null, DIRECT_UA) }.getOrElse { false }
+                    } else {
+                        runCatching { downloader.downloadFile(transformed, fileName) }.getOrElse { false }
+                    }
                     if (!ok) {
                         failed.incrementAndGet()
                         TaskManager.updateProgress(myTaskId, completed.get(), failed.get(), 0f)

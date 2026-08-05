@@ -24,7 +24,6 @@ object UrlUtils {
         if (url == null) return false
         val u = url.lowercase()
         return u.contains("douyin.com") || u.contains("iesdouyin.com")
-            || u.contains("snssdk.com") || u.contains("douyinvod.com")
     }
 
     /**
