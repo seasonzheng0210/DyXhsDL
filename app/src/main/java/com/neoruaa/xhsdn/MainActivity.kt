@@ -479,7 +479,7 @@ class MainActivity : ComponentActivity() {
                             if (plat == "douyin") {
                                 dispatchDownload(inputLink, "douyin")
                             } else if (plat == "taobao") {
-                                dispatchDownload(inputLink, "taobao")
+                                launchTaobaoWebView(inputLink)
                             } else {
                                 viewModel.updateUrl(inputLink)
                                 if (selectiveDownload) {
@@ -500,7 +500,7 @@ class MainActivity : ComponentActivity() {
                                 if (platform == "douyin") {
                                     dispatchDownload(link, "douyin")
                                 } else if (platform == "taobao") {
-                                    dispatchDownload(link, "taobao")
+                                    launchTaobaoWebView(link)
                                 } else {
                                     viewModel.updateUrl(link)
                                     if (selectiveDownload) {
@@ -591,6 +591,19 @@ class MainActivity : ComponentActivity() {
         val intent = Intent(this, WebViewActivity::class.java)
         intent.putExtra("url", cleanUrl)
         intent.putExtra("source", "douyin")
+        startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
+    }
+
+    private fun launchTaobaoWebView(input: String) {
+        val cleanUrl = UrlUtils.extractFirstUrl(input)
+        if (cleanUrl == null) {
+            showToast(getString(R.string.invalid_link_please_reenter))
+            return
+        }
+        viewModel.resetWebCrawlFlag()
+        val intent = Intent(this, WebViewActivity::class.java)
+        intent.putExtra("url", cleanUrl)
+        intent.putExtra("source", "taobao")
         startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
     }
 
@@ -702,6 +715,18 @@ class MainActivity : ComponentActivity() {
                     "douyin"
                 )
                 return
+            }
+
+            if (source == "taobao") {
+                val webViewUrl = data.getStringExtra("url") ?: ""
+                if (forceDirect || urls.isEmpty()) {
+                    // WebView 渲染抓不到（淘宝风控/登录墙）或用户主动选"直链解析"，
+                    // 回退到 TaobaoParser 的 HTTP 直解（best-effort 主图/视频）。
+                    com.neoruaa.xhsdn.DownloadService.startDownload(this, webViewUrl, "taobao")
+                    showToast(if (forceDirect) "已切换淘宝直链解析" else "WebView 未抓到，已回退淘宝直链解析")
+                    return
+                }
+                // 否则 urls 非空，继续往下走通用 startWebCrawl 下载
             }
 
             if (urls.isNotEmpty()) {

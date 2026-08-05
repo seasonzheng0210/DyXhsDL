@@ -244,8 +244,8 @@ private fun WebViewScreen(
                             color = Color.White
                         )
                     }
-                    // 抖音：提供"直链解析(备用)"入口，WebView 取不到时强制走直链
-                    if (source == "douyin") {
+                    // 抖音/淘宝：提供"直链解析(备用)"入口，WebView 取不到时强制走后台直链解析
+                    if (source == "douyin" || source == "taobao") {
                         Button(
                             onClick = {
                                 if (!finished.value) {
@@ -308,7 +308,7 @@ private fun WebViewScreen(
             override fun onPageFinished(view: WebView?, url: String?) {
                 loading = false
                 // 抖音：页面加载完成后自动尝试提取（优先 WebView），失败再走直链兜底
-                if (source == "douyin" && !finished.value) {
+                if ((source == "douyin" || source == "taobao") && !finished.value) {
                     view?.postDelayed({
                         if (!finished.value) {
                             extractImages(context, webView, sniffedVideoUrls, source, finished, onResult)
@@ -343,8 +343,15 @@ private fun WebViewScreen(
                         it.contains("bytecdn") ||
                         it.contains(".mp4") && it.contains("douyin")
                     )
+                    // 淘宝视频嗅探（PC/H5 详情页 CDN 特征）
+                    val isTaobaoVideo = source == "taobao" && (
+                        it.contains("cloud.video.taobao.com") ||
+                        (it.contains("alicdn.com") && it.contains(".mp4")) ||
+                        (it.contains("tbcache.com") && it.contains(".mp4")) ||
+                        (it.contains("taobao.com") && it.contains(".mp4"))
+                    )
 
-                    if (isXhsVideo || isDouyinVideo) {
+                    if (isXhsVideo || isDouyinVideo || isTaobaoVideo) {
                         if (!sniffedVideoUrls.contains(it)) {
                             sniffedVideoUrls.add(it)
                             android.util.Log.d("WebViewActivity", "Sniffed video URL: $it")
@@ -427,7 +434,11 @@ private fun extractImages(
 ) {
     if (finished.value) return
     webView.postDelayed({
-        val jsFileName = if (source == "douyin") "douyin_extractor.js" else "xhs_extractor.js"
+        val jsFileName = when (source) {
+            "douyin" -> "douyin_extractor.js"
+            "taobao" -> "taobao_extractor.js"
+            else -> "xhs_extractor.js"
+        }
         val jsCode = readAssetFile(context, jsFileName) ?: run {
             Toast.makeText(context, context.getString(R.string.no_urls_found_javascript_null), Toast.LENGTH_SHORT).show()
             return@postDelayed
