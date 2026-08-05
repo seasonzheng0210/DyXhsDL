@@ -131,7 +131,9 @@ object TaobaoParser {
     }
 
     private fun extractIdFromBody(html: String): String? {
-        Regex("""detail\.htm\?id=(\d{6,})""").find(html)?.groupValues?.getOrNull(1)?.let { return it }
+        // 淘宝短链（e/m/c.tb.cn）现已改为返回 200 HTML 落地页（JS 跳转），
+        // 正文里明文是 item.htm?id=... 或 detail.htm?id=...，两种都要匹配。
+        Regex("""(?:item|detail)\.htm\?id=(\d{6,})""").find(html)?.groupValues?.getOrNull(1)?.let { return it }
         return null
     }
 

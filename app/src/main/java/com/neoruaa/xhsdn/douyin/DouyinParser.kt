@@ -85,9 +85,39 @@ object DouyinParser {
 
     fun canParse(url: String): Boolean {
         return url.contains("douyin.com") || url.contains("iesdouyin.com")
+            || url.contains("snssdk.com") || url.contains("douyinvod.com")
+    }
+
+    /**
+     * 是否为抖音直链（播放接口或 CDN 视频）。这类链接的 video_id 已经是真实文件 id，
+     * 直接下载（跟随 302）即可得到 mp4，无需解析分享页。
+     */
+    private fun isDirectPlayUrl(url: String): Boolean {
+        val u = url.lowercase()
+        return (u.contains("aweme.snssdk.com/aweme/v1/play/") && u.contains("video_id="))
+            || u.contains("douyinvod.com")
+            || (u.contains("snssdk.com") && u.contains("video_id="))
     }
 
     suspend fun parse(url: String): DouyinMediaInfo = withContext(Dispatchers.IO) {
+        // 直链快路径：aweme 播放接口 / 抖音 CDN 视频，video_id 已是真实文件 id，
+        // 跟随 302 即为 mp4 本体，无需走分享页解析。
+        if (isDirectPlayUrl(url)) {
+            val vid = Regex("""video_id=([^&]+)""").find(url)?.groupValues?.getOrNull(1)
+                ?: "direct"
+            val ua = randomUserAgent()
+            Log.d(TAG, "direct play url, vid=$vid")
+            return@withContext DouyinMediaInfo(
+                type = DouyinMediaType.VIDEO,
+                title = safeTitleOf("douyin_$vid", vid),
+                videoUrl = url,
+                imageUrls = emptyList(),
+                coverUrl = null,
+                videoId = vid,
+                userAgent = ua
+            )
+        }
+
         val ua = randomUserAgent()
         val finalUrl = resolveRedirects(url, ua)
         val id = extractId(finalUrl)

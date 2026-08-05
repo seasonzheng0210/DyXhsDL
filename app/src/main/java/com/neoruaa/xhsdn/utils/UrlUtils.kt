@@ -22,7 +22,9 @@ object UrlUtils {
      */
     fun isDouyinLink(url: String?): Boolean {
         if (url == null) return false
-        return url.contains("douyin.com") || url.contains("iesdouyin.com")
+        val u = url.lowercase()
+        return u.contains("douyin.com") || u.contains("iesdouyin.com")
+            || u.contains("snssdk.com") || u.contains("douyinvod.com")
     }
 
     /**
