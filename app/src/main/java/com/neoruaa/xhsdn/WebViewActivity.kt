@@ -174,6 +174,27 @@ private fun WebViewScreen(
     // Guard to ensure we only finish once
     val finished = remember { mutableStateOf(false) }
 
+    // 淘宝登录提示状态：首次进入淘宝链接且未配置 cookie → 提示登录；提取失败（cookie 失效）→ 也提示
+    val needLogin = remember { mutableStateOf(source == "taobao" && TaobaoParser.cookie.isBlank()) }
+    val loginHint = remember {
+        mutableStateOf(
+            if (source == "taobao" && TaobaoParser.cookie.isBlank())
+                "淘宝需要登录才能下载主图，请在此页面登录淘宝账号后点击「爬取」"
+            else ""
+        )
+    }
+    // 平台品牌色（淘宝橙 / 抖音青 / 小红书红）与标识，用于来源区分
+    val sourceColor = when (source) {
+        "taobao" -> Color(0xFFFF5000)
+        "douyin" -> Color(0xFF25F4EE)
+        else -> Color(0xFFFE2C55)
+    }
+    val sourceLabel = when (source) {
+        "taobao" -> "淘宝"
+        "douyin" -> "抖音"
+        else -> "小红书"
+    }
+
     DisposableEffect(webView) {
         onDispose { webView.destroy() }
     }
@@ -212,6 +233,17 @@ private fun WebViewScreen(
                     .padding(top = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // 平台标识：用品牌色字体区分淘宝/抖音/小红书
+                Box(
+                    modifier = Modifier
+                        .background(sourceColor.copy(alpha = 0.12f), ContinuousRoundedRectangle(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = sourceLabel,
+                        color = sourceColor
+                    )
+                }
                 TextField(
                     value = urlText,
                     onValueChange = { urlText = it },
@@ -236,7 +268,7 @@ private fun WebViewScreen(
                     }
                     Button(
                         onClick = {
-                            extractImages(context, webView, sniffedVideoUrls, source, finished, onResult)
+                            extractImages(context, webView, sniffedVideoUrls, source, finished, needLogin, loginHint, onResult)
                         },
                         modifier = Modifier.weight(1f),
                         enabled = !loading,
@@ -259,12 +291,28 @@ private fun WebViewScreen(
                             modifier = Modifier.weight(1f),
                             enabled = !loading
                         ) {
-                            Text(
-                                text = "直链解析",
-                                color = Color.White
-                            )
+                        Text(
+                            text = "直链解析",
+                            color = Color.White
+                        )
                         }
                     }
+                }
+            }
+
+            // 淘宝登录提示（橙色）：首次进入未配置 cookie 或 cookie 失效时提示登录；抖音/小红书不提示
+            if (source == "taobao" && needLogin.value) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .background(sourceColor.copy(alpha = 0.12f), ContinuousRoundedRectangle(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = loginHint.value,
+                        color = sourceColor
+                    )
                 }
             }
 
@@ -319,7 +367,7 @@ private fun WebViewScreen(
                         // 若页面发生二次加载，onPageFinished 会再触发一次，自然形成一次重试。
                         view?.postDelayed({
                             if (!finished.value) {
-                                extractImages(context, webView, sniffedVideoUrls, source, finished, onResult)
+                                extractImages(context, webView, sniffedVideoUrls, source, finished, needLogin, loginHint, onResult)
                             }
                         }, 3500)
                     }
@@ -453,6 +501,8 @@ private fun extractImages(
     sniffedUrls: Set<String>,
     source: String,
     finished: MutableState<Boolean>,
+    needLogin: MutableState<Boolean>,
+    loginHint: MutableState<String>,
     onResult: (List<String>, String, Long?, Boolean) -> Unit
 ) {
     if (finished.value) return
@@ -499,6 +549,8 @@ private fun extractImages(
                 allUrls.addAll(sniffedUrls)
 
                 if (allUrls.isNotEmpty()) {
+                    // 淘宝提取成功 → 关闭登录提示（说明登录态有效）
+                    if (source == "taobao") needLogin.value = false
                     // Create a task for the web crawl
                     val taskId = com.neoruaa.xhsdn.data.TaskManager.createTask(
                         noteUrl = webView.url ?: "",
@@ -519,6 +571,11 @@ private fun extractImages(
                         finished.value = true
                         onResult(emptyList(), contentText, null, false)
                     } else {
+                        // 淘宝提取为空（cookie 失效/未登录）→ 提示重新登录
+                        if (source == "taobao") {
+                            needLogin.value = true
+                            loginHint.value = "登录态可能已失效，请在此页面重新登录淘宝后点击「爬取」"
+                        }
                         Toast.makeText(context, context.getString(R.string.no_accessible_urls_found), Toast.LENGTH_SHORT).show()
                     }
                 }
