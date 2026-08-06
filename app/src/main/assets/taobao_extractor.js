@@ -72,6 +72,29 @@
             }
         }
 
+        // ---- 1.5) 全部主图（缩略图列表高清化，覆盖轮播所有图）----
+        // 现代淘宝主图轮播：首图在 #J_ImgBooth，其余主图在缩略图列表里（高清化后即全部主图）。
+        var thumbSelectors = [
+            '#J_UlThumb li img',
+            '.tb-thumb-item img',
+            '.tb-thumb img',
+            '.thumb-list img',
+            '.pic-thumb img',
+            '.gallery-thumb img',
+            '.tb-gallery .tb-thumb-item img',
+            '.J_UlThumb li img'
+        ];
+        for (var ts = 0; ts < thumbSelectors.length; ts++) {
+            var thumbList = document.querySelectorAll(thumbSelectors[ts]);
+            for (var ti = 0; ti < thumbList.length; ti++) {
+                var tEl = thumbList[ti];
+                add(tEl.src);
+                add(tEl.getAttribute('data-src'));
+                add(tEl.getAttribute('data-original'));
+                add(tEl.getAttribute('data-ks-lazyload'));
+            }
+        }
+
         // ---- 2) 移动 H5 详情页（item.taobao.com 移动端 / 天猫 H5）----
         var h5Selectors = [
             '.detail-gallery img',
@@ -93,6 +116,35 @@
                 add(hel.getAttribute('data-src'));
                 add(hel.getAttribute('data-original'));
                 add(hel.getAttribute('data-ks-lazyload'));
+            }
+        }
+
+        // ---- 2.5) 详情长图（商品描述图文，用户常需这部分）----
+        // 现代淘宝把"主图轮播"和"详情长图"分开展示，详情长图在描述区域（图文混排）。
+        var descSelectors = [
+            '#J_DetailMeta img',
+            '.detail-desc img',
+            '.tb-item-info img',
+            '.desc-area img',
+            '.detail-content img',
+            '.detail-desc-trigger img',
+            '.detail-img-wrap img',
+            '.detail-desc-content img',
+            '.tb-detail-desc img',
+            'img[data-originalsrc]',
+            'img[data-originals]'
+        ];
+        for (var ds = 0; ds < descSelectors.length; ds++) {
+            var descList = document.querySelectorAll(descSelectors[ds]);
+            for (var di = 0; di < descList.length; di++) {
+                var dEl = descList[di];
+                add(dEl.src);
+                add(dEl.getAttribute('data-src'));
+                add(dEl.getAttribute('data-original'));
+                add(dEl.getAttribute('data-ks-lazyload'));
+                add(dEl.getAttribute('data-originalsrc'));
+                add(dEl.getAttribute('data-originals'));
+                add(dEl.getAttribute('data-lazyload'));
             }
         }
 

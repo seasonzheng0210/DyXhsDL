@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
+import com.neoruaa.xhsdn.taobao.TaobaoParser
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -87,7 +88,8 @@ data class SettingsUiState(
     val keepScreenOn: Boolean = false,
     val showClipboardBubble: Boolean = true,
     val autoReadClipboard: Boolean = false,
-    val manualInputLinks: Boolean = false
+    val manualInputLinks: Boolean = false,
+    val taobaoCookieSaved: Boolean = false
 )
 
 class SettingsViewModel(private val prefs: SharedPreferences) : ViewModel() {
@@ -110,6 +112,7 @@ class SettingsViewModel(private val prefs: SharedPreferences) : ViewModel() {
         val showClipboardBubble = prefs.getBoolean("show_clipboard_bubble", true) // Default true
         val autoReadClipboard = prefs.getBoolean("auto_read_clipboard", false)
         val manualInputLinks = prefs.getBoolean("manual_input_links", false)
+        val taobaoCookieSaved = prefs.getString("taobao_cookie", "")?.isNotBlank() == true
         return SettingsUiState(
             createLivePhotos = createLivePhotos,
             useCustomNaming = useCustomNaming,
@@ -120,7 +123,8 @@ class SettingsViewModel(private val prefs: SharedPreferences) : ViewModel() {
             keepScreenOn = keepScreenOn,
             showClipboardBubble = showClipboardBubble,
             autoReadClipboard = autoReadClipboard,
-            manualInputLinks = manualInputLinks
+            manualInputLinks = manualInputLinks,
+            taobaoCookieSaved = taobaoCookieSaved
         )
     }
 
@@ -186,6 +190,12 @@ class SettingsViewModel(private val prefs: SharedPreferences) : ViewModel() {
         it.copy(manualInputLinks = enabled).also { newState ->
             persist(newState)
         }
+    }
+
+    fun onClearTaobaoCookie() {
+        prefs.edit().remove("taobao_cookie").apply()
+        TaobaoParser.cookie = ""
+        updateState { it.copy(taobaoCookieSaved = false) }
     }
 
     private fun persist(state: SettingsUiState) {
@@ -269,6 +279,7 @@ class SettingsActivity : ComponentActivity() {
                     onShowClipboardBubbleChange = viewModel::onShowClipboardBubbleChange,
                     onAutoReadClipboardChange = viewModel::onAutoReadClipboardChange,
                     onManualInputLinksChange = viewModel::onManualInputLinksChange,
+                    onClearTaobaoCookie = viewModel::onClearTaobaoCookie,
                     topBarState = topBarState
                 )
             }
@@ -305,6 +316,7 @@ private fun SettingsScreen(
     onShowClipboardBubbleChange: (Boolean) -> Unit,
     onAutoReadClipboardChange: (Boolean) -> Unit,
     onManualInputLinksChange: (Boolean) -> Unit,
+    onClearTaobaoCookie: () -> Unit,
     topBarState: TopAppBarState
 ) {
     val context = LocalContext.current
@@ -491,6 +503,32 @@ private fun SettingsScreen(
                                     )
                                 )
                             }
+                        )
+                    }
+                }
+            }
+
+            item {
+                SmallTitle("淘宝登录")
+            }
+
+            item {
+                Card(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp)
+                ) {
+                    BasicComponent(
+                        title = if (uiState.taobaoCookieSaved) "已保存淘宝登录态" else "未保存淘宝登录态",
+                        summary = if (uiState.taobaoCookieSaved) "下载淘宝主图/视频自动使用，无需再次登录" else "首次下载淘宝请在 WebView 内登录，将自动保存",
+                        onClick = { /* 状态展示，无操作 */ }
+                    )
+
+                    if (uiState.taobaoCookieSaved) {
+                        BasicComponent(
+                            title = "清除淘宝登录态",
+                            summary = "清除后需要重新在 WebView 内登录",
+                            onClick = onClearTaobaoCookie
                         )
                     }
                 }
