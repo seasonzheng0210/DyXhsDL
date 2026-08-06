@@ -414,12 +414,18 @@ class MainActivity : ComponentActivity() {
                             // Clean the URL using the same method as other places
                             val cleanUrl = UrlUtils.extractFirstUrl(clipText)
                             if (cleanUrl != null) {
-                                val webViewIntent = Intent(this, WebViewActivity::class.java).apply {
-                                    putExtra("url", cleanUrl)
-                                    // Don't pass task_id here - let WebViewActivity create the task when user clicks "爬取"
+                                val platform = UrlUtils.detectPlatform(cleanUrl)
+                                if (platform == "taobao") {
+                                    // 淘宝链接走专用 WebView 入口（带 cookie 注入 + 登录提示 + taobao_extractor）
+                                    launchTaobaoWebView(cleanUrl)
+                                } else {
+                                    val webViewIntent = Intent(this, WebViewActivity::class.java).apply {
+                                        putExtra("url", cleanUrl)
+                                        putExtra("source", if (platform == "douyin") "douyin" else "xhs")
+                                        // Don't pass task_id here - let WebViewActivity create the task when user clicks "爬取"
+                                    }
+                                    startActivityForResult(webViewIntent, WEBVIEW_REQUEST_CODE)
                                 }
-                                startActivityForResult(webViewIntent, WEBVIEW_REQUEST_CODE)
-
                                 detectedXhsLink = null
                             } else {
                                 showToast(getString(R.string.invalid_link_please_reenter))
@@ -455,7 +461,12 @@ class MainActivity : ComponentActivity() {
                             // 复用同一任务（重置进度），重新派发到前台服务下载
                             com.neoruaa.xhsdn.data.TaskManager.resetTask(task.id)
                             com.neoruaa.xhsdn.data.TaskManager.startTask(task.id)
-                            dispatchDownload(task.noteUrl, if (task.source == "douyin") "douyin" else "xhs", task.id)
+                            val retrySource = when (task.source) {
+                                "douyin" -> "douyin"
+                                "taobao" -> "taobao"
+                                else -> "xhs"
+                            }
+                            dispatchDownload(task.noteUrl, retrySource, task.id)
                         }
                     },
                     onDeleteTask = { task ->
@@ -466,7 +477,11 @@ class MainActivity : ComponentActivity() {
                     },
                     onWebCrawlTask = { task ->
                         viewModel.updateUrl(task.noteUrl)
-                        launchWebView(task.noteUrl, task.id)
+                        when (task.source) {
+                            "taobao" -> launchTaobaoWebView(task.noteUrl)
+                            "douyin" -> launchDouyinWebView(task.noteUrl)
+                            else -> launchWebView(task.noteUrl, task.id)
+                        }
                     },
                     onStopTask = { task ->
                          // 停止前台服务中正在进行的任务
@@ -1686,8 +1701,16 @@ private fun TaskCell(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     // 来源标识（抖音/小红书）
-                    val sourceLabel = if (task.source == "douyin") "抖音" else "小红书"
-                    val sourceColor = if (task.source == "douyin") Color(0xFF25F4EE) else Color(0xFFFE2C55)
+                    val sourceLabel = when (task.source) {
+                        "douyin" -> "抖音"
+                        "taobao" -> "淘宝"
+                        else -> "小红书"
+                    }
+                    val sourceColor = when (task.source) {
+                        "douyin" -> Color(0xFF25F4EE)
+                        "taobao" -> Color(0xFFFF5000)
+                        else -> Color(0xFFFE2C55)
+                    }
                     Box(
                         modifier = Modifier
                             .clip(ContinuousRoundedRectangle(999.dp))
