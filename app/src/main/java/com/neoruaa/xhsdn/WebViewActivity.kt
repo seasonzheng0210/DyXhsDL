@@ -268,6 +268,11 @@ private fun WebViewScreen(
                     }
                     Button(
                         onClick = {
+                            // 先回抓 WebView 当前登录态 cookie（若已登录则自动保存，实现登录一次后续全自动）
+                            if (source == "taobao" && trySaveTaobaoCookie(context)) {
+                                needLogin.value = false
+                                loginHint.value = ""
+                            }
                             extractImages(context, webView, sniffedVideoUrls, source, finished, needLogin, loginHint, onResult)
                         },
                         modifier = Modifier.weight(1f),
@@ -358,6 +363,14 @@ private fun WebViewScreen(
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 loading = false
+                // 淘宝：页面加载完成且已跳离短链落地页后，尝试回抓登录态 cookie 自动保存
+                // （登录完成后页面跳转/刷新会触发本回调，此时已带 cookie2/unb/_m_h5_tk）
+                if (source == "taobao" && url != null && !url.contains("tb.cn/h")) {
+                    if (trySaveTaobaoCookie(context)) {
+                        needLogin.value = false
+                        loginHint.value = ""
+                    }
+                }
                 // 抖音/淘宝：页面加载完成后自动尝试提取（优先 WebView），失败再走直链兜底
                 if ((source == "douyin" || source == "taobao") && !finished.value) {
                     // 淘宝短链落地页（tb.cn/h）还没跳到真实商品页时不抠，等 onPageFinished 再次触发再抠
@@ -589,6 +602,35 @@ private fun extractImages(
             }
         }
     }, 10)
+}
+
+/**
+ * 淘宝登录后自动回抓 WebView 的登录态 cookie，写入设置(XHSDownloaderPrefs.taobao_cookie)
+ * 并同步到 TaobaoParser.cookie，实现"App 内登录一次，之后 HTTP 直解 / 下次 WebView 自动带登录态"。
+ * 仅在检测到有效登录标志(cookie2 / unb / _m_h5_tk)时才写入，匿名登录墙页面不会误写。
+ * @return 是否成功保存了有效登录态
+ */
+private fun trySaveTaobaoCookie(context: android.content.Context): Boolean {
+    return try {
+        val cm = CookieManager.getInstance()
+        val raw = cm.getCookie("https://item.taobao.com") ?: cm.getCookie(".taobao.com") ?: ""
+        if (raw.isNullOrBlank()) return false
+        // 登录标志：cookie2(淘宝账号主 cookie) / unb(账号 id) / _m_h5_tk(mtop token)
+        val loggedIn = raw.contains("cookie2=") || raw.contains("unb=") || raw.contains("_m_h5_tk=")
+        if (!loggedIn) return false
+        val prefs = context.getSharedPreferences("XHSDownloaderPrefs", android.content.Context.MODE_PRIVATE)
+        val existing = prefs.getString("taobao_cookie", "") ?: ""
+        if (existing != raw) {
+            prefs.edit().putString("taobao_cookie", raw).apply()
+            TaobaoParser.cookie = raw
+            Log.d("WebViewActivity", "saved taobao login cookie from webview (len=${raw.length})")
+            Toast.makeText(context, "已保存淘宝登录态，下次自动使用", Toast.LENGTH_SHORT).show()
+        }
+        true
+    } catch (e: Exception) {
+        Log.e("WebViewActivity", "save taobao cookie failed: ${e.message}")
+        false
+    }
 }
 
 private fun readAssetFile(context: android.content.Context, fileName: String): String? {
