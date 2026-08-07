@@ -59,6 +59,12 @@ data class TaobaoMediaInfo(
 object TaobaoParser {
     private const val TAG = "TaobaoParser"
 
+    /**
+     * 淘宝需要登录才能取主图时抛出的专用异常。DownloadService 捕获后自动打开可登录的
+     * WebView 入口（而非仅报错），覆盖「匿名登录墙」与「cookie 失效」两种情形。
+     */
+    class TaobaoLoginRequiredException(message: String) : Exception(message)
+
     // 手机淘宝分享 UA（AliApp(AP/...)）。淘宝对这类 UA 返回移动版详情，且对 PC Chrome UA 更敏感。
     const val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 AliApp(AP/10.0.1.123008) AlipayClient/10.0.1.123008 Language/zh-Hans"
 
@@ -170,14 +176,12 @@ object TaobaoParser {
         if (imageUrls.isEmpty()) {
             val hint = if (cookie.isBlank()) {
                 "淘宝对匿名访问返回登录墙（实测 item.taobao.com 仅返回约 5KB 登录页），主图无法获取。" +
-                    "解决方法二选一：① 在 App 设置 → 淘宝 cookie 中粘贴【已登录】淘宝网页版 cookie" +
-                    "（浏览器 F12 → Network → 复制请求里的 Cookie 头），填好后重测；" +
-                    "② 用 WebView 入口打开链接，在页面内登录淘宝后点「爬取」。"
+                    "将在 App 内打开淘宝登录页，请登录后点「爬取」；或在设置 → 淘宝 cookie 中粘贴【已登录】淘宝网页版 cookie。"
             } else {
                 "已带 cookie 仍取不到主图，可能 cookie 失效/权限不足，或该商品主图走 mtop 异步加载。" +
-                    "请更新 cookie，或改用 WebView 入口在页面内登录后重试。"
+                    "将在 App 内打开淘宝登录页，请重新登录后点「爬取」。"
             }
-            throw Exception(
+            throw TaobaoLoginRequiredException(
                 "未从淘宝详情页提取到主图。itemId=$itemId。$hint"
             )
         }
