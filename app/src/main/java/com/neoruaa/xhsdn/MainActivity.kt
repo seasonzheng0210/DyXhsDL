@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
+import com.neoruaa.xhsdn.taobao.TaobaoParser
 import com.neoruaa.xhsdn.utils.UrlUtils
 import com.neoruaa.xhsdn.utils.DownloadLogger
 import androidx.compose.foundation.layout.padding
@@ -458,15 +459,20 @@ class MainActivity : ComponentActivity() {
                     },
                     onRetryTask = { task ->
                         ensureStoragePermission {
-                            // 复用同一任务（重置进度），重新派发到前台服务下载
-                            com.neoruaa.xhsdn.data.TaskManager.resetTask(task.id)
-                            com.neoruaa.xhsdn.data.TaskManager.startTask(task.id)
                             val retrySource = when (task.source) {
                                 "douyin" -> "douyin"
                                 "taobao" -> "taobao"
                                 else -> "xhs"
                             }
-                            dispatchDownload(task.noteUrl, retrySource, task.id)
+                            when (retrySource) {
+                                "taobao" -> openTaobao(task.noteUrl, task.id)
+                                else -> {
+                                    // 复用同一任务（重置进度），重新派发到前台服务下载
+                                    com.neoruaa.xhsdn.data.TaskManager.resetTask(task.id)
+                                    com.neoruaa.xhsdn.data.TaskManager.startTask(task.id)
+                                    dispatchDownload(task.noteUrl, retrySource, task.id)
+                                }
+                            }
                         }
                     },
                     onDeleteTask = { task ->
@@ -629,6 +635,20 @@ class MainActivity : ComponentActivity() {
                 intent.putExtra("source", "taobao")
                 startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
             }
+        }
+    }
+
+    /**
+     * 淘宝入口统一路由：
+     * - 未配置登录态 cookie → 直接打开 WebView 登录页（子 Activity，带橙色"需要登录"提示），不先试探 HTTP。
+     * - 已配置 cookie → 走 HTTP 直解（带登录态），失败再在 WebView 内提示登录。
+     * 避免"无 cookie 时先撞登录墙、再自动跳 WebView"的眩晕式跳转（且 NEW_TASK 会跳回桌面）。
+     */
+    private fun openTaobao(rawLink: String, taskId: Long? = null) {
+        if (TaobaoParser.cookie.isBlank()) {
+            launchTaobaoWebView(rawLink)
+        } else {
+            com.neoruaa.xhsdn.DownloadService.startDownload(this, rawLink, "taobao", taskId)
         }
     }
 

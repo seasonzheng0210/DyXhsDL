@@ -376,13 +376,13 @@ class DownloadService : Service() {
 
                 val info = runCatching { TaobaoParser.parse(targetUrl) }.getOrElse { e ->
                     if (e is TaobaoParser.TaobaoLoginRequiredException) {
-                        // 登录墙 / cookie 失效：自动打开可登录的淘宝 WebView 入口，而非仅报错
-                        DownloadLogger.logInfo(this@DownloadService, "taobao", targetUrl,
-                            "淘宝需要登录，自动打开 WebView 登录页")
-                        TaskManager.completeTask(myTaskId, false, "需要登录淘宝，已打开登录页")
+                        // 登录墙 / cookie 失效：不再自动跳 WebView（会造成眩晕式跳转，且 NEW_TASK 会跳回桌面）。
+                        // 改为明确提示：用 App 内 WebView 入口登录后重试。
+                        DownloadLogger.logFailure(this@DownloadService, "taobao", targetUrl,
+                            "需要登录淘宝才能获取主图，请用 App 内 WebView 入口登录后重试")
+                        TaskManager.completeTask(myTaskId, false, "需要登录淘宝，请用 WebView 入口登录后重试")
                         updateNotification(getString(R.string.download_failed_notification_title),
-                            "需要登录淘宝，已打开登录页", false)
-                        openTaobaoLoginWebView(targetUrl)
+                            "需要登录淘宝，请用 WebView 入口登录后重试", false)
                         return@launch
                     }
                     DownloadLogger.logFailure(this@DownloadService, "taobao", targetUrl, "解析失败: ${e.message}")
@@ -470,29 +470,6 @@ class DownloadService : Service() {
         return okAll
     }
 
-    /**
-     * 淘宝需要登录时，自动打开可登录的 WebView 入口（FLAG_ACTIVITY_NEW_TASK）。
-     * 先把短链解析成真实商品详情页 URL，避免 WebView 卡在落地/跳转中间页。
-     */
-    private fun openTaobaoLoginWebView(rawUrl: String) {
-        scope.launch(Dispatchers.IO) {
-            val targetUrl = try {
-                TaobaoParser.resolveItemPageUrl(rawUrl)
-            } catch (_: Exception) {
-                rawUrl
-            }
-            val intent = Intent(this@DownloadService, WebViewActivity::class.java).apply {
-                putExtra("url", targetUrl)
-                putExtra("source", "taobao")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            try {
-                startActivity(intent)
-            } catch (e: Exception) {
-                Log.e(TAG, "openTaobaoLoginWebView failed: ${e.message}")
-            }
-        }
-    }
     // endregion
 
     // region 小红书下载（普通模式，复用 XHSDownloader）
