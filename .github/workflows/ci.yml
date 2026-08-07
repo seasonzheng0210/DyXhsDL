@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 37
+          build-tools: 35.0.0
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # 默认 daemon（不要 --no-daemon：本机经验表明 --no-daemon 会让 Kotlin 编译器
+      # 找不到同模块符号，导致误报编译错误）。仅跑 JVM 单测，无需签名。
+      - name: Run unit tests (default daemon)
+        run: ./gradlew testDebugUnitTest
+
+      - name: Stop Gradle daemon
+        if: always()
+        run: ./gradlew --stop

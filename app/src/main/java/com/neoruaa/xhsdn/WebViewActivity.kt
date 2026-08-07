@@ -93,18 +93,7 @@ class WebViewActivity : ComponentActivity() {
 
         val initialUrl = intent?.getStringExtra("url")
         val taskId = intent?.getLongExtra("task_id", -1L) ?: -1L
-        val source = run {
-            val s = intent?.getStringExtra("source") ?: "xhs"
-            // 兜底：来源未明确（默认 xhs）但 URL 实为淘宝/抖音域名时自动纠正，
-            // 避免任何漏传 source 的入口把淘宝/抖音链接误当小红书处理
-            if (s == "xhs" && !initialUrl.isNullOrBlank()) {
-                when {
-                    com.neoruaa.xhsdn.utils.UrlUtils.isTaobaoLink(initialUrl) -> "taobao"
-                    com.neoruaa.xhsdn.utils.UrlUtils.isDouyinLink(initialUrl) -> "douyin"
-                    else -> s
-                }
-            } else s
-        }
+        val source = com.neoruaa.xhsdn.utils.Router.resolveWebViewSource(initialUrl, intent?.getStringExtra("source"))
 
         setContent {
             val controller = ThemeController(ColorSchemeMode.System)

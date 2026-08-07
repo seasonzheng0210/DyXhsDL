@@ -302,7 +302,7 @@ object TaobaoParser {
      * 从详情页 HTML 提取主图地址列表。
      * 匹配 "auctionImages":[ ... ] 中的字符串数组，补全 https 协议，去重。
      */
-    private fun extractMainImages(html: String): List<String> {
+    internal fun extractMainImages(html: String): List<String> {
         val result = mutableListOf<String>()
         val m = Regex("""auctionImages"\s*:\s*\[(.*?)\]""", RegexOption.DOT_MATCHES_ALL)
             .find(html) ?: return result
