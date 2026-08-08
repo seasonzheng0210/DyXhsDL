@@ -43,10 +43,26 @@
         var hd = toHd(u);
         if (!seen[hd]) {
             seen[hd] = 1;
-            if (isTaobaoMedia(hd)) {
+            // 全局小图过滤：登录墙/占位/logo（如 -200-200.png）一律不收。
+            // 真实缩略图 _60x60.jpg 已被 toHd 高清化为 _750x750.jpg，不会被误伤。
+            if (isTaobaoMedia(hd) && !isTinyPlaceholder(hd)) {
                 urls.push(hd);
             }
         }
+    }
+
+    // 小图/占位图过滤：URL 带尺寸后缀且两边都 <400 视为占位图。
+    // 两种格式都要覆盖：
+    //   1) 缩略图风格 _60x60.jpg / -800x800.jpg（x 分隔）
+    //   2) alicdn tfs 风格 -200-200.png / -800-800.png（连字符分隔，登录墙 logo 就是这个格式）
+    // 真实主图通常 ≥400px（_430x430 / -800-800 / 无尺寸后缀）；登录页 logo/图标 多为 200x200 以内。
+    function isTinyPlaceholder(u) {
+        if (!u) return true;
+        var m1 = u.match(/[-_](\d{2,3})x(\d{2,3})\.(?:jpg|jpeg|png|webp)/i);
+        if (m1) return parseInt(m1[1], 10) < 400 && parseInt(m1[2], 10) < 400;
+        var m2 = u.match(/-(\d{2,3})-(\d{2,3})\.(?:jpg|jpeg|png|webp)/i);
+        if (m2) return parseInt(m2[1], 10) < 400 && parseInt(m2[2], 10) < 400;
+        return false;
     }
 
     try {
@@ -218,7 +234,7 @@
             }
         } catch (e) {}
 
-        // ---- 4) 兜底：扫描页面所有 <img>（含懒加载 data-src），只要阿里系 CDN 都收 ----
+        // ---- 4) 兜底：扫描页面所有 <img>（含懒加载 data-src），只要阿里系 CDN 且非小占位图都收 ----
         var allImgs = document.querySelectorAll('img');
         for (var a = 0; a < allImgs.length; a++) {
             var aimg = allImgs[a];
@@ -227,7 +243,8 @@
                             aimg.getAttribute('data-original') ||
                             aimg.getAttribute('data-ks-lazyload') ||
                             aimg.getAttribute('data-lazyload');
-            if (candidate && isTaobaoMedia(candidate)) {
+            // 占位/logo 小图直接跳过（登录墙页面只有这类图，过滤后返回 0 → App 提示登录）
+            if (candidate && isTaobaoMedia(candidate) && !isTinyPlaceholder(candidate)) {
                 add(candidate);
             }
             // 背景图
@@ -235,7 +252,7 @@
                 var bg = aimg.style && aimg.style.backgroundImage;
                 if (bg && bg.indexOf('url(') === 0) {
                     var bgUrl = bg.replace(/^url\(['"]?/, '').replace(/['"]?\)$/, '');
-                    if (isTaobaoMedia(bgUrl)) add(bgUrl);
+                    if (isTaobaoMedia(bgUrl) && !isTinyPlaceholder(bgUrl)) add(bgUrl);
                 }
             } catch (e) {}
         }

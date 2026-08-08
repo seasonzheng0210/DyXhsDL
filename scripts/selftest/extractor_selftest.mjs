@@ -47,9 +47,22 @@ const xhsHtml = `<!DOCTYPE html><html><body>
   <img src="https://sns-video.xhscdn.com/notes/1.mp4"/>
 </body></html>`;
 
+// ---- 淘宝：模拟"渲染后的登录墙"（模拟器真机实测：匿名页只有 200x200 logo 占位图）----
+// 关键：logo 恰好落在容器 selector(.gallery/.pic-list) 里也要被小图过滤掉 → 0 图 → App 提示登录
+const taobaoLoginWallRenderedHtml = `<!DOCTYPE html><html><head><title>商品详情页</title></head><body>
+  <div class="gallery">
+    <img src="https://gw.alicdn.com/tfs/TB1QZN.CYj1gK0jSZFuXXcrHpXa-200-200.png"/>
+    <img src="https://gw.alicdn.com/tfs/TB1logofooter-100-100.png" data-src="https://gw.alicdn.com/tfs/TB1logofooter-100-100.png"/>
+  </div>
+  <div class="pic-list">
+    <img src="https://gw.alicdn.com/tfs/TB1icon-60-60.png"/>
+  </div>
+</body></html>`;
+
 const cases = [
   { name: 'taobao_logged_in', html: taobaoLoggedInHtml, file: 'taobao_extractor.js' },
   { name: 'taobao_anonymous_shell', html: readFileSync(outDir + '/tb_anon.html', 'utf8'), file: 'taobao_extractor.js' },
+  { name: 'taobao_loginwall_logo', html: taobaoLoginWallRenderedHtml, file: 'taobao_extractor.js' },
   { name: 'douyin', html: douyinHtml, file: 'douyin_extractor.js' },
   { name: 'xhs', html: xhsHtml, file: 'xhs_extractor.js' },
 ];
@@ -66,7 +79,7 @@ for (const c of cases) {
     fail++;
   } else {
     const urls = (r.result && r.result.urls) || [];
-    const ok = c.name === 'taobao_anonymous_shell' ? urls.length === 0 : urls.length > 0;
+    const ok = (c.name === 'taobao_anonymous_shell' || c.name === 'taobao_loginwall_logo') ? urls.length === 0 : urls.length > 0;
     console.log(`[${c.name}] ${ok ? '✅' : '❌'} 抠到 ${urls.length} 个 URL` + (urls.length ? ' 例: ' + urls.slice(0,3).join(' | ') : ''));
     if (c.name === 'taobao_logged_in') {
       // 校验高清化 + 过滤

@@ -179,6 +179,13 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(autoUrl) {
                 autoUrl?.let { url ->
                      if (url.isNotEmpty()) {
+                        // 淘宝链接统一走 openTaobao：无 cookie 先进 WebView 登录页，有 cookie 才 HTTP 直解，
+                        // 避免直接进 TaobaoParser 匿名撞登录墙（与剪贴板按钮路径行为一致）
+                        if (UrlUtils.detectPlatform(url) == "taobao") {
+                            openTaobao(url)
+                            _autoDownloadIntentUrl.value = null
+                            return@LaunchedEffect
+                        }
                         viewModel.updateUrl(url)
                         ensureStoragePermission { 
                             val selectiveDownload = getSharedPreferences("XHSDownloaderPrefs", MODE_PRIVATE)

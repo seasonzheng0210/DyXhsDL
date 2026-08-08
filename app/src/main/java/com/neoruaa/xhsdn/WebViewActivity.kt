@@ -688,14 +688,18 @@ private fun extractImages(
 
 /**
  * 判定 WebView 当前 cookie 是否代表“已登录淘宝”。
- * 关键：cookie2 才是淘宝账号登录态主 cookie；匿名/未登录会话虽可能带 _m_h5_tk / unb，
- * 但没有 cookie2，不能作为“已登录”标志（v1.0.21 修复：此前误把匿名 _m_h5_tk 当作登录态，
- * 导致“还没登录就说已保存”，且 HTTP 直解用匿名 cookie 撞登录墙）。
+ * 关键：只有「账号登录态」才有的 cookie 是 unb（用户数字ID）与 tracknick（昵称）。
+ * 注意：cookie2 / _m_h5_tk / t 等匿名访客会话也有（设备/会话标识，cookie2 是 32 位 hex 非空值），
+ * 不能作为登录标志。v1.0.21 曾用 cookie2=[^;]+，实测匿名 WebView 会话也带非空 cookie2，判定失效。
  */
 internal fun isTaobaoLoggedIn(rawCookie: String): Boolean {
-    // cookie2 后的取值必须非空（[^;]+）：淘宝在未登录态会把 cookie2 置空(cookie2=)，
-    // 仅 contains("cookie2=") 会误判空值 cookie 为已登录。
-    return Regex("cookie2=[^;]+").containsMatchIn(rawCookie)
+    if (rawCookie.isBlank()) return false
+    // unb= 用户数字ID（真实登录态是长数字，如 1820441234；unb=0 视为未登录）
+    val unb = Regex("(?:^|;\\s*)unb=([^;]+)").find(rawCookie)?.groupValues?.getOrNull(1)?.trim()
+    if (!unb.isNullOrBlank() && unb != "0") return true
+    // tracknick= 昵称（URL 编码，仅登录态存在）
+    val nick = Regex("(?:^|;\\s*)tracknick=([^;]+)").find(rawCookie)?.groupValues?.getOrNull(1)?.trim()
+    return !nick.isNullOrBlank() && nick != "0"
 }
 
 /**
@@ -707,6 +711,8 @@ private fun trySaveTaobaoCookie(context: android.content.Context): Boolean {
     return try {
         val cm = CookieManager.getInstance()
         val raw = cm.getCookie("https://item.taobao.com") ?: cm.getCookie(".taobao.com") ?: ""
+        // 诊断日志：打印当前 WebView 淘宝 cookie（截断），用于判断登录态判定是否正确
+        Log.d("WebViewActivity", "TAOBAO_COOKIE_DUMP ${raw.take(500)}")
         if (raw.isNullOrBlank()) return false
         // 仅当检测到真实登录态(cookie2)才视为已登录并保存
         if (!isTaobaoLoggedIn(raw)) return false
@@ -806,6 +812,7 @@ private fun diagnoseTaobaoDom(webView: WebView, cb: (String) -> Unit) {
                 .replace("\\\\", "\\")
                 .replace("\\n", "\n")
         }
+        Log.d("WebViewActivity", "TAOBAO_DIAG $s")
         cb(s)
     }
 }
