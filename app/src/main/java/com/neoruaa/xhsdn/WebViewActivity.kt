@@ -179,10 +179,12 @@ private fun WebViewScreen(
     val loginHint = remember {
         mutableStateOf(
             if (source == "taobao" && TaobaoParser.cookie.isBlank())
-                "淘宝需要登录才能下载主图，请在此页面登录淘宝账号后点击「爬取」"
+                "淘宝需要登录才能下载主图：请先在此页面登录淘宝账号，再点「保存 Cookie」并点「爬取」"
             else ""
         )
     }
+    // 淘宝登录态是否已保存（绿色提示用）
+    val savedOk = remember { mutableStateOf(false) }
     // 平台品牌色（淘宝橙 / 抖音青 / 小红书红）与标识，用于来源区分
     val sourceColor = when (source) {
         "taobao" -> Color(0xFFFF5000)
@@ -272,6 +274,7 @@ private fun WebViewScreen(
                             if (source == "taobao" && trySaveTaobaoCookie(context)) {
                                 needLogin.value = false
                                 loginHint.value = ""
+                                savedOk.value = true
                             }
                             extractImages(context, webView, sniffedVideoUrls, source, finished, needLogin, loginHint, onResult)
                         },
@@ -317,6 +320,46 @@ private fun WebViewScreen(
                     Text(
                         text = loginHint.value,
                         color = sourceColor
+                    )
+                }
+            }
+
+            // 淘宝：登录后手动保存 Cookie 按钮（显式控制，避免误存匿名态）
+            if (source == "taobao") {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            val (ok, msg) = saveTaobaoCookieManually(context)
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            if (ok) {
+                                savedOk.value = true
+                                needLogin.value = false
+                                loginHint.value = ""
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColorsPrimary()
+                    ) {
+                        Text(text = "保存 Cookie", color = Color.White)
+                    }
+                }
+            }
+
+            // 淘宝：已保存登录态提示（绿色）
+            if (source == "taobao" && savedOk.value) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .background(Color(0xFF1B8A3A).copy(alpha = 0.12f), ContinuousRoundedRectangle(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = "已保存淘宝登录态，可点「爬取」下载主图",
+                        color = Color(0xFF1B8A3A)
                     )
                 }
             }
@@ -369,6 +412,7 @@ private fun WebViewScreen(
                     if (trySaveTaobaoCookie(context)) {
                         needLogin.value = false
                         loginHint.value = ""
+                        savedOk.value = true
                     }
                 }
                 // 抖音/淘宝：页面加载完成后自动尝试提取（优先 WebView），失败再走直链兜底
@@ -587,7 +631,7 @@ private fun extractImages(
                         // 淘宝提取为空（cookie 失效/未登录）→ 提示重新登录
                         if (source == "taobao") {
                             needLogin.value = true
-                            loginHint.value = "登录态可能已失效，请在此页面重新登录淘宝后点击「爬取」"
+                            loginHint.value = "登录态可能已失效，请在此页面重新登录淘宝后点「保存 Cookie」再点「爬取」"
                         }
                         Toast.makeText(context, context.getString(R.string.no_accessible_urls_found), Toast.LENGTH_SHORT).show()
                     }
@@ -605,31 +649,63 @@ private fun extractImages(
 }
 
 /**
- * 淘宝登录后自动回抓 WebView 的登录态 cookie，写入设置(XHSDownloaderPrefs.taobao_cookie)
- * 并同步到 TaobaoParser.cookie，实现"App 内登录一次，之后 HTTP 直解 / 下次 WebView 自动带登录态"。
- * 仅在检测到有效登录标志(cookie2 / unb / _m_h5_tk)时才写入，匿名登录墙页面不会误写。
- * @return 是否成功保存了有效登录态
+ * 判定 WebView 当前 cookie 是否代表“已登录淘宝”。
+ * 关键：cookie2 才是淘宝账号登录态主 cookie；匿名/未登录会话虽可能带 _m_h5_tk / unb，
+ * 但没有 cookie2，不能作为“已登录”标志（v1.0.21 修复：此前误把匿名 _m_h5_tk 当作登录态，
+ * 导致“还没登录就说已保存”，且 HTTP 直解用匿名 cookie 撞登录墙）。
+ */
+internal fun isTaobaoLoggedIn(rawCookie: String): Boolean {
+    // cookie2 后的取值必须非空（[^;]+）：淘宝在未登录态会把 cookie2 置空(cookie2=)，
+    // 仅 contains("cookie2=") 会误判空值 cookie 为已登录。
+    return Regex("cookie2=[^;]+").containsMatchIn(rawCookie)
+}
+
+/**
+ * 淘宝页面加载完成后自动回抓登录态 cookie（仅当检测到 cookie2 才算登录）。
+ * 匿名登录墙页面不会误写，避免 HTTP 直解撞墙。
+ * @return 是否成功保存了有效登录态（含已是最新无需变更）
  */
 private fun trySaveTaobaoCookie(context: android.content.Context): Boolean {
     return try {
         val cm = CookieManager.getInstance()
         val raw = cm.getCookie("https://item.taobao.com") ?: cm.getCookie(".taobao.com") ?: ""
         if (raw.isNullOrBlank()) return false
-        // 登录标志：cookie2(淘宝账号主 cookie) / unb(账号 id) / _m_h5_tk(mtop token)
-        val loggedIn = raw.contains("cookie2=") || raw.contains("unb=") || raw.contains("_m_h5_tk=")
-        if (!loggedIn) return false
+        // 仅当检测到真实登录态(cookie2)才视为已登录并保存
+        if (!isTaobaoLoggedIn(raw)) return false
         val prefs = context.getSharedPreferences("XHSDownloaderPrefs", android.content.Context.MODE_PRIVATE)
         val existing = prefs.getString("taobao_cookie", "") ?: ""
         if (existing != raw) {
             prefs.edit().putString("taobao_cookie", raw).apply()
             TaobaoParser.cookie = raw
             Log.d("WebViewActivity", "saved taobao login cookie from webview (len=${raw.length})")
-            Toast.makeText(context, "已保存淘宝登录态，下次自动使用", Toast.LENGTH_SHORT).show()
         }
         true
     } catch (e: Exception) {
         Log.e("WebViewActivity", "save taobao cookie failed: ${e.message}")
         false
+    }
+}
+
+/**
+ * 手动保存淘宝登录态 cookie（用户在 WebView 内登录后点「保存 Cookie」按钮触发）。
+ * 显式反馈：未登录 / 已是最新 / 保存成功 / 失败。
+ * @return (是否成功, 反馈文案)
+ */
+private fun saveTaobaoCookieManually(context: android.content.Context): Pair<Boolean, String> {
+    return try {
+        val cm = CookieManager.getInstance()
+        val raw = cm.getCookie("https://item.taobao.com") ?: cm.getCookie(".taobao.com") ?: ""
+        if (raw.isNullOrBlank()) return false to "未检测到任何淘宝 cookie"
+        if (!isTaobaoLoggedIn(raw)) return false to "尚未登录：请先在页面内登录淘宝账号，再点「保存 Cookie」"
+        val prefs = context.getSharedPreferences("XHSDownloaderPrefs", android.content.Context.MODE_PRIVATE)
+        val existing = prefs.getString("taobao_cookie", "") ?: ""
+        if (existing == raw) return true to "登录态已是最新，无需重复保存"
+        prefs.edit().putString("taobao_cookie", raw).apply()
+        TaobaoParser.cookie = raw
+        Log.d("WebViewActivity", "manual saved taobao login cookie (len=${raw.length})")
+        true to "已保存淘宝登录态，下次自动使用"
+    } catch (e: Exception) {
+        false to "保存失败：${e.message}"
     }
 }
 

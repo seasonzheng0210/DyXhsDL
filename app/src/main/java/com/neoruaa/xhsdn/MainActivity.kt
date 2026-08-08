@@ -382,6 +382,9 @@ class MainActivity : ComponentActivity() {
                                 if (platform == "douyin") {
                                     // 抖音：直接直链下载
                                     dispatchDownload(clipText, "douyin")
+                                } else if (platform == "taobao") {
+                                    // 淘宝：走专用入口（无 cookie 进 WebView 登录页，有 cookie 走 HTTP 直解）
+                                    openTaobao(clipText)
                                 } else if (platform == "xhs") {
                                     viewModel.updateUrl(clipText)
 
