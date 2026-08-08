@@ -3,6 +3,8 @@ package com.neoruaa.xhsdn
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
+import android.content.ClipboardManager
+import android.content.ClipData
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Build
@@ -185,6 +187,8 @@ private fun WebViewScreen(
     }
     // 淘宝登录态是否已保存（绿色提示用）
     val savedOk = remember { mutableStateOf(false) }
+    // 淘宝自检诊断信息（抠到 0 图时显示真实 DOM 统计，便于在真机验证选择器）
+    val taobaoDiag = remember { mutableStateOf<String?>(null) }
     // 平台品牌色（淘宝橙 / 抖音青 / 小红书红）与标识，用于来源区分
     val sourceColor = when (source) {
         "taobao" -> Color(0xFFFF5000)
@@ -276,7 +280,7 @@ private fun WebViewScreen(
                                 loginHint.value = ""
                                 savedOk.value = true
                             }
-                            extractImages(context, webView, sniffedVideoUrls, source, finished, needLogin, loginHint, onResult)
+                            extractImages(context, webView, sniffedVideoUrls, source, finished, needLogin, loginHint, taobaoDiag, onResult)
                         },
                         modifier = Modifier.weight(1f),
                         enabled = !loading,
@@ -364,6 +368,38 @@ private fun WebViewScreen(
                 }
             }
 
+            // 淘宝：自检诊断（抠到 0 图时显示真实 DOM 统计，便于真机验证选择器是否命中）
+            if (source == "taobao" && taobaoDiag.value != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .background(Color(0xFF8A6D1B).copy(alpha = 0.12f), ContinuousRoundedRectangle(12.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "自检诊断：当前页面抠到 0 张图。把下方信息发给开发者即可精修选择器（无需你懂代码）。",
+                        color = Color(0xFF8A6D1B)
+                    )
+                    Text(
+                        text = taobaoDiag.value ?: "",
+                        color = Color(0xFF8A6D1B)
+                    )
+                    Button(
+                        onClick = {
+                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            cm.setPrimaryClip(ClipData.newPlainText("taobao_diag", taobaoDiag.value ?: ""))
+                            Toast.makeText(context, "诊断已复制，发给开发者即可", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColorsPrimary()
+                    ) {
+                        Text(text = "复制诊断信息", color = Color.White)
+                    }
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -424,7 +460,7 @@ private fun WebViewScreen(
                         // 若页面发生二次加载，onPageFinished 会再触发一次，自然形成一次重试。
                         view?.postDelayed({
                             if (!finished.value) {
-                                extractImages(context, webView, sniffedVideoUrls, source, finished, needLogin, loginHint, onResult)
+                                extractImages(context, webView, sniffedVideoUrls, source, finished, needLogin, loginHint, taobaoDiag, onResult)
                             }
                         }, 3500)
                     }
@@ -560,6 +596,7 @@ private fun extractImages(
     finished: MutableState<Boolean>,
     needLogin: MutableState<Boolean>,
     loginHint: MutableState<String>,
+    taobaoDiag: MutableState<String?>,
     onResult: (List<String>, String, Long?, Boolean) -> Unit
 ) {
     if (finished.value) return
@@ -606,8 +643,8 @@ private fun extractImages(
                 allUrls.addAll(sniffedUrls)
 
                 if (allUrls.isNotEmpty()) {
-                    // 淘宝提取成功 → 关闭登录提示（说明登录态有效）
-                    if (source == "taobao") needLogin.value = false
+                    // 淘宝提取成功 → 关闭登录提示与诊断（说明登录态有效且选择器命中）
+                    if (source == "taobao") { needLogin.value = false; taobaoDiag.value = null }
                     // Create a task for the web crawl
                     val taskId = com.neoruaa.xhsdn.data.TaskManager.createTask(
                         noteUrl = webView.url ?: "",
@@ -628,10 +665,11 @@ private fun extractImages(
                         finished.value = true
                         onResult(emptyList(), contentText, null, false)
                     } else {
-                        // 淘宝提取为空（cookie 失效/未登录）→ 提示重新登录
+                        // 淘宝提取为空（cookie 失效/未登录/选择器未命中）→ 提示重新登录 + 跑自检
                         if (source == "taobao") {
                             needLogin.value = true
-                            loginHint.value = "登录态可能已失效，请在此页面重新登录淘宝后点「保存 Cookie」再点「爬取」"
+                            loginHint.value = "登录态可能已失效，或页面 DOM 未被当前选择器命中。请重新登录淘宝后点「保存 Cookie」再点「爬取」；若仍为空，点下方「复制诊断」发开发者精修选择器。"
+                            diagnoseTaobaoDom(webView) { taobaoDiag.value = it }
                         }
                         Toast.makeText(context, context.getString(R.string.no_accessible_urls_found), Toast.LENGTH_SHORT).show()
                     }
@@ -714,5 +752,60 @@ private fun readAssetFile(context: android.content.Context, fileName: String): S
         context.assets.open(fileName).bufferedReader().use { it.readText() }
     } catch (_: Exception) {
         null
+    }
+}
+
+/**
+ * 淘宝真机自检：在 WebView 渲染完成后统计真实 DOM，输出诊断 JSON。
+ * 用于解决“选择器是否命中真实页面”这一无法在开发机验证的问题——
+ * 用户登录后若仍抠不到图，把诊断发回即可精修选择器。
+ */
+private fun diagnoseTaobaoDom(webView: WebView, cb: (String) -> Unit) {
+    val js = """
+        (function() {
+            try {
+                var imgs = document.querySelectorAll('img');
+                var alicdn = 0, firstSrc = '';
+                for (var i = 0; i < imgs.length; i++) {
+                    var s = imgs[i].src || imgs[i].getAttribute('src') ||
+                            imgs[i].getAttribute('data-src') || imgs[i].getAttribute('data-original') ||
+                            imgs[i].getAttribute('data-ks-lazyload') || '';
+                    if (/alicdn\.com|taobao\.com|tmall\.com/.test(s)) { alicdn++; if (!firstSrc) firstSrc = s; }
+                }
+                var vids = document.querySelectorAll('video').length;
+                var scripts = document.querySelectorAll('script');
+                var stateKeys = [];
+                for (var j = 0; j < scripts.length; j++) {
+                    var t = scripts[j].textContent || '';
+                    if (t.indexOf('auctionImages') >= 0 && stateKeys.indexOf('auctionImages') < 0) stateKeys.push('auctionImages');
+                    if (t.indexOf('__INITIAL_STATE__') >= 0 && stateKeys.indexOf('__INITIAL_STATE__') < 0) stateKeys.push('__INITIAL_STATE__');
+                    if (t.indexOf('detailData') >= 0 && stateKeys.indexOf('detailData') < 0) stateKeys.push('detailData');
+                    if (t.indexOf('picList') >= 0 && stateKeys.indexOf('picList') < 0) stateKeys.push('picList');
+                }
+                var diag = {
+                    imgTotal: imgs.length,
+                    alicdnImg: alicdn,
+                    firstAlicdnSrc: firstSrc,
+                    video: vids,
+                    hasEmbeddedState: stateKeys.length > 0,
+                    stateKeys: stateKeys,
+                    title: (document.title || '').substring(0, 80),
+                    url: location.href
+                };
+                return JSON.stringify(diag);
+            } catch (e) {
+                return JSON.stringify({ error: String(e) });
+            }
+        })();
+    """.trimIndent()
+    webView.evaluateJavascript(js) { raw ->
+        var s = raw ?: "{}"
+        if (s.startsWith("\"") && s.endsWith("\"")) {
+            s = s.substring(1, s.length - 1)
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\")
+                .replace("\\n", "\n")
+        }
+        cb(s)
     }
 }

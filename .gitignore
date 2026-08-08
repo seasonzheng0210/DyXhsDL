@@ -41,3 +41,9 @@ python/
 # Local build logs (transient)
 build*.err
 _ks.txt
+
+# Self-test local deps
+scripts/selftest/node_modules/
+scripts/selftest/tb_anon.html
+scripts/selftest/package-lock.json
+scripts/selftest/package.json
