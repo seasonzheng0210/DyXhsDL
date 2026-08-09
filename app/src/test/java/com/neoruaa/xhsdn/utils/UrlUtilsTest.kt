@@ -4,29 +4,28 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * 平台识别接缝测试（对应 docs/specs/taobao-flow.md「边界：短链 e.tb.cn 必须识别为 taobao」）。
- * 纯 JVM 单测，不依赖安卓框架、不碰网络。
+ * 平台识别接缝测试。纯 JVM 单测，不依赖安卓框架、不碰网络。
  */
 class UrlUtilsTest {
 
     @Test
-    fun `taobao short link e tb cn is detected as taobao`() {
-        assertEquals("taobao", UrlUtils.detectPlatform("https://e.tb.cn/h.85d1cfjpNBy0DDp?tk=65ingCtOIIy"))
+    fun `kuaishou short link v kuaishou com is detected as kuaishou`() {
+        assertEquals("kuaishou", UrlUtils.detectPlatform("https://v.kuaishou.com/3xAbCdEfG"))
     }
 
     @Test
-    fun `taobao short link m tb cn is detected as taobao`() {
-        assertEquals("taobao", UrlUtils.detectPlatform("https://m.tb.cn/h.abc123xyz"))
+    fun `kuaishou www f short link is detected as kuaishou`() {
+        assertEquals("kuaishou", UrlUtils.detectPlatform("https://www.kuaishou.com/f/3xAbCdEfG"))
     }
 
     @Test
-    fun `item taobao com is detected as taobao`() {
-        assertEquals("taobao", UrlUtils.detectPlatform("https://item.taobao.com/item.htm?id=926895986130"))
+    fun `kuaishou com is detected as kuaishou`() {
+        assertEquals("kuaishou", UrlUtils.detectPlatform("https://www.kuaishou.com/short-video/3xAbCdEfG"))
     }
 
     @Test
-    fun `tmall com is detected as taobao`() {
-        assertEquals("taobao", UrlUtils.detectPlatform("https://detail.tmall.com/item.htm?id=1006988355866"))
+    fun `gifshow com is detected as kuaishou`() {
+        assertEquals("kuaishou", UrlUtils.detectPlatform("https://www.gifshow.com/photo/3xAbCdEfG"))
     }
 
     @Test
@@ -52,6 +51,11 @@ class UrlUtilsTest {
     @Test
     fun `keyword 抖音 in text is detected as douyin`() {
         assertEquals("douyin", UrlUtils.detectPlatform("复制打开抖音，看看这个视频 https://v.douyin.com/xxx/"))
+    }
+
+    @Test
+    fun `keyword 快手 in text is detected as kuaishou`() {
+        assertEquals("kuaishou", UrlUtils.detectPlatform("复制打开快手，看看这个视频 https://v.kuaishou.com/xxx/"))
     }
 
     @Test

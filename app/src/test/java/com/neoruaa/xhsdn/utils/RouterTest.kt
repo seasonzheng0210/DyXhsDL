@@ -4,19 +4,18 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * 路由接缝测试（对应 docs/specs/taobao-flow.md「边界：漏传 source 不得把淘宝当小红书」）。
- * 锁死 v1.0.17 回归点：默认 xhs 但 URL 实为淘宝/抖音域名时必须纠正。
+ * 路由接缝测试。锁死回归点：默认 xhs 但 URL 实为快手/抖音域名时必须纠正。
  */
 class RouterTest {
 
     @Test
-    fun `taobao url with default xhs source is corrected to taobao`() {
-        assertEquals("taobao", Router.resolveWebViewSource("https://item.taobao.com/item.htm?id=1", "xhs"))
+    fun `kuaishou url with default xhs source is corrected to kuaishou`() {
+        assertEquals("kuaishou", Router.resolveWebViewSource("https://www.kuaishou.com/short-video/abc", "xhs"))
     }
 
     @Test
-    fun `taobao short link with null source is corrected to taobao`() {
-        assertEquals("taobao", Router.resolveWebViewSource("https://e.tb.cn/h.abc?tk=x", null))
+    fun `kuaishou short link with null source is corrected to kuaishou`() {
+        assertEquals("kuaishou", Router.resolveWebViewSource("https://v.kuaishou.com/abc", null))
     }
 
     @Test
@@ -25,8 +24,8 @@ class RouterTest {
     }
 
     @Test
-    fun `explicit taobao source is respected even if url unrecognized`() {
-        assertEquals("taobao", Router.resolveWebViewSource("https://example.com/foo", "taobao"))
+    fun `explicit kuaishou source is respected even if url unrecognized`() {
+        assertEquals("kuaishou", Router.resolveWebViewSource("https://example.com/foo", "kuaishou"))
     }
 
     @Test

@@ -17,9 +17,9 @@ import com.neoruaa.xhsdn.data.TaskStatus
 import com.neoruaa.xhsdn.douyin.DouyinMediaInfo
 import com.neoruaa.xhsdn.douyin.DouyinMediaType
 import com.neoruaa.xhsdn.douyin.DouyinParser
-import com.neoruaa.xhsdn.taobao.TaobaoMediaInfo
-import com.neoruaa.xhsdn.taobao.TaobaoMediaType
-import com.neoruaa.xhsdn.taobao.TaobaoParser
+import com.neoruaa.xhsdn.kuaishou.KuaishouMediaInfo
+import com.neoruaa.xhsdn.kuaishou.KuaishouMediaType
+import com.neoruaa.xhsdn.kuaishou.KuaishouParser
 import com.neoruaa.xhsdn.utils.DownloadLogger
 import com.neoruaa.xhsdn.utils.UrlUtils
 import kotlinx.coroutines.CoroutineScope
@@ -43,6 +43,8 @@ import kotlin.coroutines.CoroutineContext
 class DownloadService : Service() {
     // 视频直链下载用的移动 UA（iPhone），对抖音系/第三方直链最稳
     private val DIRECT_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+    // 快手 CDN（kwaicdn.com）需带快手 Referer，否则返回 403
+    private val KUAISHOU_REFERER = "https://www.kuaishou.com/"
 
     private val serviceJob = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.IO + serviceJob)
@@ -86,8 +88,8 @@ class DownloadService : Service() {
         val taskIdExtra = intent.getLongExtra(EXTRA_TASK_ID, -1L).takeIf { it > 0 }
 
         // 中立的「视频直链」短路：任何视频直链（.mp4、aweme.snssdk.com 播放接口、
-        // douyinvod.com、cloud.video.taobao.com 等）都不走平台解析器，直接下载跟随 302 的本体。
-        // 这样淘宝页面内嵌的第三方视频、用户粘贴的直链都能下，且不会误归属到抖音/其他平台。
+        // douyinvod.com 等）都不走平台解析器，直接下载跟随 302 的本体。
+        // 这样用户粘贴的直链、WebView 提取出的第三方视频直链都能下，且不会误归属到抖音/其他平台。
         if (isDirectVideoUrl(url)) {
             downloadDirectVideo(url, taskIdExtra)
             return START_NOT_STICKY
@@ -101,7 +103,7 @@ class DownloadService : Service() {
             }
             else -> when (source) {
                 "douyin" -> startDouyin(url, mode, taskIdExtra)
-                "taobao" -> startTaobao(url, mode, taskIdExtra)
+                "kuaishou" -> startKuaishou(url, mode, taskIdExtra)
                 else -> startXhs(url, taskIdExtra)
             }
         }
@@ -115,16 +117,15 @@ class DownloadService : Service() {
         if (u.contains(".mp4") || u.contains(".mov") || u.contains(".m4v") || u.contains(".webm")) return true
         if (u.contains("aweme.snssdk.com/aweme/v1/play/")) return true
         if (u.contains("douyinvod.com")) return true
-        if (u.contains("cloud.video.taobao.com")) return true
         return false
     }
 
-    /**
-     * 中立的「视频直链」下载：不归属任何平台解析器。
-     * 用于用户粘贴的视频直链，或某平台 WebView 提取出的第三方视频直链
-     * （如淘宝商品页内嵌的 aweme.snssdk.com 抖音系播放直链）。
-     * 这类 URL 的 video_id 已是真实文件 id，直接下载（跟随 302）即得 mp4。
-     */
+        /**
+         * 中立的「视频直链」下载：不归属任何平台解析器。
+         * 用于用户粘贴的视频直链，或某平台 WebView 提取出的第三方视频直链
+         * （如抖音系 aweme.snssdk.com 播放直链）。
+         * 这类 URL 的 video_id 已是真实文件 id，直接下载（跟随 302）即得 mp4。
+         */
     private fun downloadDirectVideo(rawUrl: String, taskIdExtra: Long?) {
         val targetUrl = UrlUtils.extractFirstUrl(rawUrl) ?: rawUrl
         if (!targetUrl.startsWith("http://", true) && !targetUrl.startsWith("https://", true)) {
@@ -150,12 +151,8 @@ class DownloadService : Service() {
 
                 updateNotification(getString(R.string.downloading_files), "视频直链下载中…", true)
 
-                // 淘宝视频云需带淘宝 Referer，其余（抖音系等第三方直链）只带移动 UA 不送 Referer
-                val (referer, ua) = if (targetUrl.contains("taobao", true)) {
-                    TaobaoParser.TAOBAO_REFERER to TaobaoParser.MOBILE_UA
-                } else {
-                    null to DIRECT_UA
-                }
+                // 视频直链：只带移动 UA 不送 Referer（快手/抖音系直链均无需特殊 Referer）
+                val (referer, ua) = null to DIRECT_UA
 
                 // 解析最终直链（跟随 snssdk/douyinvod 等的 302），避免 OkHttp 透明跨 host 重定向
                 // 在部分安卓网络栈下失效。解析失败则回退原 URL。
@@ -340,19 +337,16 @@ class DownloadService : Service() {
     }
     // endregion
 
-    // region 淘宝下载
+    // region 快手下载
     /**
-     * 淘宝/天猫分享短链下载：复用 TaobaoParser 解短链拿商品 id 并提取主图（best-effort 视频）。
-     * 流程与 startDouyin 同构。
+     * 快手分享链接下载：复用 KuaishouParser 通过 GraphQL visionVideoDetail 取无水印播放源/图集。
+     * 快手公开作品无需登录，流程与 startDouyin 同构。
      */
-    private fun startTaobao(rawUrl: String, mode: String, taskIdExtra: Long?) {
-        // 读取可选淘宝登录态 cookie（App 设置中填入，用于视频 mtop 接口）
-        TaobaoParser.cookie = getSharedPreferences("XHSDownloaderPrefs", MODE_PRIVATE)
-            .getString("taobao_cookie", "") ?: ""
+    private fun startKuaishou(rawUrl: String, mode: String, taskIdExtra: Long?) {
         val targetUrl = UrlUtils.extractFirstUrl(rawUrl) ?: rawUrl
         if (!targetUrl.startsWith("http://", true) && !targetUrl.startsWith("https://", true)) {
-            DownloadLogger.logFailure(this, "taobao", rawUrl, "无法从剪贴板提取有效链接: $rawUrl")
-            TaskManager.createTask(targetUrl, null, NoteType.IMAGE, 1, source = "taobao").also {
+            DownloadLogger.logFailure(this, "kuaishou", rawUrl, "无法从剪贴板提取有效链接: $rawUrl")
+            TaskManager.createTask(targetUrl, null, NoteType.VIDEO, 1, source = "kuaishou").also {
                 TaskManager.startTask(it)
                 TaskManager.completeTask(it, false, "无法提取有效链接")
             }
@@ -368,52 +362,50 @@ class DownloadService : Service() {
                 val myTaskId = taskIdExtra
                     ?: TaskManager.findActiveTaskIdByUrl(targetUrl)
                     ?: TaskManager.createTask(
-                        targetUrl, null, NoteType.IMAGE, 1, source = "taobao"
+                        targetUrl, null, NoteType.VIDEO, 1, source = "kuaishou"
                     ).also { TaskManager.startTask(it) }
                 activeJobs[myTaskId] = coroutineContext[Job]!!
 
-                updateNotification(getString(R.string.downloading_files), "淘宝解析中…", true)
+                updateNotification(getString(R.string.downloading_files), "快手解析中…", true)
 
-                val info = runCatching { TaobaoParser.parse(targetUrl) }.getOrElse { e ->
-                    if (e is TaobaoParser.TaobaoLoginRequiredException) {
-                        // 登录墙 / cookie 失效：不再自动跳 WebView（会造成眩晕式跳转，且 NEW_TASK 会跳回桌面）。
-                        // 改为明确提示：用 App 内 WebView 入口登录后重试。
-                        DownloadLogger.logFailure(this@DownloadService, "taobao", targetUrl,
-                            "需要登录淘宝才能获取主图，请用 App 内 WebView 入口登录后重试")
-                        TaskManager.completeTask(myTaskId, false, "需要登录淘宝，请用 WebView 入口登录后重试")
-                        updateNotification(getString(R.string.download_failed_notification_title),
-                            "需要登录淘宝，请用 WebView 入口登录后重试", false)
-                        return@launch
-                    }
-                    DownloadLogger.logFailure(this@DownloadService, "taobao", targetUrl, "解析失败: ${e.message}")
+                val info = runCatching { KuaishouParser.parse(targetUrl) }.getOrElse { e ->
+                    DownloadLogger.logFailure(this@DownloadService, "kuaishou", targetUrl, "解析失败: ${e.message}")
                     TaskManager.completeTask(myTaskId, false, "解析失败: ${e.message}")
                     updateNotification(getString(R.string.download_failed_notification_title),
-                        "淘宝解析失败: ${e.message}", false)
+                        "快手解析失败: ${e.message}", false)
                     return@launch
                 }
 
-                // 主图数量 + 若有视频直链再 +1
-                val hasVideo = !info.videoUrl.isNullOrBlank()
-                val totalFiles = info.imageUrls.size + if (hasVideo) 1 else 0
-                TaskManager.updateTask(myTaskId) { t ->
-                    t.copy(
-                        noteType = if (info.imageUrls.isNotEmpty()) NoteType.IMAGE else NoteType.VIDEO,
-                        totalFiles = if (totalFiles > 0) totalFiles else 1
-                    )
+                // 图集：更新任务类型为图片，文件总数为图片数量
+                if (info.type == KuaishouMediaType.IMAGE) {
+                    TaskManager.updateTask(myTaskId) { t ->
+                        t.copy(noteType = NoteType.IMAGE, totalFiles = info.imageUrls.size)
+                    }
                 }
 
                 updateNotification(getString(R.string.downloading_files), info.title, true)
-                val mediaDesc = buildString {
-                    if (info.imageUrls.isNotEmpty()) append("${info.imageUrls.size} 张图")
-                    if (hasVideo) append(if (info.imageUrls.isNotEmpty()) " + 视频" else "视频")
-                }
-                DownloadLogger.logInfo(this@DownloadService, "taobao", targetUrl, "解析成功: ${info.title} ($mediaDesc)")
+                val mediaDesc = if (info.type == KuaishouMediaType.IMAGE) "${info.imageUrls.size} 张图" else "视频"
+                DownloadLogger.logInfo(this@DownloadService, "kuaishou", targetUrl, "解析成功: ${info.title} ($mediaDesc)")
 
                 val downloader = FileDownloader(this@DownloadService, createCallback(myTaskId))
-                val success = downloadTaobaoMedia(downloader, info, myTaskId)
+                val success = if (info.type == KuaishouMediaType.IMAGE) {
+                    downloadKuaishouMedia(downloader, info, myTaskId)
+                } else {
+                    val fileName = "${info.title}.mp4"
+                    runCatching {
+                        downloader.downloadFile(info.videoUrl, fileName, KUAISHOU_REFERER, info.userAgent)
+                    }.getOrElse { e ->
+                        DownloadLogger.logFailure(this@DownloadService, "kuaishou", info.videoUrl ?: targetUrl, "下载异常: ${e.message}")
+                        false
+                    }.also { ok ->
+                        if (!ok) {
+                            DownloadLogger.logFailure(this@DownloadService, "kuaishou", info.videoUrl ?: targetUrl, "下载失败(返回false)")
+                        }
+                    }
+                }
 
                 if (success) {
-                    DownloadLogger.logInfo(this@DownloadService, "taobao", targetUrl, "下载完成(成功): ${info.title}")
+                    DownloadLogger.logInfo(this@DownloadService, "kuaishou", targetUrl, "下载完成(成功): ${info.title}")
                 }
 
                 TaskManager.completeTask(myTaskId, success,
@@ -425,7 +417,7 @@ class DownloadService : Service() {
                     false
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "taobao download error", e)
+                Log.e(TAG, "kuaishou download error", e)
             } finally {
                 activeUrls.remove(targetUrl)
                 taskIdExtra?.let { activeJobs.remove(it) }
@@ -435,36 +427,36 @@ class DownloadService : Service() {
     }
 
     /**
-     * 下载淘宝主图（逐张），若解析到视频直链则一并下载。
+     * 下载快手图集（逐张），若解析到视频直链则一并下载。
      * 全部成功返回 true，任一项失败返回 false（失败项已落日志）。
      */
-    private fun downloadTaobaoMedia(downloader: FileDownloader, info: TaobaoMediaInfo, taskId: Long): Boolean {
+    private fun downloadKuaishouMedia(downloader: FileDownloader, info: KuaishouMediaInfo, taskId: Long): Boolean {
         var okAll = true
         info.imageUrls.forEachIndexed { index, url ->
-            val ext = TaobaoParser.mediaExtension(url)
+            val ext = KuaishouParser.mediaExtension(url)
             val fileName = "${info.title}_${index + 1}.$ext"
             val ok = runCatching {
-                downloader.downloadFile(url, fileName, TaobaoParser.TAOBAO_REFERER, info.userAgent)
+                downloader.downloadFile(url, fileName, KUAISHOU_REFERER, info.userAgent)
             }.getOrElse { e ->
-                DownloadLogger.logFailure(this@DownloadService, "taobao", url, "下载图片异常: ${e.message}")
+                DownloadLogger.logFailure(this@DownloadService, "kuaishou", url, "下载图片异常: ${e.message}")
                 false
             }
             if (!ok) {
                 okAll = false
-                DownloadLogger.logFailure(this@DownloadService, "taobao", url, "图片下载失败(返回false)")
+                DownloadLogger.logFailure(this@DownloadService, "kuaishou", url, "图片下载失败(返回false)")
             }
         }
-        // 主图之外若拿到视频直链，一并下载
+        // 图集之外若拿到视频直链，一并下载
         if (!info.videoUrl.isNullOrBlank()) {
             val vOk = runCatching {
-                downloader.downloadFile(info.videoUrl, "${info.title}_video.mp4", TaobaoParser.TAOBAO_REFERER, info.userAgent)
+                downloader.downloadFile(info.videoUrl, "${info.title}.mp4", KUAISHOU_REFERER, info.userAgent)
             }.getOrElse { e ->
-                DownloadLogger.logFailure(this@DownloadService, "taobao", info.videoUrl, "下载视频异常: ${e.message}")
+                DownloadLogger.logFailure(this@DownloadService, "kuaishou", info.videoUrl, "下载视频异常: ${e.message}")
                 false
             }
             if (!vOk) {
                 okAll = false
-                DownloadLogger.logFailure(this@DownloadService, "taobao", info.videoUrl, "视频下载失败(返回false)")
+                DownloadLogger.logFailure(this@DownloadService, "kuaishou", info.videoUrl, "视频下载失败(返回false)")
             }
         }
         return okAll

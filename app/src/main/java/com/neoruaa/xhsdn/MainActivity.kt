@@ -32,7 +32,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
-import com.neoruaa.xhsdn.taobao.TaobaoParser
 import com.neoruaa.xhsdn.utils.UrlUtils
 import com.neoruaa.xhsdn.utils.DownloadLogger
 import androidx.compose.foundation.layout.padding
@@ -179,10 +178,9 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(autoUrl) {
                 autoUrl?.let { url ->
                      if (url.isNotEmpty()) {
-                        // 淘宝链接统一走 openTaobao：无 cookie 先进 WebView 登录页，有 cookie 才 HTTP 直解，
-                        // 避免直接进 TaobaoParser 匿名撞登录墙（与剪贴板按钮路径行为一致）
-                        if (UrlUtils.detectPlatform(url) == "taobao") {
-                            openTaobao(url)
+                        // 快手链接：匿名即可直解，直接派发（与抖音同路径）
+                        if (UrlUtils.detectPlatform(url) == "kuaishou") {
+                            dispatchDownload(url, "kuaishou")
                             _autoDownloadIntentUrl.value = null
                             return@LaunchedEffect
                         }
@@ -389,9 +387,9 @@ class MainActivity : ComponentActivity() {
                                 if (platform == "douyin") {
                                     // 抖音：直接直链下载
                                     dispatchDownload(clipText, "douyin")
-                                } else if (platform == "taobao") {
-                                    // 淘宝：走专用入口（无 cookie 进 WebView 登录页，有 cookie 走 HTTP 直解）
-                                    openTaobao(clipText)
+                                } else if (platform == "kuaishou") {
+                                    // 快手：匿名即可直链下载
+                                    dispatchDownload(clipText, "kuaishou")
                                 } else if (platform == "xhs") {
                                     viewModel.updateUrl(clipText)
 
@@ -426,13 +424,15 @@ class MainActivity : ComponentActivity() {
                             val cleanUrl = UrlUtils.extractFirstUrl(clipText)
                             if (cleanUrl != null) {
                                 val platform = UrlUtils.detectPlatform(cleanUrl)
-                                if (platform == "taobao") {
-                                    // 淘宝链接走专用 WebView 入口（带 cookie 注入 + 登录提示 + taobao_extractor）
-                                    launchTaobaoWebView(cleanUrl)
+                                if (platform == "kuaishou") {
+                                    // 快手链接走专用 WebView 入口（kuaishou_extractor 兜底）
+                                    launchKuaishouWebView(cleanUrl)
+                                } else if (platform == "douyin") {
+                                    launchDouyinWebView(cleanUrl)
                                 } else {
                                     val webViewIntent = Intent(this, WebViewActivity::class.java).apply {
                                         putExtra("url", cleanUrl)
-                                        putExtra("source", if (platform == "douyin") "douyin" else "xhs")
+                                        putExtra("source", "xhs")
                                         // Don't pass task_id here - let WebViewActivity create the task when user clicks "爬取"
                                     }
                                     startActivityForResult(webViewIntent, WEBVIEW_REQUEST_CODE)
@@ -471,11 +471,10 @@ class MainActivity : ComponentActivity() {
                         ensureStoragePermission {
                             val retrySource = when (task.source) {
                                 "douyin" -> "douyin"
-                                "taobao" -> "taobao"
+                                "kuaishou" -> "kuaishou"
                                 else -> "xhs"
                             }
                             when (retrySource) {
-                                "taobao" -> openTaobao(task.noteUrl, task.id)
                                 else -> {
                                     // 复用同一任务（重置进度），重新派发到前台服务下载
                                     com.neoruaa.xhsdn.data.TaskManager.resetTask(task.id)
@@ -494,7 +493,7 @@ class MainActivity : ComponentActivity() {
                     onWebCrawlTask = { task ->
                         viewModel.updateUrl(task.noteUrl)
                         when (task.source) {
-                            "taobao" -> launchTaobaoWebView(task.noteUrl)
+                            "kuaishou" -> launchKuaishouWebView(task.noteUrl)
                             "douyin" -> launchDouyinWebView(task.noteUrl)
                             else -> launchWebView(task.noteUrl, task.id)
                         }
@@ -509,8 +508,8 @@ class MainActivity : ComponentActivity() {
                             val plat = UrlUtils.detectPlatform(inputLink)
                             if (plat == "douyin") {
                                 dispatchDownload(inputLink, "douyin")
-                            } else if (plat == "taobao") {
-                                launchTaobaoWebView(inputLink)
+                            } else if (plat == "kuaishou") {
+                                dispatchDownload(inputLink, "kuaishou")
                             } else {
                                 viewModel.updateUrl(inputLink)
                                 if (selectiveDownload) {
@@ -530,8 +529,8 @@ class MainActivity : ComponentActivity() {
                             ensureStoragePermission {
                                 if (platform == "douyin") {
                                     dispatchDownload(link, "douyin")
-                                } else if (platform == "taobao") {
-                                    launchTaobaoWebView(link)
+                                } else if (platform == "kuaishou") {
+                                    dispatchDownload(link, "kuaishou")
                                 } else {
                                     viewModel.updateUrl(link)
                                     if (selectiveDownload) {
@@ -625,41 +624,18 @@ class MainActivity : ComponentActivity() {
         startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
     }
 
-    private fun launchTaobaoWebView(input: String) {
+    private fun launchKuaishouWebView(input: String) {
         val cleanUrl = UrlUtils.extractFirstUrl(input)
         if (cleanUrl == null) {
             showToast(getString(R.string.invalid_link_please_reenter))
             return
         }
         viewModel.resetWebCrawlFlag()
-        // 先把短链解析成真实商品详情页 URL，避免 WebView 卡在 e.tb.cn 落地/跳转中间页
-        lifecycleScope.launch(Dispatchers.IO) {
-            val targetUrl = try {
-                com.neoruaa.xhsdn.taobao.TaobaoParser.resolveItemPageUrl(cleanUrl)
-            } catch (_: Exception) {
-                cleanUrl
-            }
-            withContext(Dispatchers.Main) {
-                val intent = Intent(this@MainActivity, WebViewActivity::class.java)
-                intent.putExtra("url", targetUrl)
-                intent.putExtra("source", "taobao")
-                startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
-            }
-        }
-    }
-
-    /**
-     * 淘宝入口统一路由：
-     * - 未配置登录态 cookie → 直接打开 WebView 登录页（子 Activity，带橙色"需要登录"提示），不先试探 HTTP。
-     * - 已配置 cookie → 走 HTTP 直解（带登录态），失败再在 WebView 内提示登录。
-     * 避免"无 cookie 时先撞登录墙、再自动跳 WebView"的眩晕式跳转（且 NEW_TASK 会跳回桌面）。
-     */
-    private fun openTaobao(rawLink: String, taskId: Long? = null) {
-        if (TaobaoParser.cookie.isBlank()) {
-            launchTaobaoWebView(rawLink)
-        } else {
-            com.neoruaa.xhsdn.DownloadService.startDownload(this, rawLink, "taobao", taskId)
-        }
+        // 快手匿名即可访问，无需登录态 cookie；短链跳转由 WebView 自行处理
+        val intent = Intent(this, WebViewActivity::class.java)
+        intent.putExtra("url", cleanUrl)
+        intent.putExtra("source", "kuaishou")
+        startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
     }
 
 
@@ -772,13 +748,13 @@ class MainActivity : ComponentActivity() {
                 return
             }
 
-            if (source == "taobao") {
+            if (source == "kuaishou") {
                 val webViewUrl = data.getStringExtra("url") ?: ""
                 if (forceDirect || urls.isEmpty()) {
-                    // WebView 渲染抓不到（淘宝风控/登录墙）或用户主动选"直链解析"，
-                    // 回退到 TaobaoParser 的 HTTP 直解（best-effort 主图/视频）。
-                    com.neoruaa.xhsdn.DownloadService.startDownload(this, webViewUrl, "taobao")
-                    showToast(if (forceDirect) "已切换淘宝直链解析" else "WebView 未抓到，已回退淘宝直链解析")
+                    // WebView 渲染抓不到或用户主动选"直链解析"，
+                    // 回退到 KuaishouParser 的 HTTP 直解（无水印播放源）。
+                    com.neoruaa.xhsdn.DownloadService.startDownload(this, webViewUrl, "kuaishou")
+                    showToast(if (forceDirect) "已切换快手直链解析" else "WebView 未抓到，已回退快手直链解析")
                     return
                 }
                 // 否则 urls 非空，继续往下走通用 startWebCrawl 下载
@@ -1730,15 +1706,15 @@ private fun TaskCell(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // 来源标识（抖音/小红书）
+                    // 来源标识（快手/抖音/小红书）
                     val sourceLabel = when (task.source) {
+                        "kuaishou" -> "快手"
                         "douyin" -> "抖音"
-                        "taobao" -> "淘宝"
                         else -> "小红书"
                     }
                     val sourceColor = when (task.source) {
+                        "kuaishou" -> Color(0xFFFE5000)
                         "douyin" -> Color(0xFF25F4EE)
-                        "taobao" -> Color(0xFFFF5000)
                         else -> Color(0xFFFE2C55)
                     }
                     Box(

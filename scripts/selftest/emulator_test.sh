@@ -21,37 +21,37 @@ echo "[ok] emulator booted"
 echo "===== 安装 APK ====="
 "$ADB" install -r -t "$APK" 2>&1 | tail -3
 
-# 测试链接（抖音 / 小红书 / 淘宝短链）
+# 测试链接（抖音 / 小红书 / 快手）
 declare -A URLS=(
   [douyin]="https://www.douyin.com/video/7300000000000000000"
   [xhs]="https://www.xiaohongshu.com/explore/6500000000000000000"
-  [taobao]="https://e.tb.cn/h.85d1cfjpNBy0DDp?tk=65ingCtOIIy"
+  [kuaishou]="https://v.kuaishou.com/3xAbCdEfG"
 )
 # 真实可访问样例：用一段公开抖音/小红书短链做冒烟（解析失败时至少有真实网络错误可取证）
 URLS[douyin]="https://v.douyin.com/iRwqYx3M/"
 URLS[xhs]="https://www.xiaohongshu.com/explore/64f0c8e0000000001f00e6f3"
-URLS[taobao]="https://e.tb.cn/h.85d1cfjpNBy0DDp?tk=65ingCtOIIy"
+URLS[kuaishou]="https://v.kuaishou.com/3xAbCdEfG"
 
 run_case() {
   local name="$1" url="$2"
   local log="$OUT_DIR/${name}.log"
   echo "===== [$name] $url ====="
   "$ADB" logcat -c
-  if [[ "$name" == "taobao_wv" ]]; then
-    "$ADB" shell am start -n "$WV" -e url "$url" -e source taobao 2>&1 | tail -2
+  if [[ "$name" == "kuaishou_wv" ]]; then
+    "$ADB" shell am start -n "$WV" -e url "$url" -e source kuaishou 2>&1 | tail -2
   else
     "$ADB" shell am start -n "$MAIN" -e auto_download_url "$url" 2>&1 | tail -2
   fi
   sleep 18
   "$ADB" logcat -d > "$log"
   echo "--- 关键日志(过滤) ---"
-  grep -E "XHS_Debug|DownloadService|TaobaoParser|resolveFinalUrl|extractMainImages|需要登录|未获取|解析失败|ClipText|WebViewActivity|isTaobaoLoggedIn" "$log" | tail -40
+  grep -E "XHS_Debug|DownloadService|KuaishouParser|resolveFinalUrl|解析失败|ClipText|WebViewActivity" "$log" | tail -40
   echo "(full log -> $log)"
 }
 
 run_case douyin "${URLS[douyin]}"
 run_case xhs "${URLS[xhs]}"
-run_case taobao "${URLS[taobao]}"
-run_case taobao_wv "${URLS[taobao]}"
+run_case kuaishou "${URLS[kuaishou]}"
+run_case kuaishou_wv "${URLS[kuaishou]}"
 
 echo "===== 完成，日志在 $OUT_DIR ====="
