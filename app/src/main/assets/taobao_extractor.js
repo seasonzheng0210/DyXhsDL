@@ -66,7 +66,7 @@
     }
 
     try {
-        // ---- 1) PC 详情页主图（老版淘宝/天猫 PC 站）----
+        // ---- 1) PC 详情页主图（老版淘宝/天猫 PC 站 + squirrel-gather 实战验证的天猫 selector）----
         var pcSelectors = [
             '#J_ImgBooth',
             '#J_ImgBooth_Image',
@@ -75,7 +75,8 @@
             '.tb-pic img',
             '.main-image img',
             '.tb-gallery img',
-            '.pic-list img'
+            '.pic-list img',
+            'img[class*="thumbnailPic"]'
         ];
         for (var s = 0; s < pcSelectors.length; s++) {
             var pcList = document.querySelectorAll(pcSelectors[s]);
@@ -122,7 +123,8 @@
             '.img-list img',
             '.detail-img img',
             '.tb-detail-img img',
-            '.image-list img'
+            '.image-list img',
+            'img[class*="thumbnailPic"]'
         ];
         for (var h = 0; h < h5Selectors.length; h++) {
             var h5List = document.querySelectorAll(h5Selectors[h]);
@@ -148,7 +150,10 @@
             '.detail-desc-content img',
             '.tb-detail-desc img',
             'img[data-originalsrc]',
-            'img[data-originals]'
+            'img[data-originals]',
+            // squirrel-gather 实战验证的天猫详情图 selector（descV8 图文区）
+            'img[data-name="singleImage"].descV8-singleImage-image.lazyload',
+            'img[align="absmiddle"].lazyload'
         ];
         for (var ds = 0; ds < descSelectors.length; ds++) {
             var descList = document.querySelectorAll(descSelectors[ds]);
@@ -171,7 +176,9 @@
             '.tb-video video',
             '.detail-video video',
             '.video-player video',
-            '.tb-main-video video'
+            '.tb-main-video video',
+            // squirrel-gather 实战验证的天猫主视频 selector
+            'video#videox-video-el'
         ];
         for (var v = 0; v < videoSelectors.length; v++) {
             var vList = document.querySelectorAll(videoSelectors[v]);

@@ -59,8 +59,27 @@ const taobaoLoginWallRenderedHtml = `<!DOCTYPE html><html><head><title>商品详
   </div>
 </body></html>`;
 
+// ---- 天猫 PC（squirrel-gather 实战 selector 风格 DOM）：thumbnailPic 主图 + videox 视频 + descV8 详情图 ----
+const tmallPcHtml = `<!DOCTYPE html><html><head><title>王俊凯同款骆驼休闲鞋-tmall.com天猫</title></head><body>
+  <div class="mainPicWrap">
+    <img class="thumbnailPic thumbnailPic-1" src="https://img.alicdn.com/imgextra/i1/123/tb1main1_430x430.jpg"/>
+    <img class="thumbnailPic thumbnailPic-2" src="https://gd3.alicdn.com/imgextra/i2/123/tb1main2_430x430.jpg"/>
+  </div>
+  <div class="switchTabsWrap" data-appeared="true">
+    <div class="switchTabsItem">主图</div>
+    <div class="switchTabsItem">视频</div>
+    <video id="videox-video-el" class="videox-video" src="https://cloud.video.taobao.com/play/u/1/e/1/t/926895986130.mp4"></video>
+  </div>
+  <div class="descV8-richtext">
+    <img data-name="singleImage" class="descV8-singleImage-image lazyload" src="https://img.alicdn.com/imgextra/i6/123/desc1.jpg"/>
+    <img align="absmiddle" class="lazyload" src="https://img.alicdn.com/imgextra/i7/123/desc2_60x60.jpg"/>
+  </div>
+  <img class="valueItemImg" placeholder="xxx" src="https://img.alicdn.com/imgextra/i8/123/sku_red_90x90q30.jpg_.webp"/>
+</body></html>`;
+
 const cases = [
   { name: 'taobao_logged_in', html: taobaoLoggedInHtml, file: 'taobao_extractor.js' },
+  { name: 'tmall_pc_squirrel', html: tmallPcHtml, file: 'taobao_extractor.js' },
   { name: 'taobao_anonymous_shell', html: readFileSync(outDir + '/tb_anon.html', 'utf8'), file: 'taobao_extractor.js' },
   { name: 'taobao_loginwall_logo', html: taobaoLoginWallRenderedHtml, file: 'taobao_extractor.js' },
   { name: 'douyin', html: douyinHtml, file: 'douyin_extractor.js' },

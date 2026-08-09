@@ -334,6 +334,40 @@ private fun WebViewScreen(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    // 一键去登录：H5 登录墙页面很高、底部登录入口常被遮挡（用户反馈"页面拉不下去"）。
+                    // 优先在页面内滚动到可见的"登录"入口；找不到则直达淘宝官方登录页（登录后回跳原商品页）。
+                    Button(
+                        onClick = {
+                            webView.evaluateJavascript(
+                                """
+                                (function(){
+                                  var els=document.querySelectorAll('button,a,div,span');
+                                  for(var i=0;i<els.length;i++){
+                                    var e=els[i];
+                                    if(!e.offsetParent) continue;
+                                    var t=(e.textContent||'').trim();
+                                    if(t && (t.indexOf('登录')>=0||t.indexOf('登 录')>=0) && t.length<14){
+                                      e.scrollIntoView({behavior:'smooth',block:'center'});
+                                      return 'scroll';
+                                    }
+                                  }
+                                  return 'notfound';
+                                })()
+                                """.trimIndent()
+                            ) { r ->
+                                val res = (r ?: "").trim().replace("\"", "")
+                                if (res == "notfound" || res == "null" || res.isBlank()) {
+                                    val cur = webView.url ?: "https://www.taobao.com/"
+                                    val login = "https://login.taobao.com/member/login.jhtml?redirectURL=" +
+                                        java.net.URLEncoder.encode(cur, "UTF-8")
+                                    webView.loadUrl(login)
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(text = "一键去登录", color = Color.White)
+                    }
                     Button(
                         onClick = {
                             val (ok, msg) = saveTaobaoCookieManually(context)
@@ -344,7 +378,7 @@ private fun WebViewScreen(
                                 loginHint.value = ""
                             }
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColorsPrimary()
                     ) {
                         Text(text = "保存 Cookie", color = Color.White)
