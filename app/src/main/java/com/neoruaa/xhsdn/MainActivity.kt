@@ -184,6 +184,12 @@ class MainActivity : ComponentActivity() {
                             _autoDownloadIntentUrl.value = null
                             return@LaunchedEffect
                         }
+                        // 抖音链接：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
+                        if (UrlUtils.detectPlatform(url) == "douyin") {
+                            launchDouyinWebView(url)
+                            _autoDownloadIntentUrl.value = null
+                            return@LaunchedEffect
+                        }
                         viewModel.updateUrl(url)
                         ensureStoragePermission { 
                             val selectiveDownload = getSharedPreferences("XHSDownloaderPrefs", MODE_PRIVATE)
@@ -385,8 +391,8 @@ class MainActivity : ComponentActivity() {
                                 // 提取有效链接
                                 val platform = UrlUtils.detectPlatform(clipText)
                                 if (platform == "douyin") {
-                                    // 抖音：直接直链下载
-                                    dispatchDownload(clipText, "douyin")
+                                    // 抖音：HTTP 直解已被风控拦截（空响应/安全页），改用 WebView 真浏览器解析
+                                    launchDouyinWebView(clipText)
                                 } else if (platform == "kuaishou") {
                                     // 快手：匿名即可直链下载
                                     dispatchDownload(clipText, "kuaishou")
@@ -507,7 +513,8 @@ class MainActivity : ComponentActivity() {
                         ensureStoragePermission {
                             val plat = UrlUtils.detectPlatform(inputLink)
                             if (plat == "douyin") {
-                                dispatchDownload(inputLink, "douyin")
+                                // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
+                                launchDouyinWebView(inputLink)
                             } else if (plat == "kuaishou") {
                                 dispatchDownload(inputLink, "kuaishou")
                             } else {
@@ -528,7 +535,8 @@ class MainActivity : ComponentActivity() {
                                 val platform = detectedPlatform ?: UrlUtils.detectPlatform(link)
                             ensureStoragePermission {
                                 if (platform == "douyin") {
-                                    dispatchDownload(link, "douyin")
+                                    // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
+                                    launchDouyinWebView(link)
                                 } else if (platform == "kuaishou") {
                                     dispatchDownload(link, "kuaishou")
                                 } else {
@@ -975,7 +983,8 @@ private fun MainScreen(
                         // 下载失败日志查看对话框（无需文件管理器即可查看）
                         if (showFailureLogDialog) {
                             val logCtx = LocalContext.current
-                            val logContent = DownloadLogger.getLogContent(logCtx)
+                            var failureLogVersion by remember { mutableStateOf(0) }
+                            val logContent = remember(failureLogVersion) { DownloadLogger.getLogContent(logCtx) }
                             WindowDialog(
                                 title = stringResource(R.string.failure_log_title),
                                 show = true,
@@ -1004,6 +1013,15 @@ private fun MainScreen(
                                         horizontalArrangement = Arrangement.End,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
+                                        TextButton(
+                                            text = stringResource(R.string.clear_failure_log),
+                                            onClick = {
+                                                DownloadLogger.clearFailureLog(logCtx)
+                                                failureLogVersion++
+                                                android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.failure_log_cleared), android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        )
+                                        Spacer(Modifier.width(8.dp))
                                         TextButton(
                                             text = stringResource(R.string.cancel),
                                             onClick = { showFailureLogDialog = false }

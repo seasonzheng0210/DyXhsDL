@@ -62,6 +62,19 @@ object DownloadLogger {
     fun getFailureLogFilePath(context: Context) =
         File(resolveDir(context), FILE_FAILURE).absolutePath
 
+    /**
+     * 清除失败日志：仅删除 failures.log，保留 normal.log（正常下载记录）。
+     * 删除后下次写入会自动重建文件，不影响后续日志。
+     */
+    @Synchronized
+    fun clearFailureLog(context: Context) {
+        runCatching {
+            File(resolveDir(context), FILE_FAILURE).delete()
+        }.onFailure {
+            android.util.Log.e(TAG, "clear failure log failed: ${it.message}")
+        }
+    }
+
     fun getNormalLogFilePath(context: Context) =
         File(resolveDir(context), FILE_NORMAL).absolutePath
 

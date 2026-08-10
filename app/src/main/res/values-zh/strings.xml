@@ -197,6 +197,8 @@
     <string name="failure_log_empty">暂无失败记录</string>
     <string name="copy_log">复制</string>
     <string name="log_copied">日志已复制</string>
+    <string name="clear_failure_log">清除失败</string>
+    <string name="failure_log_cleared">失败日志已清除</string>
     <string name="fg_channel_name">后台下载</string>
     <string name="fg_service_running">正在后台下载</string>
 

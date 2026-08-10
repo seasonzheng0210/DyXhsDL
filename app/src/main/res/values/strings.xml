@@ -197,6 +197,8 @@
     <string name="failure_log_empty">No failures recorded</string>
     <string name="copy_log">Copy</string>
     <string name="log_copied">Log copied</string>
+    <string name="clear_failure_log">Clear Failures</string>
+    <string name="failure_log_cleared">Failure log cleared</string>
     <string name="menu_normal_log">Normal Log</string>
     <string name="normal_log_title">Download Normal Log</string>
     <string name="normal_log_empty">No normal logs recorded</string>
