@@ -33,7 +33,8 @@ data class KuaishouMediaInfo(
 /**
  * 快手（Kuaishou）直链解析。参考 GitHub 上 KS-Downloader / KuaishouParser 等公开方案：
  *
- * 解析路径（与 DouyinParser 同构，HTTP 直解优先）：
+ * 解析路径（与 DouyinParser 同构）：快手自动下载入口（剪贴板/气泡/手动输入/自动读取）现已改为
+ * 先走 WebView 真浏览器解析（最难被风控，与抖音一致）；本 Parser 作为 WebView 抓空时的 HTTP 直解兜底：
  *  1) 从分享链接解析出作品 id（photoId）：
  *     短链 v.kuaishou.com/CODE、www.kuaishou.com/f/CODE 会 302 跳转到
  *     www.kuaishou.com/short-video/{photoId}（中间可能经 v.m.chenzhongtech.com/fw/photo/{id}），

@@ -178,9 +178,9 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(autoUrl) {
                 autoUrl?.let { url ->
                      if (url.isNotEmpty()) {
-                        // 快手链接：匿名即可直解，直接派发（与抖音同路径）
+                        // 快手链接：HTTP 直解不稳定（匿名 GraphQL 偶被风控返回空），改用 WebView 真浏览器解析（与抖音一致）
                         if (UrlUtils.detectPlatform(url) == "kuaishou") {
-                            dispatchDownload(url, "kuaishou")
+                            launchKuaishouWebView(url)
                             _autoDownloadIntentUrl.value = null
                             return@LaunchedEffect
                         }
@@ -394,8 +394,8 @@ class MainActivity : ComponentActivity() {
                                     // 抖音：HTTP 直解已被风控拦截（空响应/安全页），改用 WebView 真浏览器解析
                                     launchDouyinWebView(clipText)
                                 } else if (platform == "kuaishou") {
-                                    // 快手：匿名即可直链下载
-                                    dispatchDownload(clipText, "kuaishou")
+                                    // 快手：HTTP 直解不稳定（匿名 GraphQL 偶被风控），改用 WebView 真浏览器解析（与抖音一致）
+                                    launchKuaishouWebView(clipText)
                                 } else if (platform == "xhs") {
                                     viewModel.updateUrl(clipText)
 
@@ -516,7 +516,7 @@ class MainActivity : ComponentActivity() {
                                 // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
                                 launchDouyinWebView(inputLink)
                             } else if (plat == "kuaishou") {
-                                dispatchDownload(inputLink, "kuaishou")
+                                launchKuaishouWebView(inputLink)
                             } else {
                                 viewModel.updateUrl(inputLink)
                                 if (selectiveDownload) {
@@ -538,7 +538,7 @@ class MainActivity : ComponentActivity() {
                                     // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
                                     launchDouyinWebView(link)
                                 } else if (platform == "kuaishou") {
-                                    dispatchDownload(link, "kuaishou")
+                                    launchKuaishouWebView(link)
                                 } else {
                                     viewModel.updateUrl(link)
                                     if (selectiveDownload) {
