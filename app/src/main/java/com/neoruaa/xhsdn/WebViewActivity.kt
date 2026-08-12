@@ -153,7 +153,15 @@ private fun WebViewScreen(
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.cacheMode = WebSettings.LOAD_DEFAULT
-            settings.userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Mobile Safari/537.36"
+            // 快手分享链接：强制桌面 UA，否则被甩到 m.gifshow.com「在 App 打开」中转遮罩页（无任何视频数据）；
+            // 桌面页 www.kuaishou.com/short-video/{id} 才含真实播放数据（window.__APOLLO_STATE__）。
+            // 小红书保留移动 UA（其提取器依赖移动端 DOM 选择器 .note-image-box img 等）。
+            val ua = if (source == "kuaishou") {
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            } else {
+                "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Mobile Safari/537.36"
+            }
+            settings.userAgentString = ua
             settings.setSupportZoom(true)
             settings.builtInZoomControls = true
             settings.displayZoomControls = false

@@ -22,6 +22,8 @@
     }
 
     var content = { content: '', title: '', desc: '' };
+    var foundCaption = '';
+    var foundAuthor = '';
 
     // 递归遍历 __INITIAL_STATE__，收集视频/图集/封面，跳过水印与 HLS 源
     var SKIP_KEYS = { mainMvUrls: 1, manifest: 1, manifestH265: 1 };
@@ -41,6 +43,17 @@
                 if (u) add(u);
             }
         }
+        // 顺带收集标题(caption)与作者(authorName/author.name)
+        if (!foundCaption && typeof node.caption === 'string' && node.caption.trim()) {
+            foundCaption = node.caption.trim();
+        }
+        if (!foundAuthor) {
+            if (typeof node.authorName === 'string' && node.authorName.trim()) {
+                foundAuthor = node.authorName.trim();
+            } else if (node.author && typeof node.author === 'object' && typeof node.author.name === 'string' && node.author.name.trim()) {
+                foundAuthor = node.author.name.trim();
+            }
+        }
         var keys = Object.keys(node);
         for (var k = 0; k < keys.length; k++) {
             var key = keys[k];
@@ -51,9 +64,14 @@
     }
 
     try {
-        var state = window.__INITIAL_STATE__;
-        if (state) {
-            walk(state, 0);
+        // 快手页面数据先后用过两个全局：旧 __INITIAL_STATE__ 与新 __APOLLO_STATE__（Apollo GraphQL 缓存）。
+        // 桌面页 www.kuaishou.com/short-video/{id} 用 Apollo —— 需 WebView 强制桌面 UA 才能落到该页，
+        // 否则会被甩到 m.gifshow.com 的「在 App 打开」中转遮罩页（无任何视频数据）。
+        var stateSources = [];
+        if (window.__INITIAL_STATE__) stateSources.push(window.__INITIAL_STATE__);
+        if (window.__APOLLO_STATE__) stateSources.push(window.__APOLLO_STATE__);
+        for (var s = 0; s < stateSources.length; s++) {
+            walk(stateSources[s], 0);
         }
 
         // 兜底：__INITIAL_STATE__ 没抠到时，扫描页面 <video>/<img>
@@ -76,12 +94,9 @@
             }
         }
 
-        // 文本：caption
-        if (state) {
-            var photo = state.photo || (state.detail && state.detail.photo);
-            if (photo && photo.caption) content.title = photo.caption;
-            if (state.author && state.author.name) content.desc = state.author.name;
-        }
+        // 文本：caption / author（在两套全局里都找过，取首次命中）
+        if (foundCaption) content.title = foundCaption;
+        if (foundAuthor) content.desc = foundAuthor;
         if (!content.title && document.title) {
             content.title = document.title.replace(/[-_|].*$/, '').trim();
         }

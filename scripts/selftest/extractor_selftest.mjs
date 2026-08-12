@@ -47,6 +47,24 @@ const kuaishouAlbumState = {
   author: { id: 'u1', name: '测试作者' }
 };
 
+// ---- 快手：模拟桌面页 Apollo GraphQL 缓存（window.__APOLLO_STATE__，新结构）----
+const kuaishouApolloState = {
+  "VisionVideoDetail:{\"photoId\":\"3xAbCdEfG\"}": {
+    "data": {
+      "visionVideoDetail": {
+        "photo": {
+          photoId: '3xAbCdEfG',
+          caption: '测试Apollo视频',
+          photoUrl: 'https://v.m.chenzhongtech.com/bs2/apollo/playurl.mp4',
+          coverUrl: 'https://v.m.chenzhongtech.com/bs2/apollo/cover.jpg',
+          images: []
+        },
+        "author": { "name": "Apollo作者" }
+      }
+    }
+  }
+};
+
 // ---- 抖音：模拟 H5 笔记页注入的 window._ROUTER_DATA（douyin_extractor.js 的真实数据来源）----
 const douyinRouterData = {
   loaderData: {
@@ -73,6 +91,7 @@ const xhsHtml = `<!DOCTYPE html><html><body>
 const cases = [
   { name: 'kuaishou_video', html: '<!DOCTYPE html><html><head><title>测试快手视频标题</title></head><body></body></html>', file: 'kuaishou_extractor.js', state: kuaishouVideoState },
   { name: 'kuaishou_album', html: '<!DOCTYPE html><html><head><title>测试快手图集</title></head><body></body></html>', file: 'kuaishou_extractor.js', state: kuaishouAlbumState },
+  { name: 'kuaishou_apollo', html: '<!DOCTYPE html><html><head><title>测试Apollo视频</title></head><body></body></html>', file: 'kuaishou_extractor.js', apollo: kuaishouApolloState },
   { name: 'douyin', html: '<!DOCTYPE html><html><body></body></html>', file: 'douyin_extractor.js', globals: { _ROUTER_DATA: douyinRouterData } },
   { name: 'xhs', html: xhsHtml, file: 'xhs_extractor.js' },
 ];
@@ -84,6 +103,7 @@ for (const c of cases) {
   catch (e) { console.log(`[${c.name}] 读取 ${c.file} 失败: ${e}`); fail++; continue; }
   const dom = new JSDOM(c.html, { runScripts: 'outside-only' });
   if (c.state) dom.window.__INITIAL_STATE__ = c.state;
+  if (c.apollo) dom.window.__APOLLO_STATE__ = c.apollo;
   if (c.globals) Object.assign(dom.window, c.globals);
   const r = runExtractor(dom, code);
   if (r.error) {
