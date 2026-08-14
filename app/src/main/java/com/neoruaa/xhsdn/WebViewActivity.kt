@@ -397,8 +397,17 @@ private fun WebViewScreen(
                 view: WebView?,
                 request: WebResourceRequest?
             ): Boolean {
-                // 让 WebView 原生处理所有 http/https 导航（含抖音/快手短链跨域 302 重定向），
-                // 不要在这里再 loadUrl —— 重复加载会打断 SPA 且可能清掉已注入的钩子。
+                val u = request?.url?.toString() ?: return false
+                // 抖音分享短链 302 到 iesdouyin.com/share/video/{id} 是「请在抖音极速版内观看」拒绝页，
+                // 浏览器（含真机 WebView）拿不到视频数据。改写为真·桌面播放页 www.douyin.com/video/{id}，
+                // 该页在真机/模拟器 WebView（真实浏览器指纹）下可正常加载并由 XHR 钩子捕获播放地址。
+                val m = Regex("""iesdouyin\.com/share/video/(\d+)""").find(u)
+                if (m != null) {
+                    val id = m.groupValues[1]
+                    view?.loadUrl("https://www.douyin.com/video/$id")
+                    return true
+                }
+                // 其余导航（含快手短链 → www.kuaishou.com/short-video/{id}）让 WebView 原生处理。
                 return false
             }
 
