@@ -572,7 +572,11 @@ private fun scheduleNextOrFallback(
     onResult: (List<String>, String, Long?, Boolean) -> Unit,
     attempt: Int
 ) {
-    val MAX_ATTEMPTS = 25
+    // 轮询 ~2 分钟（150 × 800ms ≈ 120s）：GitHub 双引擎方案的浏览器引擎实践——
+    // 抖音/快手桌面页在 Android WebView 上 SPA 水合很慢（模拟器实测抖音 ~85s 才出数据），
+    // 20s 窗口必然提前回退到已被风控的 HTTP 直解。延长窗口让页面有足够时间加载并触发
+    // web_inject.js 的 API 重拉/响应捕获。
+    val MAX_ATTEMPTS = 150
     if (finished.value) return
     if (attempt + 1 < MAX_ATTEMPTS) {
         // 轮询下一次（~800ms），等待 SPA 异步数据 / 视频元素就绪

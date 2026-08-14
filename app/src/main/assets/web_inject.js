@@ -66,10 +66,39 @@
         } catch (e) {}
     }
 
+    // ---- API 请求地址捕获 + 同源立即重拉（GitHub 双引擎方案里的 API 引擎）----
+    // 页面自己的 JS 发出的视频数据 API 请求自带有效签名（a_bogus/X-Bogus）与 cookie，
+    // 拦截其 URL 后同源重拉，几秒内即可拿到 play_addr，无需等待 SPA 渲染完成。
+    var API_RE = /(\/aweme\/v1\/|\/web\/api\/|iteminfo|visionVideoDetail|\/graphql|aweme\/detail|\/video\/play\/|aweme\/post|aweme\/list)/;
+    var probed = {};
+    function probeApi(url) {
+        try {
+            if (!url || typeof url !== 'string') return;
+            if (!API_RE.test(url)) return;
+            if (probed[url]) return;
+            probed[url] = 1;
+            fetch(url).then(function (r) {
+                return r.text();
+            }).then(function (t) {
+                if (!t || t.length < 50) return;
+                if (t.indexOf('play_addr') < 0 && t.indexOf('url_list') < 0 &&
+                    t.indexOf('photoUrl') < 0 && t.indexOf('videoInfoRes') < 0) return;
+                if (t.length < 3000000) {
+                    var j = JSON.parse(t);
+                    scanObj(j, 0);
+                }
+            }).catch(function () {});
+        } catch (e) {}
+    }
+
     // 包裹 fetch
     var origFetch = window.fetch;
     window.fetch = function () {
         var a = arguments;
+        try {
+            var reqUrl = (typeof a[0] === 'string') ? a[0] : (a[0] && a[0].url);
+            probeApi(reqUrl);
+        } catch (e) {}
         return origFetch.apply(this, a).then(function (r) {
             try {
                 r.clone().text().then(function (t) { handleText(t); }).catch(function () {});
@@ -85,6 +114,7 @@
     var origSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.open = function (m, u) {
         this.__dyu = u;
+        try { probeApi(u); } catch (e) {}
         return origOpen.apply(this, arguments);
     };
     XMLHttpRequest.prototype.send = function () {
