@@ -16,6 +16,7 @@ import android.webkit.WebSettings
 import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.JavascriptInterface
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -148,6 +149,13 @@ private fun WebViewScreen(
     val topBarState = rememberTopAppBarState()
     val scrollBehavior = top.yukonga.miuix.kmp.basic.MiuixScrollBehavior(state = topBarState)
 
+    // Set to store sniffed video URLs
+    val sniffedVideoUrls = remember { mutableSetOf<String>() }
+    // Set to store video URLs captured by the injected XHR/fetch hook (web_inject.js)
+    val capturedUrls = remember { mutableSetOf<String>() }
+    // Guard to ensure we only finish once
+    val finished = remember { mutableStateOf(false) }
+
     val webView = remember {
         WebView(context).apply {
             settings.javaScriptEnabled = true
@@ -175,13 +183,15 @@ private fun WebViewScreen(
             settings.allowUniversalAccessFromFileURLs = true
             settings.allowFileAccessFromFileURLs = true
             setInitialScale(80)
+            // 注册视频地址桥：web_inject.js 捕获到播放地址后回传，绕过 SPA 异步数据缺失
+            addJavascriptInterface(object {
+                @JavascriptInterface
+                fun onVideoUrl(url: String) {
+                    if (url.isNotBlank()) capturedUrls.add(url)
+                }
+            }, "AndroidVideoBridge")
         }
     }
-
-    // Set to store sniffed video URLs
-    val sniffedVideoUrls = remember { mutableSetOf<String>() }
-    // Guard to ensure we only finish once
-    val finished = remember { mutableStateOf(false) }
 
     // 平台品牌色（快手橙 / 抖音青 / 小红书红）与标识，用于来源区分
     val sourceColor = when (source) {
@@ -268,7 +278,9 @@ private fun WebViewScreen(
                     }
                     Button(
                         onClick = {
-                            extractImages(context, webView, sniffedVideoUrls, source, finished, onResult)
+                            if (!finished.value) {
+                                extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0)
+                            }
                         },
                         modifier = Modifier.weight(1f),
                         enabled = !loading,
@@ -338,19 +350,21 @@ private fun WebViewScreen(
                 url?.let { urlText = TextFieldValue(it) }
                 // Clear sniffed URLs on new page load
                 sniffedVideoUrls.clear()
+                // 注入 XHR/fetch 钩子（幂等），捕获 SPA 异步拉取的播放地址
+                injectHook(webView, context)
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 loading = false
-                // 抖音/快手：页面加载完成后自动尝试提取（优先 WebView），失败再走直链兜底
+                // 抖音/快手：SPA 异步水合，视频数据由页面 JS 通过 XHR/fetch 拉取
+                //（_ROUTER_DATA 现在只是 SSR 壳，videoInfoRes 不再内联）。单次延时不够，
+                // 改为轮询：每 ~800ms 提取一次，直到拿到地址或超时，期间钩子/嗅探/视频元素扫描持续补充。
                 if ((source == "douyin" || source == "kuaishou") && !finished.value) {
-                    // SPA 二次水合/懒加载图片需更久，延时拉长到 3500ms；
-                    // 若页面发生二次加载，onPageFinished 会再触发一次，自然形成一次重试。
                     view?.postDelayed({
                         if (!finished.value) {
-                            extractImages(context, webView, sniffedVideoUrls, source, finished, onResult)
+                            extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0)
                         }
-                    }, 3500)
+                    }, 1500)
                 }
             }
 
@@ -378,14 +392,19 @@ private fun WebViewScreen(
                         it.contains("douyinvod") ||
                         it.contains("aweme.snssdk.com") ||
                         it.contains("bytecdn") ||
-                        it.contains(".mp4") && it.contains("douyin")
+                        it.contains("tiktokcdn") ||
+                        it.contains("ib.douyin.com") ||
+                        it.contains(".mp4")
                     )
                     // 快手视频嗅探（PC/H5 详情页 CDN 特征）
                     val isKuaishouVideo = source == "kuaishou" && (
                         it.contains("kwaicdn.com") ||
                         it.contains("chenzhongtech.com") ||
-                        (it.contains("kwai") && it.contains(".mp4")) ||
-                        (it.contains("kuaishou") && it.contains(".mp4"))
+                        it.contains("gifshow.com") ||
+                        it.contains("kwai-player") ||
+                        it.contains("kwai") ||
+                        it.contains("kuaishou") ||
+                        it.contains(".mp4")
                     )
 
                     if (isXhsVideo || isDouyinVideo || isKuaishouVideo) {
@@ -465,9 +484,11 @@ private fun extractImages(
     context: android.content.Context,
     webView: WebView,
     sniffedUrls: Set<String>,
+    capturedUrls: Set<String>,
     source: String,
     finished: MutableState<Boolean>,
-    onResult: (List<String>, String, Long?, Boolean) -> Unit
+    onResult: (List<String>, String, Long?, Boolean) -> Unit,
+    attempt: Int
 ) {
     if (finished.value) return
     webView.postDelayed({
@@ -483,7 +504,7 @@ private fun extractImages(
         webView.evaluateJavascript(jsCode) { result ->
             try {
                 if (result == null || result == "null" || result.isEmpty()) {
-                    Toast.makeText(context, context.getString(R.string.no_urls_found_javascript_null), Toast.LENGTH_SHORT).show()
+                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt)
                     return@evaluateJavascript
                 }
                 var cleanResult = result
@@ -504,13 +525,13 @@ private fun extractImages(
                 for (i in 0 until urlsArray.length()) {
                     val url = urlsArray.getString(i)
                     if (url.isNullOrEmpty()) continue
-                    if (url.startsWith("http") && !url.startsWith("blob:") && !url.startsWith("data:")) {
+                    if (url.startsWith("http") && !url.startsWith("blob:") && !url.startsWith("data:") && !url.endsWith(".m3u8")) {
                         allUrls.add(url)
                     }
                 }
-
-                // Merge extracted URLs with sniffed URLs
-                allUrls.addAll(sniffedUrls)
+                // 合并嗅探到的地址与 XHR/fetch 钩子捕获到的地址（跳过无法直下的 HLS）
+                for (u in sniffedUrls) if (!u.endsWith(".m3u8")) allUrls.add(u)
+                for (u in capturedUrls) if (!u.endsWith(".m3u8")) allUrls.add(u)
 
                 if (allUrls.isNotEmpty()) {
                     // Create a task for the web crawl
@@ -528,24 +549,51 @@ private fun extractImages(
                     finished.value = true
                     onResult(allUrls, contentText, taskId, false)
                 } else {
-                    if (source == "douyin" || source == "kuaishou") {
-                        // WebView 取不到资源 → 交给 ViewModel 走直链兜底
-                        finished.value = true
-                        onResult(emptyList(), contentText, null, false)
-                    } else {
-                        Toast.makeText(context, context.getString(R.string.no_accessible_urls_found), Toast.LENGTH_SHORT).show()
-                    }
+                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt)
                 }
             } catch (e: Exception) {
-                if (source == "douyin" || source == "kuaishou") {
-                    finished.value = true
-                    onResult(emptyList(), "", null, false)
-                } else {
-                    Toast.makeText(context, context.getString(R.string.error_parsing_urls, e.message ?: ""), Toast.LENGTH_LONG).show()
-                }
+                scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt)
             }
         }
-    }, 10)
+    }, if (attempt == 0) 10 else 0)
+}
+
+private fun scheduleNextOrFallback(
+    context: android.content.Context,
+    webView: WebView,
+    sniffedUrls: Set<String>,
+    capturedUrls: Set<String>,
+    source: String,
+    finished: MutableState<Boolean>,
+    onResult: (List<String>, String, Long?, Boolean) -> Unit,
+    attempt: Int
+) {
+    val MAX_ATTEMPTS = 25
+    if (finished.value) return
+    if (attempt + 1 < MAX_ATTEMPTS) {
+        // 轮询下一次（~800ms），等待 SPA 异步数据 / 视频元素就绪
+        webView.postDelayed({
+            if (!finished.value) {
+                extractImages(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt + 1)
+            }
+        }, 800)
+    } else {
+        // 兜底：WebView 始终抓不到 → 回退直链解析（DownloadService 再回退 HTTP，最终可能失败）
+        if (source == "douyin" || source == "kuaishou") {
+            finished.value = true
+            onResult(emptyList(), "", null, false)
+            Toast.makeText(context, context.getString(R.string.no_accessible_urls_found), Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, context.getString(R.string.no_accessible_urls_found), Toast.LENGTH_SHORT).show()
+        }
+    }
+}
+
+private fun injectHook(webView: WebView, context: android.content.Context) {
+    val js = readAssetFile(context, "web_inject.js")
+    if (js != null) {
+        webView.evaluateJavascript(js, null)
+    }
 }
 
 private fun readAssetFile(context: android.content.Context, fileName: String): String? {

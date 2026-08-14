@@ -82,6 +82,29 @@ const douyinRouterData = {
   }
 };
 
+// ---- 抖音：模拟新版 SPA 异步结构（loaderData 仅 SSR 壳，videoInfoRes 已消失，
+//      播放数据被页面 JS 异步塞进某嵌套对象；同时页面含 <video> 元素）----
+const douyinAsyncState = {
+  loaderData: {
+    "video_(id)/page": {
+      ua: "Mozilla/5.0",
+      renderInSSR: true,
+      itemId: "7672952610642577830",
+      feed: {
+        aweme: {
+          video: {
+            play_addr: { url_list: ["https://v26-web.douyinvod.com/obj/play.mp4?a=1"] },
+            bit_rate: []
+          },
+          desc: "测试抖音异步视频"
+        }
+      }
+    }
+  }
+};
+const douyinAsyncHtml = `<!DOCTYPE html><html><head><title>测试抖音异步视频</title></head>
+<body><video src="https://aweme.snssdk.com/video/async.mp4" controls></video></body></html>`;
+
 // ---- 小红书：模拟笔记页（真实 DOM：.note-image-box 包裹 img）----
 const xhsHtml = `<!DOCTYPE html><html><body>
   <div class="note-image-box"><img src="https://sns-img.xhscdn.com/notes/1.jpg"/></div>
@@ -93,6 +116,7 @@ const cases = [
   { name: 'kuaishou_album', html: '<!DOCTYPE html><html><head><title>测试快手图集</title></head><body></body></html>', file: 'kuaishou_extractor.js', state: kuaishouAlbumState },
   { name: 'kuaishou_apollo', html: '<!DOCTYPE html><html><head><title>测试Apollo视频</title></head><body></body></html>', file: 'kuaishou_extractor.js', apollo: kuaishouApolloState },
   { name: 'douyin', html: '<!DOCTYPE html><html><body></body></html>', file: 'douyin_extractor.js', globals: { _ROUTER_DATA: douyinRouterData } },
+  { name: 'douyin_async', html: douyinAsyncHtml, file: 'douyin_extractor.js', globals: { _ROUTER_DATA: douyinAsyncState } },
   { name: 'xhs', html: xhsHtml, file: 'xhs_extractor.js' },
 ];
 
@@ -118,6 +142,13 @@ for (const c of cases) {
       const hasMp4 = urls.some(u => u.endsWith('.mp4'));
       console.log(`   含视频直链: ${hasMp4 ? '✅' : '❌'}`);
       if (!hasMp4) fail++;
+    }
+    if (c.name === 'douyin_async') {
+      // 新版 SPA：应从嵌套对象的 play_addr 抠出无(去)水印直链，并扫到 <video> 元素
+      const gotNested = urls.some(u => u.includes('douyinvod.com/obj/play.mp4'));
+      const gotVideoEl = urls.some(u => u.includes('aweme.snssdk.com/video/async.mp4'));
+      console.log(`   嵌套 play_addr: ${gotNested ? '✅' : '❌'} | <video> 元素: ${gotVideoEl ? '✅' : '❌'}`);
+      if (!gotNested || !gotVideoEl) fail++;
     }
     if (c.name === 'kuaishou_album') {
       const bothAlbum = urls.length === 2 && urls.every(u => u.includes('album'));
