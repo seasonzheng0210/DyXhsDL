@@ -582,10 +582,22 @@ private fun scheduleNextOrFallback(
             }
         }, 800)
     } else {
-        // 兜底：WebView 始终抓不到 → 回退直链解析（DownloadService 再回退 HTTP，最终可能失败）
+        // 兜底：WebView 始终抓不到 → 先把页面诊断写入失败日志（含版本号，便于判断是否新包），
+        // 再回退直链解析（DownloadService 再回退 HTTP，最终可能失败）。
         if (source == "douyin" || source == "kuaishou") {
-            finished.value = true
-            onResult(emptyList(), "", null, false)
+            val diagUrl = webView.url ?: ""
+            webView.evaluateJavascript(
+                "(function(){try{var vs=document.querySelectorAll('video').length;var im=document.querySelectorAll('img').length;var t=(document.title||'').slice(0,80);var b=(document.body?(document.body.innerText||''):'').slice(0,120).replace(/\\n/g,' ');return JSON.stringify({videos:vs,imgs:im,title:t,body:b});}catch(e){return JSON.stringify({err:String(e)});}})()"
+            ) { diag ->
+                com.neoruaa.xhsdn.utils.DownloadLogger.logFailure(
+                    context, source, diagUrl,
+                    "WebView 提取超时 diag=$diag captured=${capturedUrls.size} sniffed=${sniffedUrls.size}"
+                )
+                if (!finished.value) {
+                    finished.value = true
+                    onResult(emptyList(), "", null, false)
+                }
+            }
             Toast.makeText(context, context.getString(R.string.no_accessible_urls_found), Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(context, context.getString(R.string.no_accessible_urls_found), Toast.LENGTH_SHORT).show()

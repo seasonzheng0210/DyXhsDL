@@ -38,9 +38,10 @@ object DownloadLogger {
     private fun append(file: File, source: String, input: String, detail: String) {
         runCatching {
             val ts = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+            val ver = com.neoruaa.xhsdn.BuildConfig.VERSION_NAME
             val safeInput = input.replace("\n", " ").take(400)
             val safeDetail = detail.replace("\n", " ").take(800)
-            val line = "[$ts][$source] input=$safeInput\n  $safeDetail\n\n"
+            val line = "[$ts][$source][v$ver] input=$safeInput\n  $safeDetail\n\n"
             file.appendText(line)
         }.onFailure {
             android.util.Log.e(TAG, "write log failed: ${it.message}")

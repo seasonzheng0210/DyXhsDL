@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
@@ -99,6 +100,14 @@ import android.util.Size
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import java.io.File
 import android.util.LruCache
 import androidx.compose.foundation.layout.statusBars
@@ -1688,13 +1697,65 @@ private fun TaskCell(
         com.neoruaa.xhsdn.data.NoteType.UNKNOWN -> stringResource(R.string.note_type_unknown)
     }
     
+    // 左滑露出删除按钮（卡片左移 REVEAL.dp），长按复制链接
+    val offsetX = remember { mutableStateOf(0f) }
+    val swipeScope = rememberCoroutineScope()
+    val REVEAL = 76f
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(ContinuousRoundedRectangle(18.dp))
+    ) {
+        // 删除按钮（始终在右端，卡片左移后露出）
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .width(REVEAL.dp)
+                .fillMaxHeight()
+                .clip(ContinuousRoundedRectangle(18.dp))
+                .background(Color(0xFFF44336))
+                .clickable { onDelete() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "删除",
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .offset { IntOffset(offsetX.value.roundToInt(), 0) }
             .clip(ContinuousRoundedRectangle(18.dp))
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        offsetX.value = (offsetX.value + dragAmount).coerceIn(-REVEAL, 0f)
+                    },
+                    onDragEnd = {
+                        swipeScope.launch {
+                            animate(
+                                initialValue = offsetX.value,
+                                targetValue = if (offsetX.value < -REVEAL / 2f) -REVEAL else 0f,
+                                animationSpec = tween(200)
+                            ) { value, _ -> offsetX.value = value }
+                        }
+                    },
+                    onDragCancel = {
+                        swipeScope.launch {
+                            animate(initialValue = offsetX.value, targetValue = 0f, animationSpec = tween(200)) { value, _ -> offsetX.value = value }
+                        }
+                    }
+                )
+            }
             .combinedClickable(
                 onClick = { onClick?.invoke() },
-                onLongClick = onDelete
+                onLongClick = onCopyUrl
             )
             .background(MiuixTheme.colorScheme.surfaceVariant)
             .padding(12.dp)
@@ -1939,6 +2000,7 @@ private fun TaskCell(
         }
 
     }
+    } // Box (swipe reveal wrapper)
 }
 
 /**
