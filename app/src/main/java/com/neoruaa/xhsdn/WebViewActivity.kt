@@ -54,6 +54,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
+import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.runtime.MutableState
@@ -145,6 +146,7 @@ private fun WebViewScreen(
     var urlText by remember { mutableStateOf(TextFieldValue(initialUrl ?: "")) }
     var loading by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0) }
+    val statusMsg = remember { mutableStateOf("") }
 
     val topBarState = rememberTopAppBarState()
     val scrollBehavior = top.yukonga.miuix.kmp.basic.MiuixScrollBehavior(state = topBarState)
@@ -283,7 +285,7 @@ private fun WebViewScreen(
                     Button(
                         onClick = {
                             if (!finished.value) {
-                                extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0)
+                                extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0, statusMsg)
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -314,6 +316,15 @@ private fun WebViewScreen(
                         }
                     }
                 }
+            }
+
+            if (statusMsg.value.isNotEmpty()) {
+                Text(
+                    text = statusMsg.value,
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
             }
 
             Box(
@@ -364,13 +375,19 @@ private fun WebViewScreen(
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 loading = false
+                // 关键修复：onPageStarted 里注入钩子并不可靠（文档可能未就绪，且 SPA 内部跳转会清掉注入）。
+                // 这里在文档就绪后【重新注入】钩子（幂等 __dyInject 守卫），确保能捕获页面加载后才发出的
+                // 异步 API 请求（抖音/快手视频数据由页面 JS 在 onPageFinished 之后才 XHR/fetch 拉取）。
+                injectHook(webView, context)
+                if (source == "douyin") loadAbogus(webView, context)
                 // 抖音/快手：SPA 异步水合，视频数据由页面 JS 通过 XHR/fetch 拉取
                 //（_ROUTER_DATA 现在只是 SSR 壳，videoInfoRes 不再内联）。单次延时不够，
                 // 改为轮询：每 ~800ms 提取一次，直到拿到地址或超时，期间钩子/嗅探/视频元素扫描持续补充。
                 if ((source == "douyin" || source == "kuaishou") && !finished.value) {
+                    statusMsg.value = "页面已加载，正在提取视频地址…"
                     view?.postDelayed({
                         if (!finished.value) {
-                            extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0)
+                            extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0, statusMsg)
                         }
                     }, 1500)
                 }
@@ -380,12 +397,9 @@ private fun WebViewScreen(
                 view: WebView?,
                 request: WebResourceRequest?
             ): Boolean {
-                if (request?.url?.scheme == "http" || request?.url?.scheme == "https") {
-                    view?.let { loadUrl(it, request.url.toString()) }
-                } else {
-                    return true
-                }
-                return super.shouldOverrideUrlLoading(view, request)
+                // 让 WebView 原生处理所有 http/https 导航（含抖音/快手短链跨域 302 重定向），
+                // 不要在这里再 loadUrl —— 重复加载会打断 SPA 且可能清掉已注入的钩子。
+                return false
             }
 
             override fun onLoadResource(view: WebView?, url: String?) {
@@ -496,7 +510,8 @@ private fun extractImages(
     source: String,
     finished: MutableState<Boolean>,
     onResult: (List<String>, String, Long?, Boolean) -> Unit,
-    attempt: Int
+    attempt: Int,
+    statusMsg: MutableState<String>
 ) {
     if (finished.value) return
     webView.postDelayed({
@@ -512,7 +527,7 @@ private fun extractImages(
         webView.evaluateJavascript(jsCode) { result ->
             try {
                 if (result == null || result == "null" || result.isEmpty()) {
-                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt)
+                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg)
                     return@evaluateJavascript
                 }
                 var cleanResult = result
@@ -555,12 +570,13 @@ private fun extractImages(
                     com.neoruaa.xhsdn.data.TaskManager.updateTaskStatus(taskId, com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING)
 
                     finished.value = true
+                    statusMsg.value = ""
                     onResult(allUrls, contentText, taskId, false)
                 } else {
-                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt)
+                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg)
                 }
             } catch (e: Exception) {
-                scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt)
+                scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg)
             }
         }
     }, if (attempt == 0) 10 else 0)
@@ -574,7 +590,8 @@ private fun scheduleNextOrFallback(
     source: String,
     finished: MutableState<Boolean>,
     onResult: (List<String>, String, Long?, Boolean) -> Unit,
-    attempt: Int
+    attempt: Int,
+    statusMsg: MutableState<String>
 ) {
     // 轮询 ~2 分钟（150 × 800ms ≈ 120s）：GitHub 双引擎方案的浏览器引擎实践——
     // 抖音/快手桌面页在 Android WebView 上 SPA 水合很慢（模拟器实测抖音 ~85s 才出数据），
@@ -584,16 +601,19 @@ private fun scheduleNextOrFallback(
     if (finished.value) return
     if (attempt + 1 < MAX_ATTEMPTS) {
         // 轮询下一次（~800ms），等待 SPA 异步数据 / 视频元素就绪
+        statusMsg.value = "正在提取视频地址…（第 ${attempt + 1} 次轮询）"
         webView.postDelayed({
             if (!finished.value) {
-                extractImages(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt + 1)
+                extractImages(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt + 1, statusMsg)
             }
         }, 800)
     } else {
         // 兜底：WebView 始终抓不到 → 先把页面诊断写入失败日志（含版本号，便于判断是否新包），
-        // 再回退直链解析（DownloadService 再回退 HTTP，最终可能失败）。
+        // 不再静默回退到已失效的 HTTP 直解，而是明确告知用户，便于反馈真机环境到底卡在哪。
         if (source == "douyin" || source == "kuaishou") {
             val diagUrl = webView.url ?: ""
+            statusMsg.value = "提取超时：钩子捕获 ${capturedUrls.size} 条，嗅探 ${sniffedUrls.size} 条"
+            Toast.makeText(context, "提取超时（钩子${capturedUrls.size}/嗅探${sniffedUrls.size}），可重试或点「直链解析」", Toast.LENGTH_LONG).show()
             webView.evaluateJavascript(
                 "(function(){try{var vs=document.querySelectorAll('video').length;var im=document.querySelectorAll('img').length;var t=(document.title||'').slice(0,80);var b=(document.body?(document.body.innerText||''):'').slice(0,120).replace(/\\n/g,' ');return JSON.stringify({videos:vs,imgs:im,title:t,body:b});}catch(e){return JSON.stringify({err:String(e)});}})()"
             ) { diag ->
@@ -606,7 +626,6 @@ private fun scheduleNextOrFallback(
                     onResult(emptyList(), "", null, false)
                 }
             }
-            Toast.makeText(context, context.getString(R.string.no_accessible_urls_found), Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(context, context.getString(R.string.no_accessible_urls_found), Toast.LENGTH_SHORT).show()
         }

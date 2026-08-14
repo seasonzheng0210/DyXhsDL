@@ -99,10 +99,10 @@ import android.util.Size
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.offset
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
@@ -281,15 +281,22 @@ class MainActivity : ComponentActivity() {
                         // 3. Logic Branching
                         
                         if (currentAutoRead && UrlUtils.detectPlatform(clipText) == "douyin") {
-                            // 抖音：自动读取时直接直链下载
+                            // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
                             lastHandledUrl = dedupeKey
-                            dispatchDownload(url ?: clipText, "douyin")
+                            launchDouyinWebView(url ?: clipText)
                             // 读取后清空剪贴板，避免同链接被反复读取
                             clipboard.setPrimaryClip(android.content.ClipData.newPlainText("", ""))
                             detectedXhsLink = null
                         } else if (currentAutoRead) {
                                 // A. Auto Download Priority
                                 lastHandledUrl = dedupeKey
+                                val autoPlat = UrlUtils.detectPlatform(clipText)
+                                if (autoPlat == "kuaishou") {
+                                    // 快手：HTTP 直解不稳，改用 WebView 真浏览器解析
+                                    launchKuaishouWebView(clipText)
+                                } else if (autoPlat == "douyin") {
+                                    launchDouyinWebView(clipText)
+                                } else {
                                 viewModel.updateUrl(clipText)
                                 Log.d("XHS_Debug", "Triggering Auto Download")
 
@@ -297,6 +304,7 @@ class MainActivity : ComponentActivity() {
                                     viewModel.startSelectiveDownload { showToast(it) }
                                 } else {
                                     dispatchDownload(clipText, null)
+                                }
                                 }
                                 
                                 // Show Notification with Full Content
@@ -483,17 +491,14 @@ class MainActivity : ComponentActivity() {
                     },
                     onRetryTask = { task ->
                         ensureStoragePermission {
-                            val retrySource = when (task.source) {
-                                "douyin" -> "douyin"
-                                "kuaishou" -> "kuaishou"
-                                else -> "xhs"
-                            }
-                            when (retrySource) {
+                            when (task.source) {
+                                "douyin" -> launchDouyinWebView(task.noteUrl)
+                                "kuaishou" -> launchKuaishouWebView(task.noteUrl)
                                 else -> {
                                     // 复用同一任务（重置进度），重新派发到前台服务下载
                                     com.neoruaa.xhsdn.data.TaskManager.resetTask(task.id)
                                     com.neoruaa.xhsdn.data.TaskManager.startTask(task.id)
-                                    dispatchDownload(task.noteUrl, retrySource, task.id)
+                                    dispatchDownload(task.noteUrl, "xhs", task.id)
                                 }
                             }
                         }
@@ -755,22 +760,32 @@ class MainActivity : ComponentActivity() {
 
             if (source == "douyin") {
                 val webViewUrl = data.getStringExtra("url") ?: ""
-                com.neoruaa.xhsdn.DownloadService.startDownload(
-                    this,
-                    if (forceDirect || urls.isEmpty()) webViewUrl
-                    else (urls.firstOrNull { it.startsWith("http") } ?: webViewUrl),
-                    "douyin"
-                )
+                if (forceDirect) {
+                    // 用户主动点「直链解析」：走 HTTP（可能失败，用户已知晓）
+                    com.neoruaa.xhsdn.DownloadService.startDownload(this, webViewUrl, "douyin")
+                } else if (urls.isNotEmpty()) {
+                    // WebView 提取成功：直链走中立下载，不进 HTTP 解析器
+                    com.neoruaa.xhsdn.DownloadService.startDownload(
+                        this,
+                        urls.firstOrNull { it.startsWith("http") } ?: webViewUrl,
+                        "douyin"
+                    )
+                } else {
+                    showToast("WebView 未能提取抖音视频，可重试或点「直链解析」")
+                }
                 return
             }
 
             if (source == "kuaishou") {
                 val webViewUrl = data.getStringExtra("url") ?: ""
-                if (forceDirect || urls.isEmpty()) {
-                    // WebView 渲染抓不到或用户主动选"直链解析"，
-                    // 回退到 KuaishouParser 的 HTTP 直解（无水印播放源）。
+                if (forceDirect) {
+                    // 用户主动点「直链解析」：走 HTTP（可能失败，用户已知晓）
                     com.neoruaa.xhsdn.DownloadService.startDownload(this, webViewUrl, "kuaishou")
-                    showToast(if (forceDirect) "已切换快手直链解析" else "WebView 未抓到，已回退快手直链解析")
+                    showToast("已切换快手直链解析")
+                    return
+                }
+                if (urls.isEmpty()) {
+                    showToast("WebView 未能提取快手作品，可重试或点「直链解析」")
                     return
                 }
                 // 否则 urls 非空，继续往下走通用 startWebCrawl 下载
@@ -1723,40 +1738,40 @@ private fun TaskCell(
             )
         }
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-            .clip(ContinuousRoundedRectangle(18.dp))
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures(
-                    onHorizontalDrag = { change, dragAmount ->
-                        change.consume()
-                        offsetX.value = (offsetX.value + dragAmount).coerceIn(-REVEAL, 0f)
-                    },
-                    onDragEnd = {
-                        swipeScope.launch {
-                            animate(
-                                initialValue = offsetX.value,
-                                targetValue = if (offsetX.value < -REVEAL / 2f) -REVEAL else 0f,
-                                animationSpec = tween(200)
-                            ) { value, _ -> offsetX.value = value }
-                        }
-                    },
-                    onDragCancel = {
-                        swipeScope.launch {
-                            animate(initialValue = offsetX.value, targetValue = 0f, animationSpec = tween(200)) { value, _ -> offsetX.value = value }
-                        }
-                    }
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .clip(ContinuousRoundedRectangle(18.dp))
+                .background(MiuixTheme.colorScheme.surfaceVariant)
+                .padding(12.dp)
+                .combinedClickable(
+                    onClick = { onClick?.invoke() },
+                    onLongClick = onCopyUrl
                 )
-            }
-            .combinedClickable(
-                onClick = { onClick?.invoke() },
-                onLongClick = onCopyUrl
-            )
-            .background(MiuixTheme.colorScheme.surfaceVariant)
-            .padding(12.dp)
-    ) {
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            offsetX.value = (offsetX.value + dragAmount).coerceIn(-REVEAL, 0f)
+                        },
+                        onDragEnd = {
+                            swipeScope.launch {
+                                animate(
+                                    initialValue = offsetX.value,
+                                    targetValue = if (offsetX.value < -REVEAL / 2f) -REVEAL else 0f,
+                                    animationSpec = tween(200)
+                                ) { value, _ -> offsetX.value = value }
+                            }
+                        },
+                        onDragCancel = {
+                            swipeScope.launch {
+                                animate(initialValue = offsetX.value, targetValue = 0f, animationSpec = tween(200)) { value, _ -> offsetX.value = value }
+                            }
+                        }
+                    )
+                }
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1995,8 +2010,7 @@ private fun TaskCell(
                 }
             }
         }
-
-    }
+        } // card Column body
     } // Box (swipe reveal wrapper)
 }
 
