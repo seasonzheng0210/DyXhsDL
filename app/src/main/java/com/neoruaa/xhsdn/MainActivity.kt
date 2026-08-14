@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
@@ -1707,16 +1706,14 @@ private fun TaskCell(
             .fillMaxWidth()
             .clip(ContinuousRoundedRectangle(18.dp))
     ) {
-        // 删除按钮（始终在右端，卡片左移后露出）
+        // 删除按钮（满铺整项，卡片左移后露出右端"删除"）
         Box(
             modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .width(REVEAL.dp)
-                .fillMaxHeight()
-                .clip(ContinuousRoundedRectangle(18.dp))
+                .matchParentSize()
                 .background(Color(0xFFF44336))
+                .padding(end = 24.dp)
                 .clickable { onDelete() },
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.CenterEnd
         ) {
             Text(
                 text = "删除",

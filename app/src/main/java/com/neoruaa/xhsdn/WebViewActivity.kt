@@ -356,6 +356,10 @@ private fun WebViewScreen(
                 sniffedVideoUrls.clear()
                 // 注入 XHR/fetch 钩子（幂等），捕获 SPA 异步拉取的播放地址
                 injectHook(webView, context)
+                // 抖音：加载 a_bogus 签名算法，供直连 API 兜底（GitHub 双引擎的 API 引擎）
+                if (source == "douyin") {
+                    loadAbogus(webView, context)
+                }
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -611,6 +615,13 @@ private fun scheduleNextOrFallback(
 
 private fun injectHook(webView: WebView, context: android.content.Context) {
     val js = readAssetFile(context, "web_inject.js")
+    if (js != null) {
+        webView.evaluateJavascript(js, null)
+    }
+}
+
+private fun loadAbogus(webView: WebView, context: android.content.Context) {
+    val js = readAssetFile(context, "abogus.js")
     if (js != null) {
         webView.evaluateJavascript(js, null)
     }

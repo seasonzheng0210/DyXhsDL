@@ -141,5 +141,35 @@
         } catch (e) {}
     }, 700);
 
+    // ---- 抖音直连 API 兜底（GitHub 双引擎里的 API 引擎）----
+    // 当页面自己的 API 请求迟迟未发（SPA 崩溃/慢水合）时，用内嵌 a_bogus 算法自行签名并请求
+    // 抖音 detail 接口，直接拿到 play_addr，不必等页面渲染。__getABogus 由 abogus.js 提供。
+    var directTried = false;
+    function directApiAttempt() {
+        try {
+            if (directTried) return;
+            directTried = true;
+            if (typeof window.__getABogus !== 'function') return;
+            var host = (location.host || '');
+            if (host.indexOf('douyin.com') < 0) return;
+            var m = (location.pathname || '').match(/\/video\/(\d+)/);
+            if (!m) return;
+            var id = m[1];
+            var base = 'https://www.douyin.com/aweme/v1/web/aweme/detail/?aweme_id=' + id +
+                '&aid=6383&channel=channel_pc_web&device_platform=webapp' +
+                '&browser_language=zh-CN&browser_platform=Win32&browser_name=Chrome&browser_version=124.0.0.0' +
+                '&engine_name=Blink&engine_version=124.0.0.0&os_name=Windows&os_version=10' +
+                '&screen_width=1280&screen_height=800';
+            var ab = window.__getABogus(base, 'get');
+            if (!ab) return;
+            var url = base + '&a_bogus=' + encodeURIComponent(ab);
+            fetch(url).then(function (r) { return r.text(); }).then(function (t) {
+                if (t && t.length >= 50) handleText(t);
+            }).catch(function () {});
+        } catch (e) {}
+    }
+    // 页面加载几秒后仍未捕获到播放地址时，尝试直连 API
+    setTimeout(directApiAttempt, 3000);
+
     console.log('=== dy inject ready ===');
 })();
