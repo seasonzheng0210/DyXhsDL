@@ -455,6 +455,7 @@ class MainActivity : ComponentActivity() {
                                     val webViewIntent = Intent(this, WebViewActivity::class.java).apply {
                                         putExtra("url", cleanUrl)
                                         putExtra("source", "xhs")
+                                        putExtra("direct", true)
                                         // Don't pass task_id here - let WebViewActivity create the task when user clicks "爬取"
                                     }
                                     startActivityForResult(webViewIntent, WEBVIEW_REQUEST_CODE)
@@ -626,6 +627,7 @@ class MainActivity : ComponentActivity() {
         viewModel.resetWebCrawlFlag()
         val intent = Intent(this, WebViewActivity::class.java)
         intent.putExtra("url", cleanUrl)
+        intent.putExtra("direct", true)
         if (taskId != null && taskId > 0) {
             intent.putExtra("task_id", taskId)
         }
@@ -642,6 +644,7 @@ class MainActivity : ComponentActivity() {
         val intent = Intent(this, WebViewActivity::class.java)
         intent.putExtra("url", cleanUrl)
         intent.putExtra("source", "douyin")
+        intent.putExtra("direct", true)
         startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
     }
 
@@ -656,6 +659,7 @@ class MainActivity : ComponentActivity() {
         val intent = Intent(this, WebViewActivity::class.java)
         intent.putExtra("url", cleanUrl)
         intent.putExtra("source", "kuaishou")
+        intent.putExtra("direct", true)
         startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
     }
 

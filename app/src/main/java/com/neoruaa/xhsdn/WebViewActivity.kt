@@ -10,6 +10,7 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -44,6 +45,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -77,6 +79,12 @@ import com.kyant.capsule.ContinuousRoundedRectangle
 class WebViewActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
+        val direct = intent?.getBooleanExtra("direct", false) ?: false
+        if (direct) {
+            // 直达下载模式：透明主题，不向用户展示抖音/快手/小红书网页本身，
+            // 仅显示一个「解析中」浮层；WebView 在后台（INVISIBLE）跑 a_bogus 签名与抓 token，成功后直接下载。
+            setTheme(R.style.Theme_WebViewDirect)
+        }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(lightScrim = android.graphics.Color.TRANSPARENT, darkScrim = android.graphics.Color.TRANSPARENT),
@@ -91,6 +99,10 @@ class WebViewActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
+        if (direct) {
+            // 透明窗口：让后面的 MainActivity 透出来，用户看不到抖音/快手/小红书网页
+            window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        }
         val isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightNavigationBars = !isNightMode
 
@@ -104,10 +116,14 @@ class WebViewActivity : ComponentActivity() {
             val localSource = source
             val taskCreatedId = remember { mutableStateOf<Long?>(null) }
             val activity = this@WebViewActivity
+            // 直达下载模式下，提取失败才降级为可见页（让用户登录/手动重试），否则全程不展示平台网页
+            val fallback = remember { mutableStateOf(false) }
             MiuixTheme(controller = controller) {
                 WebViewScreen(
                     initialUrl = localInitialUrl,
                     source = localSource,
+                    direct = direct,
+                    fallback = fallback,
                     onBack = { flushWebViewCookies(); finish() },
                     onResult = { urls, content, taskId, forceDirect ->
                         val resultIntent = Intent().apply {
@@ -139,6 +155,8 @@ class WebViewActivity : ComponentActivity() {
 private fun WebViewScreen(
     initialUrl: String?,
     source: String,
+    direct: Boolean = false,
+    fallback: MutableState<Boolean> = remember { mutableStateOf(false) },
     onBack: () -> Unit,
     onResult: (List<String>, String, Long?, Boolean) -> Unit
 ) {
@@ -212,6 +230,13 @@ private fun WebViewScreen(
         }
     }
 
+    // 直达下载模式且尚未降级：WebView 不绘制给用户看（INVISIBLE 仍参与布局、JS 正常执行，
+    // 因此 a_bogus 读取的 window/document 尺寸依旧有效），仅由透明浮层提示「解析中」。
+    val invisible = direct && !fallback.value
+    LaunchedEffect(direct, fallback.value) {
+        webView.visibility = if (direct && !fallback.value) View.INVISIBLE else View.VISIBLE
+    }
+
     // 平台品牌色（快手橙 / 抖音青 / 小红书红）与标识，用于来源区分
     val sourceColor = when (source) {
         "kuaishou" -> Color(0xFFFE5000)
@@ -249,8 +274,9 @@ private fun WebViewScreen(
     }
 
     Scaffold(
-        contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.displayCutout),
-        topBar = {
+        contentWindowInsets = if (invisible) WindowInsets(0, 0, 0, 0) else WindowInsets.statusBars.union(WindowInsets.displayCutout),
+        topBar = if (invisible) ({
+        }) else ({
             TopAppBar(
                 title = stringResource(R.string.webview_title),
                 navigationIcon = {
@@ -264,8 +290,49 @@ private fun WebViewScreen(
                 },
                 scrollBehavior = scrollBehavior
             )
-        }
+        })
     ) { padding ->
+        if (invisible) {
+            // 直达下载浮层：透明背景，仅展示「解析中」；WebView 在后台（INVISIBLE）跑 a_bogus 签名，
+            // 成功后由 onResult 直接下载，用户全程不看到抖音/快手/小红书网页。
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                androidx.compose.ui.viewinterop.AndroidView(
+                    factory = { webView.apply { layoutParams = android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT) } },
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier.align(Alignment.Center)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .background(MiuixTheme.colorScheme.surface, ContinuousRoundedRectangle(16.dp))
+                            .padding(horizontal = 22.dp, vertical = 18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "正在解析视频，请稍候…",
+                            fontSize = 14.sp,
+                            color = MiuixTheme.colorScheme.onSurface
+                        )
+                        if (loading) {
+                            LinearProgressIndicator(progress = progress / 100f, color = MiuixTheme.colorScheme.primary)
+                        } else {
+                            LinearProgressIndicator(color = MiuixTheme.colorScheme.primary)
+                        }
+                        Text(
+                            text = if (loading) "页面加载中" else "正在提取视频地址…",
+                            fontSize = 12.sp,
+                            color = MiuixTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        } else {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -318,7 +385,7 @@ private fun WebViewScreen(
                     Button(
                         onClick = {
                             if (!finished.value) {
-                                extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0, statusMsg, extractionFailed, retryUrl)
+                                extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0, statusMsg, extractionFailed, retryUrl, direct, fallback)
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -427,6 +494,7 @@ private fun WebViewScreen(
                 }
             }
         }
+        }
     }
 
     DisposableEffect(Unit) {
@@ -456,11 +524,14 @@ private fun WebViewScreen(
                 // 抖音/快手：SPA 异步水合，视频数据由页面 JS 通过 XHR/fetch 拉取
                 //（_ROUTER_DATA 现在只是 SSR 壳，videoInfoRes 不再内联）。单次延时不够，
                 // 改为轮询：每 ~800ms 提取一次，直到拿到地址或超时，期间钩子/嗅探/视频元素扫描持续补充。
-                if ((source == "douyin" || source == "kuaishou") && !finished.value) {
+                // 抖音/快手：SPA 异步水合，视频数据由页面 JS 在 onPageFinished 后才 XHR/fetch 拉取。
+                // 直达下载模式（direct）下，小红书也走自动提取，无需用户点「爬取」。
+                val autoExtract = direct || source == "douyin" || source == "kuaishou"
+                if (autoExtract && !finished.value) {
                     statusMsg.value = "页面已加载，正在提取视频地址…"
                     view?.postDelayed({
                         if (!finished.value) {
-                            extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0, statusMsg, extractionFailed, retryUrl)
+                            extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0, statusMsg, extractionFailed, retryUrl, direct, fallback)
                         }
                     }, 1500)
                 }
@@ -602,7 +673,9 @@ private fun extractImages(
     attempt: Int,
     statusMsg: MutableState<String>,
     extractionFailed: MutableState<Boolean>,
-    retryUrl: MutableState<String?>
+    retryUrl: MutableState<String?>,
+    direct: Boolean = false,
+    fallback: MutableState<Boolean> = mutableStateOf(false)
 ) {
     if (finished.value) return
     webView.postDelayed({
@@ -618,7 +691,7 @@ private fun extractImages(
         webView.evaluateJavascript(jsCode) { result ->
             try {
                 if (result == null || result == "null" || result.isEmpty()) {
-                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg, extractionFailed, retryUrl)
+                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg, extractionFailed, retryUrl, direct, fallback)
                     return@evaluateJavascript
                 }
                 var cleanResult = result
@@ -664,7 +737,7 @@ private fun extractImages(
                     statusMsg.value = ""
                     onResult(allUrls, contentText, taskId, false)
                 } else {
-                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg, extractionFailed, retryUrl)
+                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg, extractionFailed, retryUrl, direct, fallback)
                 }
             } catch (e: Exception) {
                 scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg, extractionFailed, retryUrl)
@@ -684,7 +757,9 @@ private fun scheduleNextOrFallback(
     attempt: Int,
     statusMsg: MutableState<String>,
     extractionFailed: MutableState<Boolean>,
-    retryUrl: MutableState<String?>
+    retryUrl: MutableState<String?>,
+    direct: Boolean = false,
+    fallback: MutableState<Boolean> = mutableStateOf(false)
 ) {
     // 轮询 ~2 分钟（150 × 800ms ≈ 120s）：GitHub 双引擎方案的浏览器引擎实践——
     // 抖音/快手桌面页在 Android WebView 上 SPA 水合很慢（模拟器实测抖音 ~85s 才出数据），
@@ -697,12 +772,17 @@ private fun scheduleNextOrFallback(
         statusMsg.value = "正在提取视频地址…（第 ${attempt + 1} 次轮询）"
         webView.postDelayed({
             if (!finished.value) {
-                extractImages(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt + 1, statusMsg, extractionFailed, retryUrl)
+                extractImages(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt + 1, statusMsg, extractionFailed, retryUrl, direct, fallback)
             }
         }, 800)
     } else {
-        // 兜底：WebView 始终抓不到 → 先把页面诊断写入失败日志（含版本号，便于判断是否新包），
-        // 不再静默回退到已失效的 HTTP 直解，而是明确告知用户，便于反馈真机环境到底卡在哪。
+        // 兜底：WebView 始终抓不到 → 先把页面诊断写入失败日志（含版本号，便于判断是否新包）。
+        // 直达下载模式下，自动降级为「可见页」，把平台网页与登录/重试入口展示给用户（不再静默失败）；
+        // 非直达模式则维持原行为（展示登录引导卡）。
+        if (direct && !fallback.value) {
+            fallback.value = true
+            Toast.makeText(context, "自动解析未完成，已为你打开页面手动提取/登录", Toast.LENGTH_LONG).show()
+        }
         if (source == "douyin" || source == "kuaishou") {
             val diagUrl = webView.url ?: ""
             val label = if (source == "douyin") "抖音" else if (source == "kuaishou") "快手" else "该平台"
