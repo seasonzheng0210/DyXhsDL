@@ -761,8 +761,8 @@ class MainActivity : ComponentActivity() {
             if (source == "douyin") {
                 val webViewUrl = data.getStringExtra("url") ?: ""
                 if (forceDirect) {
-                    // 用户主动点「直链解析」：走 HTTP（可能失败，用户已知晓）
-                    com.neoruaa.xhsdn.DownloadService.startDownload(this, webViewUrl, "douyin")
+                    // 抖音 HTTP 直解已被风控打死，走此路必败；引导用户登录后重试提取
+                    showToast("抖音 HTTP 直解已失效（平台风控），请点「去登录抖音」登录后点「重试提取」")
                 } else if (urls.isNotEmpty()) {
                     // WebView 提取成功：直链走中立下载，不进 HTTP 解析器
                     com.neoruaa.xhsdn.DownloadService.startDownload(
@@ -779,9 +779,8 @@ class MainActivity : ComponentActivity() {
             if (source == "kuaishou") {
                 val webViewUrl = data.getStringExtra("url") ?: ""
                 if (forceDirect) {
-                    // 用户主动点「直链解析」：走 HTTP（可能失败，用户已知晓）
-                    com.neoruaa.xhsdn.DownloadService.startDownload(this, webViewUrl, "kuaishou")
-                    showToast("已切换快手直链解析")
+                    // 快手 HTTP 直解已被风控打死，引导用户登录后重试提取
+                    showToast("快手 HTTP 直解已失效（平台风控），请点「去登录快手」登录后点「重试提取」")
                     return
                 }
                 if (urls.isEmpty()) {

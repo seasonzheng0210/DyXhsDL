@@ -117,6 +117,9 @@ class DownloadService : Service() {
         if (u.contains(".mp4") || u.contains(".mov") || u.contains(".m4v") || u.contains(".webm")) return true
         if (u.contains("aweme.snssdk.com/aweme/v1/play/")) return true
         if (u.contains("douyinvod.com")) return true
+        // 抖音/快手系常见视频 CDN：WebView 提取出的播放直链都应直接下载，而非二次喂给已失效的 HTTP 解析器
+        if (u.contains("douyin") && (u.contains("bytecdn") || u.contains("ib.douyin.com") || u.contains("tiktokcdn") || u.contains("douyinvod"))) return true
+        if (u.contains("kuaishou") && (u.contains("kwaicdn") || u.contains("chenzhongtech") || u.contains("gifshow") || u.contains("kwai"))) return true
         return false
     }
 
@@ -151,12 +154,18 @@ class DownloadService : Service() {
 
                 updateNotification(getString(R.string.downloading_files), "视频直链下载中…", true)
 
-                // 视频直链：只带移动 UA 不送 Referer（快手/抖音系直链均无需特殊 Referer）
-                val (referer, ua) = null to DIRECT_UA
+                // 视频直链：按 host 选择 Referer/UA。抖音/快手 CDN 需要带对应站点 Referer，
+                // 否则常返回 403；抖音还要 Chrome 移动 UA（与 DouyinDL 一致）。
+                val lowUrl = targetUrl.lowercase()
+                val (referer, ua) = when {
+                    lowUrl.contains("douyin") -> DouyinParser.REFERER to DouyinParser.MOBILE_UA
+                    lowUrl.contains("kuaishou") -> "https://www.kuaishou.com/" to KuaishouParser.MOBILE_UA
+                    else -> null to DIRECT_UA
+                }
 
                 // 解析最终直链（跟随 snssdk/douyinvod 等的 302），避免 OkHttp 透明跨 host 重定向
                 // 在部分安卓网络栈下失效。解析失败则回退原 URL。
-                val resolved = resolveFinalUrl(targetUrl, ua) ?: targetUrl
+                val resolved = resolveFinalUrl(targetUrl, ua, referer) ?: targetUrl
 
                 // 包装回调：同时驱动 TaskManager 进度，并记录真实失败原因用于诊断
                 val baseCb = createCallback(myTaskId)
@@ -206,10 +215,11 @@ class DownloadService : Service() {
     }
 
     /** 跟随重定向拿到最终直链（不读取响应体，仅取最终 URL）。失败返回 null。 */
-    private fun resolveFinalUrl(url: String, ua: String): String? {
+    private fun resolveFinalUrl(url: String, ua: String, referer: String? = null): String? {
         return try {
-            val req = okhttp3.Request.Builder().url(url).header("User-Agent", ua).build()
-            FileDownloader.getSharedHttpClient().newCall(req).execute().use { resp ->
+            val builder = okhttp3.Request.Builder().url(url).header("User-Agent", ua)
+            if (!referer.isNullOrBlank()) builder.header("Referer", referer)
+            FileDownloader.getSharedHttpClient().newCall(builder.build()).execute().use { resp ->
                 resp.request.url.toString()
             }
         } catch (e: Exception) {
@@ -234,6 +244,13 @@ class DownloadService : Service() {
             }
             updateNotification(getString(R.string.download_failed_notification_title),
                 getString(R.string.no_valid_link_found), false)
+            return
+        }
+
+        // WebView 提取出的 CDN 直链（aweme.snssdk.com/douyinvod/bytecdn 等）：直接下载，
+        // 绝不再喂给已被风控打死的 HTTP 直解解析器（否则秒挂 End of input）
+        if (isDirectVideoUrl(targetUrl)) {
+            downloadDirectVideo(targetUrl, taskIdExtra)
             return
         }
 
@@ -352,6 +369,13 @@ class DownloadService : Service() {
             }
             updateNotification(getString(R.string.download_failed_notification_title),
                 getString(R.string.no_valid_link_found), false)
+            return
+        }
+
+        // WebView 提取出的 CDN 直链（kwaicdn/chenzhongtech/gifshow 等）：直接下载，
+        // 不再走已被风控打死的 HTTP 直解解析器
+        if (isDirectVideoUrl(targetUrl)) {
+            downloadDirectVideo(targetUrl, taskIdExtra)
             return
         }
 
