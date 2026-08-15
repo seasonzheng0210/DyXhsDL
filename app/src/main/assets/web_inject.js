@@ -71,10 +71,34 @@
     // 拦截其 URL 后同源重拉，几秒内即可拿到 play_addr，无需等待 SPA 渲染完成。
     var API_RE = /(\/aweme\/v1\/|\/web\/api\/|iteminfo|visionVideoDetail|\/graphql|aweme\/detail|\/video\/play\/|aweme\/post|aweme\/list)/;
     var probed = {};
+
+    // 从抖音请求 URL 中收割会话 token（msToken/webid/ttwid/uifid），供 directApiAttempt 补全签名。
+    // 这些 token 由抖音页面 JS 在 WebView 运行时生成（游客态即可，无需登录账号），但必须随请求
+    // 一同上送、并参与 a_bogus 签名，否则抖音服务端校验失败返回空。
+    var TOKEN_RE = /[?&](msToken|webid|ttwid|uifid)=([^&]+)/g;
+    function harvestTokens(url) {
+        try {
+            if (!url || typeof url !== 'string') return;
+            if (url.indexOf('douyin.com') < 0) return;
+            var seen = window.__dyTokens || {};
+            var m;
+            TOKEN_RE.lastIndex = 0;
+            while ((m = TOKEN_RE.exec(url))) {
+                seen[m[1]] = decodeURIComponent(m[2]);
+            }
+            window.__dyTokens = seen;
+        } catch (e) {}
+    }
+
     function probeApi(url) {
         try {
             if (!url || typeof url !== 'string') return;
             if (!API_RE.test(url)) return;
+            harvestTokens(url);
+            // 记下抖音自己签过名的 detail 请求，directApiAttempt 优先原样重放（同环境 a_bogus，最稳）
+            if (url.indexOf('aweme/detail') >= 0 || url.indexOf('aweme/v1/web') >= 0) {
+                window.__dyDetailUrl = url;
+            }
             if (probed[url]) return;
             probed[url] = 1;
             fetch(url).then(function (r) {
@@ -155,17 +179,32 @@
             var m = (location.pathname || '').match(/\/video\/(\d+)/);
             if (!m) return;
             var id = m[1];
+            // 优先用拦截到的「抖音自己签过名」的 detail 请求直接重放（a_bogus 由抖音在同环境算，最稳）
+            if (window.__dyDetailUrl) {
+                fetch(window.__dyDetailUrl, { headers: { 'Referer': 'https://www.douyin.com/' } })
+                    .then(function (r) { return r.text(); })
+                    .then(function (t) { if (t && t.length >= 50) handleText(t); })
+                    .catch(function () {});
+                return;
+            }
+            // 兜底：自行签名。补全从拦截请求收割到的真实会话 token（否则服务端校验失败返回空）。
+            var tok = window.__dyTokens || {};
             var base = 'https://www.douyin.com/aweme/v1/web/aweme/detail/?aweme_id=' + id +
                 '&aid=6383&channel=channel_pc_web&device_platform=webapp' +
                 '&browser_language=zh-CN&browser_platform=Win32&browser_name=Chrome&browser_version=124.0.0.0' +
                 '&engine_name=Blink&engine_version=124.0.0.0&os_name=Windows&os_version=10' +
                 '&screen_width=1280&screen_height=800';
+            if (tok.msToken) base += '&msToken=' + encodeURIComponent(tok.msToken);
+            if (tok.webid) base += '&webid=' + encodeURIComponent(tok.webid);
+            if (tok.ttwid) base += '&webid=' + encodeURIComponent(tok.ttwid);
+            if (tok.uifid) base += '&uifid=' + encodeURIComponent(tok.uifid);
             var ab = window.__getABogus(base, 'get');
             if (!ab) return;
             var url = base + '&a_bogus=' + encodeURIComponent(ab);
-            fetch(url).then(function (r) { return r.text(); }).then(function (t) {
-                if (t && t.length >= 50) handleText(t);
-            }).catch(function () {});
+            fetch(url, { headers: { 'Referer': 'https://www.douyin.com/' } })
+                .then(function (r) { return r.text(); })
+                .then(function (t) { if (t && t.length >= 50) handleText(t); })
+                .catch(function () {});
         } catch (e) {}
     }
     // 页面加载几秒后仍未捕获到播放地址时，尝试直连 API
