@@ -108,7 +108,7 @@ class WebViewActivity : ComponentActivity() {
                 WebViewScreen(
                     initialUrl = localInitialUrl,
                     source = localSource,
-                    onBack = { finish() },
+                    onBack = { flushWebViewCookies(); finish() },
                     onResult = { urls, content, taskId, forceDirect ->
                         val resultIntent = Intent().apply {
                             putStringArrayListExtra("image_urls", ArrayList(urls))
@@ -157,6 +157,10 @@ private fun WebViewScreen(
     val capturedUrls = remember { mutableSetOf<String>() }
     // Guard to ensure we only finish once
     val finished = remember { mutableStateOf(false) }
+    // 抖音/快手：提取失败时置位，用于展示「去登录 / 重试提取」引导（不再静默结束 Activity）
+    val extractionFailed = remember { mutableStateOf(false) }
+    // 失败时的页面 URL，重试时重新加载该视频页（复用已登录 Cookie）
+    val retryUrl = remember { mutableStateOf<String?>(null) }
 
     val webView = remember {
         WebView(context).apply {
@@ -196,6 +200,15 @@ private fun WebViewScreen(
                     if (url.isNotBlank()) capturedUrls.add(url)
                 }
             }, "AndroidVideoBridge")
+
+            // 允许并持久化 Cookie（登录态）：抖音/快手在 WebView 内登录后，后续 XHR 会自动携带
+            // 会话 Cookie，从而解除「未登录」门控拿到真实播放地址。Cookie 默认持久化到应用私有
+            // 目录（app_webview/Cookies），跨启动保留，无需每次都登录。
+            val cookieManager = CookieManager.getInstance()
+            cookieManager.setAcceptCookie(true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                cookieManager.setAcceptThirdPartyCookies(this, true)
+            }
         }
     }
 
@@ -209,6 +222,26 @@ private fun WebViewScreen(
         "kuaishou" -> "快手"
         "douyin" -> "抖音"
         else -> "小红书"
+    }
+
+    // 抖音/快手：在 App 内 WebView 打开平台登录页（登录态由 CookieManager 自动持久化）
+    val goLogin = {
+        flushWebViewCookies()
+        val loginUrl = if (source == "douyin") "https://www.douyin.com/" else "https://www.kuaishou.com/"
+        statusMsg.value = "请在打开的${sourceLabel}页面完成登录，登录态会自动保存"
+        webView.loadUrl(loginUrl)
+    }
+    // 提取失败后重试：清空状态并重新加载视频页，复用已登录 Cookie 重新提取
+    val retryExtract = {
+        if (extractionFailed.value) {
+            extractionFailed.value = false
+            finished.value = false
+            capturedUrls.clear()
+            sniffedVideoUrls.clear()
+            statusMsg.value = "已重新加载，正在提取视频地址…"
+            val target = retryUrl.value ?: urlText.text
+            if (target.isNotBlank()) loadUrl(webView, target) else webView.reload()
+        }
     }
 
     DisposableEffect(webView) {
@@ -285,7 +318,7 @@ private fun WebViewScreen(
                     Button(
                         onClick = {
                             if (!finished.value) {
-                                extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0, statusMsg)
+                                extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0, statusMsg, extractionFailed, retryUrl)
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -313,6 +346,44 @@ private fun WebViewScreen(
                             text = "直链解析",
                             color = Color.White
                         )
+                        }
+                    }
+                }
+
+                // 抖音/快手：登录引导（非阻塞，提取期间也可提前登录；失败后出现「重试提取」）
+                if (source == "douyin" || source == "kuaishou") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = { goLogin() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(text = "去登录${sourceLabel}", color = Color.White)
+                        }
+                        if (extractionFailed.value) {
+                            Button(
+                                onClick = { retryExtract() },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColorsPrimary()
+                            ) {
+                                Text(text = "重试提取", color = Color.White)
+                            }
+                        }
+                    }
+                    if (extractionFailed.value) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(sourceColor.copy(alpha = 0.1f), ContinuousRoundedRectangle(12.dp))
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Text(
+                                text = "提取失败：${sourceLabel}可能需要登录后才能获取播放地址。请点「去登录${sourceLabel}」在本窗口完成登录（登录态已自动保存），再点「重试提取」重新获取。",
+                                fontSize = 12.sp,
+                                color = MiuixTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 }
@@ -365,6 +436,8 @@ private fun WebViewScreen(
                 url?.let { urlText = TextFieldValue(it) }
                 // Clear sniffed URLs on new page load
                 sniffedVideoUrls.clear()
+                // 新页面加载即视为一次新尝试，先收起「提取失败」引导卡（失败会再次置位）
+                extractionFailed.value = false
                 // 注入 XHR/fetch 钩子（幂等），捕获 SPA 异步拉取的播放地址
                 injectHook(webView, context)
                 // 抖音：加载 a_bogus 签名算法，供直连 API 兜底（GitHub 双引擎的 API 引擎）
@@ -387,7 +460,7 @@ private fun WebViewScreen(
                     statusMsg.value = "页面已加载，正在提取视频地址…"
                     view?.postDelayed({
                         if (!finished.value) {
-                            extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0, statusMsg)
+                            extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0, statusMsg, extractionFailed, retryUrl)
                         }
                     }, 1500)
                 }
@@ -463,6 +536,13 @@ private fun WebViewScreen(
     }
 }
 
+private fun flushWebViewCookies() {
+    // 立即将 WebView 内存中的 Cookie 落盘（登录态持久化，跨启动保留）
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        CookieManager.getInstance().flush()
+    }
+}
+
 private fun loadUrl(webView: WebView, raw: String) {
     var url = raw.trim()
     if (url.isEmpty()) return
@@ -520,7 +600,9 @@ private fun extractImages(
     finished: MutableState<Boolean>,
     onResult: (List<String>, String, Long?, Boolean) -> Unit,
     attempt: Int,
-    statusMsg: MutableState<String>
+    statusMsg: MutableState<String>,
+    extractionFailed: MutableState<Boolean>,
+    retryUrl: MutableState<String?>
 ) {
     if (finished.value) return
     webView.postDelayed({
@@ -536,7 +618,7 @@ private fun extractImages(
         webView.evaluateJavascript(jsCode) { result ->
             try {
                 if (result == null || result == "null" || result.isEmpty()) {
-                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg)
+                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg, extractionFailed, retryUrl)
                     return@evaluateJavascript
                 }
                 var cleanResult = result
@@ -582,10 +664,10 @@ private fun extractImages(
                     statusMsg.value = ""
                     onResult(allUrls, contentText, taskId, false)
                 } else {
-                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg)
+                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg, extractionFailed, retryUrl)
                 }
             } catch (e: Exception) {
-                scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg)
+                scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg, extractionFailed, retryUrl)
             }
         }
     }, if (attempt == 0) 10 else 0)
@@ -600,7 +682,9 @@ private fun scheduleNextOrFallback(
     finished: MutableState<Boolean>,
     onResult: (List<String>, String, Long?, Boolean) -> Unit,
     attempt: Int,
-    statusMsg: MutableState<String>
+    statusMsg: MutableState<String>,
+    extractionFailed: MutableState<Boolean>,
+    retryUrl: MutableState<String?>
 ) {
     // 轮询 ~2 分钟（150 × 800ms ≈ 120s）：GitHub 双引擎方案的浏览器引擎实践——
     // 抖音/快手桌面页在 Android WebView 上 SPA 水合很慢（模拟器实测抖音 ~85s 才出数据），
@@ -613,7 +697,7 @@ private fun scheduleNextOrFallback(
         statusMsg.value = "正在提取视频地址…（第 ${attempt + 1} 次轮询）"
         webView.postDelayed({
             if (!finished.value) {
-                extractImages(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt + 1, statusMsg)
+                extractImages(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt + 1, statusMsg, extractionFailed, retryUrl)
             }
         }, 800)
     } else {
@@ -621,19 +705,18 @@ private fun scheduleNextOrFallback(
         // 不再静默回退到已失效的 HTTP 直解，而是明确告知用户，便于反馈真机环境到底卡在哪。
         if (source == "douyin" || source == "kuaishou") {
             val diagUrl = webView.url ?: ""
-            statusMsg.value = "提取超时：钩子捕获 ${capturedUrls.size} 条，嗅探 ${sniffedUrls.size} 条"
-            Toast.makeText(context, "提取超时（钩子${capturedUrls.size}/嗅探${sniffedUrls.size}），可重试或点「直链解析」", Toast.LENGTH_LONG).show()
+            val label = if (source == "douyin") "抖音" else if (source == "kuaishou") "快手" else "该平台"
+            retryUrl.value = diagUrl
+            extractionFailed.value = true
+            statusMsg.value = "提取超时（钩子${capturedUrls.size}/嗅探${sniffedUrls.size}）。${label}可能要求登录，可在本窗口登录后点「重试提取」。"
+            Toast.makeText(context, "提取超时，可登录${label}后重试", Toast.LENGTH_LONG).show()
             webView.evaluateJavascript(
                 "(function(){try{var vs=document.querySelectorAll('video').length;var im=document.querySelectorAll('img').length;var t=(document.title||'').slice(0,80);var b=(document.body?(document.body.innerText||''):'').slice(0,120).replace(/\\n/g,' ');return JSON.stringify({videos:vs,imgs:im,title:t,body:b});}catch(e){return JSON.stringify({err:String(e)});}})()"
             ) { diag ->
                 com.neoruaa.xhsdn.utils.DownloadLogger.logFailure(
                     context, source, diagUrl,
-                    "WebView 提取超时 diag=$diag captured=${capturedUrls.size} sniffed=${sniffedUrls.size}"
+                    "WebView 提取超时 diag=$diag captured=${capturedUrls.size} sniffed=${sniffedUrls.size}（建议登录后重试）"
                 )
-                if (!finished.value) {
-                    finished.value = true
-                    onResult(emptyList(), "", null, false)
-                }
             }
         } else {
             Toast.makeText(context, context.getString(R.string.no_accessible_urls_found), Toast.LENGTH_SHORT).show()
