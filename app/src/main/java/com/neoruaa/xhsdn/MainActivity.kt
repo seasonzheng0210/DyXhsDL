@@ -72,6 +72,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.neoruaa.xhsdn.douyin.DouyinParser
+import com.neoruaa.xhsdn.kuaishou.KuaishouParser
 import kotlinx.coroutines.Dispatchers
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
@@ -634,6 +636,11 @@ class MainActivity : ComponentActivity() {
         startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
     }
 
+    /**
+     * 抖音下载入口：优先 HTTP 直解（移动端 aweme/v1/feed 接口，不触发 Argus、无水印），
+     * 成功则直接交给下载服务下载——「不跳提取页、直接下」。仅当直解失败时回退到
+     * WebView 真浏览器解析（旧行为）。
+     */
     private fun launchDouyinWebView(input: String) {
         val cleanUrl = UrlUtils.extractFirstUrl(input)
         if (cleanUrl == null) {
@@ -641,6 +648,19 @@ class MainActivity : ComponentActivity() {
             return
         }
         viewModel.resetWebCrawlFlag()
+        lifecycleScope.launch {
+            val parsed = withContext(Dispatchers.IO) { runCatching { DouyinParser.parse(cleanUrl) } }
+            if (parsed.isSuccess && parsed.getOrNull() != null) {
+                // 直解成功：直接下载，不跳 WebView 页
+                DownloadService.startDownload(this@MainActivity, cleanUrl, "douyin")
+            } else {
+                Log.w("MainActivity", "douyin 直解失败，回退 WebView: ${parsed.exceptionOrNull()?.message}")
+                startDouyinWebViewFallback(cleanUrl)
+            }
+        }
+    }
+
+    private fun startDouyinWebViewFallback(cleanUrl: String) {
         val intent = Intent(this, WebViewActivity::class.java)
         intent.putExtra("url", cleanUrl)
         intent.putExtra("source", "douyin")
@@ -648,6 +668,9 @@ class MainActivity : ComponentActivity() {
         startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
     }
 
+    /**
+     * 快手下载入口：同上，优先 HTTP 直解（匿名 GraphQL），失败回退 WebView。
+     */
     private fun launchKuaishouWebView(input: String) {
         val cleanUrl = UrlUtils.extractFirstUrl(input)
         if (cleanUrl == null) {
@@ -655,6 +678,18 @@ class MainActivity : ComponentActivity() {
             return
         }
         viewModel.resetWebCrawlFlag()
+        lifecycleScope.launch {
+            val parsed = withContext(Dispatchers.IO) { runCatching { KuaishouParser.parse(cleanUrl) } }
+            if (parsed.isSuccess && parsed.getOrNull() != null) {
+                DownloadService.startDownload(this@MainActivity, cleanUrl, "kuaishou")
+            } else {
+                Log.w("MainActivity", "kuaishou 直解失败，回退 WebView: ${parsed.exceptionOrNull()?.message}")
+                startKuaishouWebViewFallback(cleanUrl)
+            }
+        }
+    }
+
+    private fun startKuaishouWebViewFallback(cleanUrl: String) {
         // 快手匿名即可访问，无需登录态 cookie；短链跳转由 WebView 自行处理
         val intent = Intent(this, WebViewActivity::class.java)
         intent.putExtra("url", cleanUrl)

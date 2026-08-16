@@ -295,7 +295,8 @@ class DownloadService : Service() {
                 } else {
                     val fileName = "${info.title}.mp4"
                     runCatching {
-                        downloader.downloadFile(info.videoUrl, fileName, "", info.userAgent)
+                        // 抖音 play_addr 直链（365yg / api-play 等 CDN）需带抖音 Referer，否则常 403
+                        downloader.downloadFile(info.videoUrl, fileName, DouyinParser.REFERER, info.userAgent)
                     }.getOrElse { e ->
                         DownloadLogger.logFailure(this@DownloadService, "douyin", info.videoUrl ?: targetUrl, "下载异常: ${e.message}")
                         false

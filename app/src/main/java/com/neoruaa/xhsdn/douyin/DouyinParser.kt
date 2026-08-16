@@ -93,9 +93,13 @@ object DouyinParser {
         val id = extractId(finalUrl)
         Log.d(TAG, "finalUrl=$finalUrl id=$id ua=$ua")
 
-        // 优先用官方 iteminfo 接口（返回干净结构化 JSON，图集字段为 images[]）；
-        // 失败再回退到分享页 _ROUTER_DATA（share/video、share/note 都试）。
+        // 候选顺序（从最稳到兜底）：
+        //  1) 移动端 aweme/v1/feed 接口（aweme.snssdk.com）——不触发 Argus 风控、无需 a_bogus，
+        //     直接返回 play_addr（无水印）结构化 JSON，成功率最高；
+        //  2) 官方 iteminfo 接口（返回干净结构化 JSON，图集字段为 images[]）；
+        //  3/4) 分享页 _ROUTER_DATA（share/video、share/note）。
         val candidates = listOf(
+            "https://aweme.snssdk.com/aweme/v1/feed/?type=7&aweme_id=$id&iid=0&device_id=0&version_code=27.0.0&version_name=27.0.0",
             "https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids=$id",
             "https://www.iesdouyin.com/share/video/$id",
             "https://www.iesdouyin.com/share/note/$id"
@@ -103,8 +107,11 @@ object DouyinParser {
         var lastErr: String? = null
         for (c in candidates) {
             try {
-                val info = if (c.contains("iteminfo")) parseFromItemInfo(c, ua, id)
-                           else parseFromShare(c, ua, id)
+                val info = when {
+                    c.contains("aweme/v1/feed") -> parseFromMobileFeed(c, ua, id)
+                    c.contains("iteminfo") -> parseFromItemInfo(c, ua, id)
+                    else -> parseFromShare(c, ua, id)
+                }
                 if (info != null) return@withContext info
             } catch (e: Exception) {
                 lastErr = e.message
@@ -168,6 +175,55 @@ object DouyinParser {
             return DouyinMediaInfo(DouyinMediaType.VIDEO, safeTitle, vUrl, emptyList(), coverUrl, id, ua)
         }
 
+        return null
+    }
+
+    /**
+     * 移动端官方 feed 接口（aweme.snssdk.com/aweme/v1/feed/）解析。
+     *  - 该接口不触发 Argus 风控、无需 a_bogus，直接返回干净结构化 JSON；
+     *  - 返回字段结构与 iteminfo 一致（aweme_list[0] 内含 video.play_addr / images / desc）；
+     *  - play_addr 为无水印播放源，download_addr 为带水印下载源，这里优先取 play_addr。
+     *  - 成功返回 [DouyinMediaInfo]；列表为空 / 无媒体返回 null 让调用方试下一个源。
+     */
+    private fun parseFromMobileFeed(apiUrl: String, ua: String, id: String): DouyinMediaInfo? {
+        val request = Request.Builder()
+            .url(apiUrl)
+            .header("User-Agent", ua)
+            .header("Referer", "https://www.iesdouyin.com/")
+            .build()
+
+        val body = client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw Exception("mobile feed 接口失败: HTTP ${response.code}")
+            response.body.string()
+        }
+
+        val json = JSONObject(body)
+        val list = json.optJSONArray("aweme_list")
+            ?: json.optJSONArray("item_list")
+            ?: return null
+        if (list.length() == 0) return null
+
+        val data = list.getJSONObject(0)
+        val safeTitle = safeTitleOf(data.optString("desc", "").trim().ifEmpty { "douyin_$id" }, id)
+
+        // 图集优先
+        val imageUrls = extractDouyinImages(data)
+        if (imageUrls.isNotEmpty()) {
+            val coverUrl = data.optJSONObject("image_post_info")
+                ?.optJSONObject("first_frame_image")
+                ?.optJSONArray("url_list")?.optString(0)
+                ?: data.optJSONObject("video")
+                    ?.optJSONObject("cover")?.optJSONArray("url_list")?.optString(0)
+            return DouyinMediaInfo(DouyinMediaType.IMAGE, safeTitle, null, imageUrls, coverUrl, id, ua)
+        }
+
+        // 视频：优先 play_addr（无水印），回退 bit_rate[0].play_addr
+        val video = data.optJSONObject("video")
+        if (video != null) {
+            val vUrl = extractVideoUrl(video) ?: return null
+            val coverUrl = video.optJSONObject("cover")?.optJSONArray("url_list")?.optString(0)
+            return DouyinMediaInfo(DouyinMediaType.VIDEO, safeTitle, vUrl, emptyList(), coverUrl, id, ua)
+        }
         return null
     }
 
