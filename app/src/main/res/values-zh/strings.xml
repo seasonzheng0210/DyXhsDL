@@ -210,4 +210,14 @@
     <string name="retry_inconsistent_save_button">保存日志</string>
     <string name="retry_inconsistent_save_success">日志已保存到 %1$s</string>
     <string name="retry_inconsistent_save_failed">日志保存失败</string>
+
+    <!-- 主页下载（v1.0.45） -->
+    <string name="main_tab_video">视频下载</string>
+    <string name="homepage_download">主页下载</string>
+    <string name="homepage_desc">粘贴作者主页链接或单个视频链接，自动查找该作者全部视频并批量下载。</string>
+    <string name="homepage_input_hint">抖音主页/视频链接</string>
+    <string name="homepage_paste_clipboard">从剪贴板粘贴</string>
+    <string name="homepage_start_download">开始下载主页</string>
+    <string name="homepage_supported">支持：抖音视频链接（自动反查作者主页）、抖音主页分享文案（「查看TA的更多作品」）、www.douyin.com/user/xxx。复制主页分享文案到剪贴板也可自动触发下载。</string>
+    <string name="homepage_parsing">开始批量解析 %1$d 个主页视频…</string>
 </resources>

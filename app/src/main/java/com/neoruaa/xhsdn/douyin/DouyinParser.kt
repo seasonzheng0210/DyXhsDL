@@ -87,6 +87,41 @@ object DouyinParser {
         return url.contains("douyin.com") || url.contains("iesdouyin.com")
     }
 
+    /**
+     * 从单个视频链接反查作者主页 URL（https://www.douyin.com/user/{sec_uid}）。
+     *  - 解析重定向拿 aweme_id → 调移动端 aweme/v1/feed 接口（不触发 Argus、无需 a_bogus）
+     *    取 author.sec_uid → 拼主页直链；
+     *  - 用于「主页下载」功能：拿到作者主页后由 WebView 爬取全部 /video/{id} 批量下载。
+     *  - 失败（风控/无水印/接口异常）返回 null，调用方兜底直接用原视频链接。
+     */
+    suspend fun resolveAuthorHomepageUrl(videoUrl: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val ua = randomUserAgent()
+            val finalUrl = resolveRedirects(videoUrl, ua)
+            val id = extractId(finalUrl)
+            val feedUrl = "https://aweme.snssdk.com/aweme/v1/feed/?type=7&aweme_id=$id&iid=0&device_id=0&version_code=27.0.0&version_name=27.0.0"
+            val request = Request.Builder()
+                .url(feedUrl)
+                .header("User-Agent", ua)
+                .header("Referer", "https://www.iesdouyin.com/")
+                .build()
+            val body = client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                response.body.string()
+            }
+            val json = JSONObject(body)
+            val list = json.optJSONArray("aweme_list") ?: json.optJSONArray("item_list") ?: return@withContext null
+            if (list.length() == 0) return@withContext null
+            val data = list.getJSONObject(0)
+            val author = data.optJSONObject("author") ?: return@withContext null
+            val secUid = author.optString("sec_uid").takeIf { it.isNotBlank() } ?: return@withContext null
+            return@withContext "https://www.douyin.com/user/$secUid"
+        } catch (e: Exception) {
+            Log.w(TAG, "resolveAuthorHomepageUrl failed: ${e.message}")
+            return@withContext null
+        }
+    }
+
     suspend fun parse(url: String): DouyinMediaInfo = withContext(Dispatchers.IO) {
         val ua = randomUserAgent()
         val finalUrl = resolveRedirects(url, ua)

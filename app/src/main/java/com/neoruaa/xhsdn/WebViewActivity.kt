@@ -109,11 +109,14 @@ class WebViewActivity : ComponentActivity() {
         val initialUrl = intent?.getStringExtra("url")
         val taskId = intent?.getLongExtra("task_id", -1L) ?: -1L
         val source = com.neoruaa.xhsdn.utils.Router.resolveWebViewSource(initialUrl, intent?.getStringExtra("source"))
+        // mode：extract=普通提取（默认）；homepage=主页爬取（自动滚动收集全部 /video/{id}）
+        val mode = intent?.getStringExtra("mode") ?: "extract"
 
         setContent {
             val controller = ThemeController(ColorSchemeMode.System)
             val localInitialUrl = initialUrl // Capture the variable in the composition scope
             val localSource = source
+            val localMode = mode
             val taskCreatedId = remember { mutableStateOf<Long?>(null) }
             val activity = this@WebViewActivity
             // 直达下载模式下，提取失败才降级为可见页（让用户登录/手动重试），否则全程不展示平台网页
@@ -122,6 +125,7 @@ class WebViewActivity : ComponentActivity() {
                 WebViewScreen(
                     initialUrl = localInitialUrl,
                     source = localSource,
+                    mode = localMode,
                     direct = direct,
                     fallback = fallback,
                     onBack = { flushWebViewCookies(); finish() },
@@ -137,7 +141,7 @@ class WebViewActivity : ComponentActivity() {
                             taskId?.let { id ->
                                 putExtra("task_id", id)
                             }
-                            putExtra("source", localSource)
+                            putExtra("source", if (mode == "homepage") "douyin_home" else localSource)
                             putExtra("force_direct", forceDirect)
                         }
                         // Make sure setResult is called before finish
@@ -155,6 +159,7 @@ class WebViewActivity : ComponentActivity() {
 private fun WebViewScreen(
     initialUrl: String?,
     source: String,
+    mode: String = "extract",
     direct: Boolean = false,
     fallback: MutableState<Boolean> = remember { mutableStateOf(false) },
     onBack: () -> Unit,
@@ -173,6 +178,8 @@ private fun WebViewScreen(
     val sniffedVideoUrls = remember { mutableSetOf<String>() }
     // Set to store video URLs captured by the injected XHR/fetch hook (web_inject.js)
     val capturedUrls = remember { mutableSetOf<String>() }
+    // 主页爬取模式：收集到的全部视频页 URL（/video/{id}）
+    val collectedVideoUrls = remember { mutableSetOf<String>() }
     // Guard to ensure we only finish once
     val finished = remember { mutableStateOf(false) }
     // 抖音/快手：提取失败时置位，用于展示「去登录 / 重试提取」引导（不再静默结束 Activity）
@@ -237,15 +244,19 @@ private fun WebViewScreen(
         webView.visibility = if (direct && !fallback.value) View.INVISIBLE else View.VISIBLE
     }
 
+    // 主页爬取模式标识（加载作者主页、自动滚动收集全部 /video/{id}）
+    val isHomepage = mode == "homepage"
+
     // 平台品牌色（快手橙 / 抖音青 / 小红书红）与标识，用于来源区分
     val sourceColor = when (source) {
         "kuaishou" -> Color(0xFFFE5000)
         "douyin" -> Color(0xFF25F4EE)
         else -> Color(0xFFFE2C55)
     }
-    val sourceLabel = when (source) {
-        "kuaishou" -> "快手"
-        "douyin" -> "抖音"
+    val sourceLabel = when {
+        isHomepage -> "抖音主页"
+        source == "kuaishou" -> "快手"
+        source == "douyin" -> "抖音"
         else -> "小红书"
     }
 
@@ -384,7 +395,11 @@ private fun WebViewScreen(
                     }
                     Button(
                         onClick = {
-                            if (!finished.value) {
+                            if (isHomepage) {
+                                if (!finished.value) {
+                                    finishHomepageCrawl(context, webView, collectedVideoUrls, onResult, finished, statusMsg)
+                                }
+                            } else if (!finished.value) {
                                 extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0, statusMsg, extractionFailed, retryUrl, direct, fallback)
                             }
                         },
@@ -393,12 +408,12 @@ private fun WebViewScreen(
                         colors = ButtonDefaults.buttonColorsPrimary()
                     ) {
                         Text(
-                            text = stringResource(R.string.webview_crawl),
+                            text = if (isHomepage) "完成爬取" else stringResource(R.string.webview_crawl),
                             color = Color.White
                         )
                     }
-                    // 抖音/快手：提供"直链解析(备用)"入口，WebView 取不到时强制走后台直链解析
-                    if (source == "douyin" || source == "kuaishou") {
+                    // 抖音/快手：提供"直链解析(备用)"入口，WebView 取不到时强制走后台直链解析（主页爬取模式无此按钮）
+                    if ((source == "douyin" || source == "kuaishou") && !isHomepage) {
                         Button(
                             onClick = {
                                 if (!finished.value) {
@@ -527,7 +542,15 @@ private fun WebViewScreen(
                 // 抖音/快手：SPA 异步水合，视频数据由页面 JS 在 onPageFinished 后才 XHR/fetch 拉取。
                 // 直达下载模式（direct）下，小红书也走自动提取，无需用户点「爬取」。
                 val autoExtract = direct || source == "douyin" || source == "kuaishou"
-                if (autoExtract && !finished.value) {
+                if (isHomepage && !finished.value) {
+                    // 主页爬取模式：页面加载后自动滚动收集全部 /video/{id}
+                    statusMsg.value = "页面已加载，正在爬取主页视频…"
+                    view?.postDelayed({
+                        if (!finished.value) {
+                            crawlHomepage(context, webView, collectedVideoUrls, statusMsg, onResult, 0, finished)
+                        }
+                    }, 1500)
+                } else if (autoExtract && !finished.value) {
                     statusMsg.value = "页面已加载，正在提取视频地址…"
                     view?.postDelayed({
                         if (!finished.value) {
@@ -801,6 +824,86 @@ private fun scheduleNextOrFallback(
         } else {
             Toast.makeText(context, context.getString(R.string.no_accessible_urls_found), Toast.LENGTH_SHORT).show()
         }
+    }
+}
+
+/**
+ * 主页爬取模式：自动滚动作者主页，收集全部视频页链接（/video/{id}）。
+ * 每次轮询：收集 a[href*="/video/"] → 滚动到底触发懒加载 → 直到轮询上限或连续多次无新增（视为到底）。
+ * 收集到的链接写入 collectedUrls，最终由 finishHomepageCrawl 回传（source=douyin_home）。
+ */
+private fun crawlHomepage(
+    context: android.content.Context,
+    webView: WebView,
+    collectedUrls: MutableSet<String>,
+    statusMsg: MutableState<String>,
+    onResult: (List<String>, String, Long?, Boolean) -> Unit,
+    attempt: Int,
+    finished: MutableState<Boolean>
+) {
+    if (finished.value) return
+    webView.postDelayed({
+        val js = """(function(){
+          try {
+            var nodes = document.querySelectorAll('a[href*="/video/"]');
+            var arr = [];
+            for (var i = 0; i < nodes.length; i++) {
+              var h = nodes[i].getAttribute('href') || '';
+              if (h && h.indexOf('/video/') >= 0) {
+                if (h.indexOf('http') !== 0) { h = 'https://www.douyin.com' + h; }
+                arr.push(h);
+              }
+            }
+            // 触发无限滚动加载更多
+            window.scrollTo(0, document.body.scrollHeight);
+            return JSON.stringify(arr);
+          } catch (e) { return JSON.stringify([]); }
+        })();"""
+        webView.evaluateJavascript(js) { result ->
+            try {
+                val raw = result?.trim() ?: "[]"
+                val clean = if (raw.startsWith("\"") && raw.endsWith("\"")) {
+                    raw.substring(1, raw.length - 1).replace("\\\"", "\"").replace("\\\\", "\\")
+                } else raw
+                val jsonArr = org.json.JSONArray(clean)
+                val prevSize = collectedUrls.size
+                for (i in 0 until jsonArr.length()) {
+                    val u = jsonArr.optString(i)
+                    if (u.contains("/video/")) collectedUrls.add(u)
+                }
+                val newCount = collectedUrls.size - prevSize
+                statusMsg.value = "已收集 ${collectedUrls.size} 个视频${if (newCount > 0) "（本次 +$newCount）" else ""}，继续滚动加载…"
+                val MAX_ATTEMPTS = 40
+                if (attempt + 1 < MAX_ATTEMPTS && !(newCount == 0 && attempt > 4)) {
+                    crawlHomepage(context, webView, collectedUrls, statusMsg, onResult, attempt + 1, finished)
+                } else {
+                    finishHomepageCrawl(context, webView, collectedUrls, onResult, finished, statusMsg)
+                }
+            } catch (e: Exception) {
+                finishHomepageCrawl(context, webView, collectedUrls, onResult, finished, statusMsg)
+            }
+        }
+    }, if (attempt == 0) 1500 else 1200)
+}
+
+/**
+ * 结束主页爬取：回传已收集的全部视频页链接（source=douyin_home），或在无结果时提示。
+ */
+private fun finishHomepageCrawl(
+    context: android.content.Context,
+    webView: WebView,
+    collectedUrls: MutableSet<String>,
+    onResult: (List<String>, String, Long?, Boolean) -> Unit,
+    finished: MutableState<Boolean>,
+    statusMsg: MutableState<String>
+) {
+    if (finished.value) return
+    finished.value = true
+    if (collectedUrls.isNotEmpty()) {
+        onResult(collectedUrls.toList(), "", null, false)
+    } else {
+        Toast.makeText(context, "未收集到主页视频，请确认已登录抖音或重试", Toast.LENGTH_LONG).show()
+        statusMsg.value = "未收集到视频，请在登录后重试"
     }
 }
 

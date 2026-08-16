@@ -210,4 +210,14 @@
     <string name="retry_inconsistent_save_button">儲存日誌</string>
     <string name="retry_inconsistent_save_success">日誌已儲存到 %1$s</string>
     <string name="retry_inconsistent_save_failed">日誌儲存失敗</string>
+
+    <!-- 主頁下載（v1.0.45） -->
+    <string name="main_tab_video">影片下載</string>
+    <string name="homepage_download">主頁下載</string>
+    <string name="homepage_desc">貼上作者主頁連結或單部影片連結，自動查找該作者全部影片並批次下載。</string>
+    <string name="homepage_input_hint">抖音主頁/影片連結</string>
+    <string name="homepage_paste_clipboard">從剪貼簿貼上</string>
+    <string name="homepage_start_download">開始下載主頁</string>
+    <string name="homepage_supported">支援：抖音影片連結（自動反查作者主頁）、抖音主頁分享文案（「查看TA的更多作品」）、www.douyin.com/user/xxx。複製主頁分享文案到剪貼簿也可自動觸發下載。</string>
+    <string name="homepage_parsing">開始批次解析 %1$d 個主頁影片…</string>
 </resources>

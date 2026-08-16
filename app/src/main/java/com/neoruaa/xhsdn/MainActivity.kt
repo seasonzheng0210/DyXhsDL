@@ -73,6 +73,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.neoruaa.xhsdn.douyin.DouyinParser
+import com.neoruaa.xhsdn.douyin.DouyinMediaType
 import com.neoruaa.xhsdn.kuaishou.KuaishouParser
 import kotlinx.coroutines.Dispatchers
 import androidx.lifecycle.lifecycleScope
@@ -222,6 +223,8 @@ class MainActivity : ComponentActivity() {
             var detectedPlatform by remember { mutableStateOf<String?>(null) }
             // 任务栏当前平台页签：0=抖音 / 1=小红书 / 2=快手；识别到链接自动跳转
             var taskTab by remember { mutableStateOf(0) }
+            // 底部主标签栏：0=视频下载 / 1=主页下载
+            var mainTab by remember { mutableStateOf(0) }
             // 已处理过的剪贴板链接（去重用），相同链接不再重复读取/下载
             var lastHandledUrl by remember { mutableStateOf<String?>(null) }
             var manualInputLinks by remember { mutableStateOf(prefs.getBoolean("manual_input_links", false)) }
@@ -283,7 +286,17 @@ class MainActivity : ComponentActivity() {
                         
                         if (UrlUtils.detectPlatform(clipText) != null) {
                         // 3. Logic Branching
-                        
+
+                        // 0. 主页链接优先：抖音主页分享文案 / /user/{sec_uid} → 直接下载主页全部视频
+                        if (UrlUtils.isDouyinHomepageLink(clipText)) {
+                            lastHandledUrl = dedupeKey
+                            launchDouyinHomepageDownload(clipText)
+                            // 读取后清空剪贴板，避免同链接被反复读取
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("", ""))
+                            detectedXhsLink = null
+                            return@checkClipboard
+                        }
+
                         if (currentAutoRead && UrlUtils.detectPlatform(clipText) == "douyin") {
                             // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
                             lastHandledUrl = dedupeKey
@@ -402,12 +415,20 @@ class MainActivity : ComponentActivity() {
                     showInputDialog = showInputDialog,
                     onShowInputDialogChange = { showInputDialog = it },
                     scrollBehavior = scrollBehavior,
+                    mainTab = mainTab,
+                    onMainTabSelected = { mainTab = it },
+                    onHomepageDownload = { link -> launchDouyinHomepageDownload(link) },
                     onDownload = {
                         if (!manualInputLinks) {
                             ensureStoragePermission {
                                 // 先读取剪贴板
                                 val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                 val clipText = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+                                // 主页链接：走主页下载，反查作者并批量下载
+                                if (UrlUtils.isDouyinHomepageLink(clipText)) {
+                                    launchDouyinHomepageDownload(clipText)
+                                    return@ensureStoragePermission
+                                }
                                 // 提取有效链接
                                 val platform = UrlUtils.detectPlatform(clipText)
                                 if (platform == "douyin") {
@@ -444,7 +465,7 @@ class MainActivity : ComponentActivity() {
                         ensureStoragePermission { viewModel.copyDescription({ showToast(getString(R.string.copied_description)) }, { showToast(it) }) } 
                     },
                     onOpenSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
-                    onWebCrawlFromClipboard = {
+                    onWebCrawlFromClipboard = homepageGuard@{
                         // 先读取剪贴板
                         val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
                         val clipText = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
@@ -452,6 +473,12 @@ class MainActivity : ComponentActivity() {
                             // Clean the URL using the same method as other places
                             val cleanUrl = UrlUtils.extractFirstUrl(clipText)
                             if (cleanUrl != null) {
+                                // 主页链接：走主页下载，反查作者并批量下载
+                                if (UrlUtils.isDouyinHomepageLink(clipText)) {
+                                    launchDouyinHomepageDownload(clipText)
+                                    detectedXhsLink = null
+                                    return@homepageGuard
+                                }
                                 val platform = UrlUtils.detectPlatform(cleanUrl)
                                 if (platform == "kuaishou") {
                                     // 快手链接走专用 WebView 入口（kuaishou_extractor 兜底）
@@ -503,22 +530,29 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onRetryTask = { task ->
-                        ensureStoragePermission {
-                            when (task.source) {
-                                "douyin" -> {
-                                    // 复用同一任务记录（重置进度），把原失败任务 id 透传下去，重试成功即原地变 COMPLETED
-                                    com.neoruaa.xhsdn.data.TaskManager.resetTask(task.id)
-                                    launchDouyinWebView(task.noteUrl, task.id)
-                                }
-                                "kuaishou" -> {
-                                    com.neoruaa.xhsdn.data.TaskManager.resetTask(task.id)
-                                    launchKuaishouWebView(task.noteUrl, task.id)
-                                }
-                                else -> {
-                                    // 复用同一任务（重置进度），重新派发到前台服务下载
-                                    com.neoruaa.xhsdn.data.TaskManager.resetTask(task.id)
-                                    com.neoruaa.xhsdn.data.TaskManager.startTask(task.id)
-                                    dispatchDownload(task.noteUrl, "xhs", task.id)
+                        when (task.source) {
+                            "douyin_home" -> {
+                                // 主页批次重试：重新反查作者并爬取（旧失败记录不再复用，直接删除避免僵尸）
+                                com.neoruaa.xhsdn.data.TaskManager.deleteTask(task.id)
+                                launchDouyinHomepageDownload(task.noteUrl)
+                            }
+                            else -> ensureStoragePermission {
+                                when (task.source) {
+                                    "douyin" -> {
+                                        // 复用同一任务记录（重置进度），把原失败任务 id 透传下去，重试成功即原地变 COMPLETED
+                                        com.neoruaa.xhsdn.data.TaskManager.resetTask(task.id)
+                                        launchDouyinWebView(task.noteUrl, task.id)
+                                    }
+                                    "kuaishou" -> {
+                                        com.neoruaa.xhsdn.data.TaskManager.resetTask(task.id)
+                                        launchKuaishouWebView(task.noteUrl, task.id)
+                                    }
+                                    else -> {
+                                        // 复用同一任务（重置进度），重新派发到前台服务下载
+                                        com.neoruaa.xhsdn.data.TaskManager.resetTask(task.id)
+                                        com.neoruaa.xhsdn.data.TaskManager.startTask(task.id)
+                                        dispatchDownload(task.noteUrl, "xhs", task.id)
+                                    }
                                 }
                             }
                         }
@@ -542,7 +576,12 @@ class MainActivity : ComponentActivity() {
                          com.neoruaa.xhsdn.DownloadService.stopTask(this, task.id)
                     },
                     onClearHistory = { viewModel.clearHistory() },
-                    onManualInputDownload = { inputLink ->
+                    onManualInputDownload = homepageGuard@{ inputLink ->
+                        // 抖音主页链接（分享文案 / /user/{sec_uid}）：走主页下载，反查作者并批量下载
+                        if (UrlUtils.isDouyinHomepageLink(inputLink)) {
+                            launchDouyinHomepageDownload(inputLink)
+                            return@homepageGuard
+                        }
                         ensureStoragePermission {
                             val plat = UrlUtils.detectPlatform(inputLink)
                             if (plat == "douyin") {
@@ -570,9 +609,16 @@ class MainActivity : ComponentActivity() {
                     detectedPlatform = detectedPlatform,
                     taskTab = taskTab,
                     onTabSelected = { taskTab = it },
-                    onClipboardBubbleActivate = {
+                    onClipboardBubbleActivate = homepageGuard@{
                         val link = detectedXhsLink
                         if (!link.isNullOrBlank()) {
+                                // 主页链接：走主页下载，反查作者并批量下载
+                                if (UrlUtils.isDouyinHomepageLink(link)) {
+                                    launchDouyinHomepageDownload(link)
+                                    detectedXhsLink = null
+                                    detectedPlatform = null
+                                    return@homepageGuard
+                                }
                                 val platform = detectedPlatform ?: UrlUtils.detectPlatform(link)
                             ensureStoragePermission {
                                 // 识别到平台后自动跳到对应任务页签
@@ -731,6 +777,44 @@ class MainActivity : ComponentActivity() {
         startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
     }
 
+    /**
+     * 主页下载入口：给定视频链接或主页链接，反查/直连作者主页，启动 WebView 主页爬取。
+     *  - 主页链接（分享文案 / /user/{sec_uid}）：直接交给 WebView 加载并爬取；
+     *  - 视频链接：用移动端 aweme/v1/feed 接口反查 author.sec_uid → /user/{sec_uid} 再爬取。
+     */
+    private fun launchDouyinHomepageDownload(input: String) {
+        val cleanUrl = UrlUtils.extractFirstUrl(input)
+        if (cleanUrl == null) {
+            showToast(getString(R.string.invalid_link_please_reenter))
+            return
+        }
+        ensureStoragePermission {
+            lifecycleScope.launch {
+                val homepageUrl = withContext(Dispatchers.IO) {
+                    if (UrlUtils.isDouyinHomepageLink(input)) {
+                        // 主页链接（短链或 /user/{sec_uid} 直链）：交给 WebView 重定向/爬取
+                        cleanUrl
+                    } else {
+                        // 视频链接：用移动端 feed 接口反查 sec_uid → /user/{sec_uid}
+                        runCatching { DouyinParser.resolveAuthorHomepageUrl(cleanUrl) }.getOrNull() ?: cleanUrl
+                    }
+                }
+                startDouyinHomepageCrawl(homepageUrl)
+            }
+        }
+    }
+
+    private fun startDouyinHomepageCrawl(homepageUrl: String) {
+        // 主页爬取需用户可见（滚动收集 + 登录态），故 direct=false
+        val intent = Intent(this, WebViewActivity::class.java).apply {
+            putExtra("url", homepageUrl)
+            putExtra("source", "douyin")
+            putExtra("mode", "homepage")
+            putExtra("direct", false)
+        }
+        startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
+    }
+
 
 
     override fun onNewIntent(intent: Intent) {
@@ -829,6 +913,48 @@ class MainActivity : ComponentActivity() {
             val taskId = data.getLongExtra("task_id", -1L).takeIf { it > 0 }
             val source = data.getStringExtra("source") ?: "xhs"
             val forceDirect = data.getBooleanExtra("force_direct", false)
+
+            if (source == "douyin_home") {
+                // 主页下载：urls 为 WebView 收集到的视频页链接（/video/{id}），逐条解析直链后批量下载
+                val videoPageUrls = urls.filter { it.contains("/video/") }
+                if (videoPageUrls.isEmpty()) {
+                    showToast("未收集到主页视频链接，请重试或登录后重试")
+                    return
+                }
+                val homepageUrl = data.getStringExtra("url") ?: ""
+                showToast(getString(R.string.homepage_parsing, videoPageUrls.size))
+                lifecycleScope.launch {
+                    val directUrls = mutableListOf<String>()
+                    withContext(Dispatchers.IO) {
+                        for (u in videoPageUrls.distinct()) {
+                            runCatching {
+                                val info = DouyinParser.parse(u)
+                                if (info.type == DouyinMediaType.VIDEO && !info.videoUrl.isNullOrBlank()) {
+                                    directUrls.add(info.videoUrl)
+                                } else if (info.type == DouyinMediaType.IMAGE && info.imageUrls.isNotEmpty()) {
+                                    directUrls.addAll(info.imageUrls)
+                                }
+                            }
+                        }
+                    }
+                    withContext(Dispatchers.Main) {
+                        if (directUrls.isNotEmpty()) {
+                            val batchTaskId = com.neoruaa.xhsdn.data.TaskManager.createTask(
+                                noteUrl = homepageUrl,
+                                noteTitle = "主页视频(${directUrls.size})",
+                                noteType = com.neoruaa.xhsdn.data.NoteType.VIDEO,
+                                totalFiles = directUrls.size
+                            )
+                            com.neoruaa.xhsdn.data.TaskManager.updateTaskStatus(batchTaskId, com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING)
+                            viewModel.onWebCrawlResult(directUrls, "", batchTaskId)
+                            com.neoruaa.xhsdn.DownloadService.startWebCrawl(this@MainActivity, directUrls, "", batchTaskId)
+                        } else {
+                            showToast("主页视频解析失败（可能需登录），请在设置中登录抖音后重试")
+                        }
+                    }
+                }
+                return
+            }
 
             if (source == "douyin") {
                 val webViewUrl = data.getStringExtra("url") ?: ""
@@ -939,6 +1065,9 @@ private fun MainScreen(
     detectedPlatform: String? = null,
     taskTab: Int = 0,
     onTabSelected: (Int) -> Unit = {},
+    mainTab: Int = 0,
+    onMainTabSelected: (Int) -> Unit = {},
+    onHomepageDownload: (String) -> Unit = {},
     onClipboardBubbleActivate: () -> Unit = {},
     onDismissPrompt: () -> Unit,
     onCancelSelectiveDownload: () -> Unit,
@@ -1219,33 +1348,49 @@ private fun MainScreen(
                 )
             }
         ) { padding ->
-            HistoryPage(
-                uiState = uiState,
-                manualInputLinks = manualInputLinks,
-                showInputDialog = showInputDialog,
-                onShowInputDialogChange = onShowInputDialogChange,
-                statusListState = statusListState,
-                onDownload = onDownload,
-                onManualInputDownload = onManualInputDownload,
-                onMediaClick = onMediaClick,
-                onCopyUrl = onCopyUrl,
-                onBrowseUrl = onBrowseUrl,
-                onRetryTask = onRetryTask,
-                onContinueTask = onContinueTask,
-                onWebCrawlTask = onWebCrawlTask,
-                onStopTask = onStopTask,
-                onDeleteTask = onDeleteTask,
-                detectedXhsLink = detectedXhsLink,
-                detectedPlatform = detectedPlatform,
-                selectedTab = taskTab,
-                onTabSelected = onTabSelected,
-                onClipboardBubbleActivate = onClipboardBubbleActivate,
-                onDismissPrompt = onDismissPrompt,
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
-                nestedScrollConnection = miuixScrollBehavior.nestedScrollConnection
-            )
+                    .padding(padding)
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    if (mainTab == 0) {
+                        HistoryPage(
+                            uiState = uiState,
+                            manualInputLinks = manualInputLinks,
+                            showInputDialog = showInputDialog,
+                            onShowInputDialogChange = onShowInputDialogChange,
+                            statusListState = statusListState,
+                            onDownload = onDownload,
+                            onManualInputDownload = onManualInputDownload,
+                            onMediaClick = onMediaClick,
+                            onCopyUrl = onCopyUrl,
+                            onBrowseUrl = onBrowseUrl,
+                            onRetryTask = onRetryTask,
+                            onContinueTask = onContinueTask,
+                            onWebCrawlTask = onWebCrawlTask,
+                            onStopTask = onStopTask,
+                            onDeleteTask = onDeleteTask,
+                            detectedXhsLink = detectedXhsLink,
+                            detectedPlatform = detectedPlatform,
+                            selectedTab = taskTab,
+                            onTabSelected = onTabSelected,
+                            onHomepageDownload = onHomepageDownload,
+                            onClipboardBubbleActivate = onClipboardBubbleActivate,
+                            onDismissPrompt = onDismissPrompt,
+                            modifier = Modifier.fillMaxSize(),
+                            nestedScrollConnection = miuixScrollBehavior.nestedScrollConnection
+                        )
+                    } else {
+                        HomepagePage(
+                            onHomepageDownload = onHomepageDownload,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+                // 底部主标签栏：视频下载 / 主页下载
+                MainTabBar(mainTab, onMainTabSelected)
+            }
         }
 
         SelectiveDownloadSheet(
@@ -1383,6 +1528,7 @@ private fun HistoryPage(
     detectedPlatform: String? = null,
     selectedTab: Int = 0,
     onTabSelected: (Int) -> Unit = {},
+    onHomepageDownload: (String) -> Unit = {},
     onClipboardBubbleActivate: () -> Unit = {},
     onDismissPrompt: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1439,8 +1585,8 @@ private fun HistoryPage(
             ) {
                 // 平台页签：抖音 / 小红书 / 快手（按来源归类，识别到链接自动跳转）
                 val counts = listOf(
-                    tasks.count { it.source == "douyin" },
-                    tasks.count { it.source != "douyin" && it.source != "kuaishou" },
+                    tasks.count { it.source == "douyin" || it.source == "douyin_home" },
+                    tasks.count { it.source != "douyin" && it.source != "douyin_home" && it.source != "kuaishou" },
                     tasks.count { it.source == "kuaishou" }
                 )
                 val filterLabels = listOf("抖音", "小红书", "快手").mapIndexed { i, label -> "$label ${counts[i]}" }
@@ -1464,11 +1610,11 @@ private fun HistoryPage(
                         .padding(horizontal = 16.dp, vertical = 10.dp)
                 )
 
-                // 根据平台过滤任务（douyin→0 / xhs及其余→1 / kuaishou→2）
+                // 根据平台过滤任务（douyin→0 / xhs及其余→1 / kuaishou→2；douyin_home 归入抖音页签）
                 val filteredTasks = when (selectedTab) {
-                    0 -> tasks.filter { it.source == "douyin" }
+                    0 -> tasks.filter { it.source == "douyin" || it.source == "douyin_home" }
                     2 -> tasks.filter { it.source == "kuaishou" }
-                    else -> tasks.filter { it.source != "douyin" && it.source != "kuaishou" }
+                    else -> tasks.filter { it.source != "douyin" && it.source != "douyin_home" && it.source != "kuaishou" }
                 }
                 if (filteredTasks.isEmpty()) {
                     // 空状态
@@ -1513,7 +1659,7 @@ private fun HistoryPage(
                         contentPadding = PaddingValues(
                             start = 16.dp,
                             end = 16.dp,
-                            bottom = navPadding + 140.dp
+                            bottom = navPadding + 140.dp + 56.dp
                         ),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = if (nestedScrollConnection != null) {
@@ -1542,6 +1688,7 @@ private fun HistoryPage(
                                 onWebCrawl = { onWebCrawlTask(task) },
                                 onStop = { onStopTask(task) },
                                 onDelete = { taskToDelete = task },
+                                onHomepageDownload = { onHomepageDownload(task.noteUrl) },
                                 onMediaClick = onMediaClick,
                                 onClick = {
                                     val detailIntent = DetailActivity.newIntent(
@@ -1565,7 +1712,7 @@ private fun HistoryPage(
         Card(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(start = 24.dp, end = 24.dp, bottom = navPadding + 16.dp)
+                .padding(start = 24.dp, end = 24.dp, bottom = navPadding + 16.dp + 56.dp)
                 .fillMaxWidth()
                 .clickable(enabled = !uiState.isDownloading) {
                     if (manualInputLinks) {
@@ -1621,7 +1768,7 @@ private fun HistoryPage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .padding(start = 24.dp, end = 24.dp, bottom = navPadding + 76.dp),
+                    .padding(start = 24.dp, end = 24.dp, bottom = navPadding + 76.dp + 56.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 val bubbleLabel = if (detectedPlatform == "douyin")
@@ -1776,6 +1923,7 @@ private fun TaskCell(
     onWebCrawl: () -> Unit,
     onStop: () -> Unit,
     onDelete: () -> Unit,
+    onHomepageDownload: () -> Unit = {},
     onMediaClick: (MediaItem) -> Unit = {},
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -2108,7 +2256,15 @@ private fun TaskCell(
         }
         } // card Column body
 
-        // 长按菜单：复制链接 / 删除（左滑删除在部分真机失效时的兜底交互）
+        // 长按菜单：主页下载（抖音任务）/ 复制链接 / 删除（左滑删除在部分真机失效时的兜底交互）
+        val isDouyinTask = task.source == "douyin" || task.source == "douyin_home" || UrlUtils.isDouyinLink(task.noteUrl)
+        val menuActions = remember(task.source, task.noteUrl) {
+            buildList {
+                if (isDouyinTask) add("homepage")
+                add("copy")
+                add("delete")
+            }
+        }
         WindowListPopup(
             show = showTaskMenu,
             popupPositionProvider = rememberOffsetPopupPositionProvider(x = 0.dp),
@@ -2116,26 +2272,27 @@ private fun TaskCell(
             onDismissRequest = { showTaskMenu = false }
         ) {
             ListPopupColumn {
-                DropdownImpl(
-                    text = stringResource(R.string.copy_link),
-                    optionSize = 2,
-                    isSelected = false,
-                    onSelectedIndexChange = {
-                        showTaskMenu = false
-                        onCopyUrl()
-                    },
-                    index = 0
-                )
-                DropdownImpl(
-                    text = stringResource(R.string.delete_task_menu),
-                    optionSize = 2,
-                    isSelected = false,
-                    onSelectedIndexChange = {
-                        showTaskMenu = false
-                        onDelete()
-                    },
-                    index = 1
-                )
+                menuActions.forEachIndexed { index, action ->
+                    val text = when (action) {
+                        "homepage" -> stringResource(R.string.homepage_download)
+                        "copy" -> stringResource(R.string.copy_link)
+                        else -> stringResource(R.string.delete_task_menu)
+                    }
+                    DropdownImpl(
+                        text = text,
+                        optionSize = menuActions.size,
+                        isSelected = false,
+                        onSelectedIndexChange = {
+                            showTaskMenu = false
+                            when (action) {
+                                "homepage" -> onHomepageDownload()
+                                "copy" -> onCopyUrl()
+                                else -> onDelete()
+                            }
+                        },
+                        index = index
+                    )
+                }
             }
         }
     } // Box (swipe reveal wrapper)
@@ -2240,4 +2397,122 @@ private fun isKuaishouVideoUrl(url: String): Boolean {
         url.contains("kwai") ||
         url.contains("kuaishou") ||
         url.contains(".mp4")
+}
+
+/**
+ * 底部主标签栏：视频下载 / 主页下载。
+ */
+@Composable
+private fun MainTabBar(
+    selected: Int,
+    onSelected: (Int) -> Unit
+) {
+    val items = listOf(stringResource(R.string.main_tab_video), stringResource(R.string.homepage_download))
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MiuixTheme.colorScheme.surface)
+            .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+    ) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            items.forEachIndexed { index, label ->
+                val selectedNow = index == selected
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onSelected(index) }
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = label,
+                        color = if (selectedNow) MiuixTheme.colorScheme.primary else Color.Gray,
+                        fontWeight = if (selectedNow) FontWeight.Medium else FontWeight.Normal,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 主页下载页：手动粘贴抖音主页/视频链接，反查作者并批量下载该作者全部视频。
+ */
+@Composable
+private fun HomepagePage(
+    onHomepageDownload: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val ctx = LocalContext.current
+    var link by remember { mutableStateOf("") }
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+            .padding(bottom = 56.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+    ) {
+        Text(
+            text = stringResource(R.string.homepage_download),
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = MiuixTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.homepage_desc),
+            fontSize = 13.sp,
+            color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        TextField(
+            value = link,
+            onValueChange = { link = it },
+            label = stringResource(R.string.homepage_input_hint),
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(ContinuousRoundedRectangle(16.dp))
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Button(
+                onClick = {
+                    val clip = (ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager)
+                        .primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+                    if (clip.isNotEmpty()) {
+                        link = clip
+                    } else {
+                        Toast.makeText(ctx, ctx.getString(R.string.no_valid_link_found), Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(stringResource(R.string.homepage_paste_clipboard))
+            }
+            Button(
+                onClick = {
+                    if (link.isNotBlank()) {
+                        onHomepageDownload(link)
+                    } else {
+                        Toast.makeText(ctx, ctx.getString(R.string.please_enter_url), Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColorsPrimary()
+            ) {
+                Text(stringResource(R.string.homepage_start_download), color = Color.White)
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = stringResource(R.string.homepage_supported),
+            fontSize = 12.sp,
+            color = Color.Gray
+        )
+    }
 }

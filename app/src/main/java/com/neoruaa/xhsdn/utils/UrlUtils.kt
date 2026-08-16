@@ -4,7 +4,8 @@ object UrlUtils {
     /**
      * 从文本中提取第一个 URL
      */
-    fun extractFirstUrl(text: String): String? {
+    fun extractFirstUrl(text: String?): String? {
+        if (text.isNullOrBlank()) return null
         val regex = Regex("https?://[\\w\\-.]+(?:/[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=%]*)?")
         return regex.find(text)?.value
     }
@@ -34,6 +35,32 @@ object UrlUtils {
         val u = url.lowercase()
         return u.contains("kuaishou.com") || u.contains("kuaishou.cn") ||
             u.contains("gifshow.com") || u.contains("chenzhongtech.com")
+    }
+
+    /**
+     * 判断文本是否为「抖音主页链接」。
+     * 命中场景：
+     *  - 分享文案含「查看TA的更多作品」「查看更多作品」等主页分享特征；
+     *  - 链接已解析为 www.douyin.com/user/{sec_uid} 主页直链。
+     * 视频链接（/video/{id}）不命中，需经 feed 接口反查作者后再走主页下载。
+     */
+    fun isDouyinHomepageLink(text: String?): Boolean {
+        if (text.isNullOrBlank()) return false
+        val u = text.lowercase()
+        if (text.contains("查看ta的更多作品") || text.contains("查看更多作品") ||
+            text.contains("查看ta的作品") || text.contains("more works") ||
+            text.contains("more videos")) return true
+        if (Regex("""douyin\.com/user/[A-Za-z0-9_\-]+""").containsMatchIn(u)) return true
+        return false
+    }
+
+    /**
+     * 从文本中提取抖音主页链接（主页分享文案或 /user/{sec_uid} 直链）。
+     * 非主页链接返回 null。
+     */
+    fun extractDouyinHomepageUrl(text: String?): String? {
+        if (!isDouyinHomepageLink(text)) return null
+        return extractFirstUrl(text)
     }
 
     /**

@@ -217,4 +217,14 @@
     <string name="retry_inconsistent_save_button">Save logs</string>
     <string name="retry_inconsistent_save_success">Logs saved to %1$s</string>
     <string name="retry_inconsistent_save_failed">Failed to save logs</string>
+
+    <!-- Homepage download (v1.0.45) -->
+    <string name="main_tab_video">Video Download</string>
+    <string name="homepage_download">Homepage Download</string>
+    <string name="homepage_desc">Paste an author homepage link or a single video link; the app will find the author and batch-download all their videos.</string>
+    <string name="homepage_input_hint">Douyin homepage / video link</string>
+    <string name="homepage_paste_clipboard">Paste from Clipboard</string>
+    <string name="homepage_start_download">Start Homepage Download</string>
+    <string name="homepage_supported">Supports: Douyin video link (auto-resolves the author homepage), Douyin homepage share text (\"View more of their works\"), www.douyin.com/user/xxx. Copying a homepage share to clipboard also triggers download automatically.</string>
+    <string name="homepage_parsing">Batch-parsing %1$d homepage videos…</string>
 </resources>
