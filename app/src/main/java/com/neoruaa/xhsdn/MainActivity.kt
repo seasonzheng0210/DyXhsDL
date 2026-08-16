@@ -220,6 +220,8 @@ class MainActivity : ComponentActivity() {
             val prefs = remember { context.getSharedPreferences("XHSDownloaderPrefs", MODE_PRIVATE) }
             var detectedXhsLink by remember { mutableStateOf<String?>(null) }
             var detectedPlatform by remember { mutableStateOf<String?>(null) }
+            // 任务栏当前平台页签：0=抖音 / 1=小红书 / 2=快手；识别到链接自动跳转
+            var taskTab by remember { mutableStateOf(0) }
             // 已处理过的剪贴板链接（去重用），相同链接不再重复读取/下载
             var lastHandledUrl by remember { mutableStateOf<String?>(null) }
             var manualInputLinks by remember { mutableStateOf(prefs.getBoolean("manual_input_links", false)) }
@@ -410,11 +412,14 @@ class MainActivity : ComponentActivity() {
                                 val platform = UrlUtils.detectPlatform(clipText)
                                 if (platform == "douyin") {
                                     // 抖音：HTTP 直解已被风控拦截（空响应/安全页），改用 WebView 真浏览器解析
+                                    taskTab = platformTabIndex(platform)
                                     launchDouyinWebView(clipText)
                                 } else if (platform == "kuaishou") {
                                     // 快手：HTTP 直解不稳定（匿名 GraphQL 偶被风控），改用 WebView 真浏览器解析（与抖音一致）
+                                    taskTab = platformTabIndex(platform)
                                     launchKuaishouWebView(clipText)
                                 } else if (platform == "xhs") {
+                                    taskTab = platformTabIndex(platform)
                                     viewModel.updateUrl(clipText)
 
                                     if (selectiveDownload) {
@@ -424,7 +429,7 @@ class MainActivity : ComponentActivity() {
                                         dispatchDownload(clipText, "xhs")
                                     }
                                 } else {
-                                    showToast(getString(R.string.clipboard_no_xhs_link))
+                                    showToast(getString(R.string.link_not_recognized))
                                 }
                             }
                         }
@@ -450,10 +455,13 @@ class MainActivity : ComponentActivity() {
                                 val platform = UrlUtils.detectPlatform(cleanUrl)
                                 if (platform == "kuaishou") {
                                     // 快手链接走专用 WebView 入口（kuaishou_extractor 兜底）
+                                    taskTab = platformTabIndex(platform)
                                     launchKuaishouWebView(cleanUrl)
                                 } else if (platform == "douyin") {
+                                    taskTab = platformTabIndex(platform)
                                     launchDouyinWebView(cleanUrl)
-                                } else {
+                                } else if (platform == "xhs") {
+                                    taskTab = platformTabIndex(platform)
                                     val webViewIntent = Intent(this, WebViewActivity::class.java).apply {
                                         putExtra("url", cleanUrl)
                                         putExtra("source", "xhs")
@@ -461,6 +469,8 @@ class MainActivity : ComponentActivity() {
                                         // Don't pass task_id here - let WebViewActivity create the task when user clicks "爬取"
                                     }
                                     startActivityForResult(webViewIntent, WEBVIEW_REQUEST_CODE)
+                                } else {
+                                    showToast(getString(R.string.link_not_recognized))
                                 }
                                 detectedXhsLink = null
                             } else {
@@ -537,26 +547,36 @@ class MainActivity : ComponentActivity() {
                             val plat = UrlUtils.detectPlatform(inputLink)
                             if (plat == "douyin") {
                                 // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
+                                taskTab = platformTabIndex(plat)
                                 launchDouyinWebView(inputLink)
                             } else if (plat == "kuaishou") {
+                                taskTab = platformTabIndex(plat)
                                 launchKuaishouWebView(inputLink)
-                            } else {
+                            } else if (plat == "xhs") {
+                                taskTab = platformTabIndex(plat)
                                 viewModel.updateUrl(inputLink)
                                 if (selectiveDownload) {
                                     viewModel.startSelectiveDownload { showToast(it) }
                                 } else {
                                     dispatchDownload(inputLink, "xhs")
                                 }
+                            } else {
+                                // 既非抖音/快手/小红书任一：提示链接暂不可识别
+                                showToast(getString(R.string.link_not_recognized))
                             }
                         }
                     },
                     detectedXhsLink = detectedXhsLink,
                     detectedPlatform = detectedPlatform,
+                    taskTab = taskTab,
+                    onTabSelected = { taskTab = it },
                     onClipboardBubbleActivate = {
                         val link = detectedXhsLink
                         if (!link.isNullOrBlank()) {
                                 val platform = detectedPlatform ?: UrlUtils.detectPlatform(link)
                             ensureStoragePermission {
+                                // 识别到平台后自动跳到对应任务页签
+                                taskTab = platformTabIndex(platform)
                                 if (platform == "douyin") {
                                     // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
                                     launchDouyinWebView(link)
@@ -839,7 +859,23 @@ class MainActivity : ComponentActivity() {
                     showToast("WebView 未能提取快手作品，可重试或点「直链解析」")
                     return
                 }
-                // 否则 urls 非空，继续往下走通用 startWebCrawl 下载
+                // 快手只要视频：从 WebView 嗅探结果中过滤出视频直链，排除图集图片
+                val videoUrls = urls.filter { isKuaishouVideoUrl(it) }
+                if (videoUrls.isEmpty()) {
+                    showToast("WebView 提取结果中未找到视频直链，可重试或登录后重试提取")
+                    return
+                }
+                val taskToUse = taskId ?: com.neoruaa.xhsdn.data.TaskManager.createTask(
+                    noteUrl = webViewUrl,
+                    noteTitle = null,
+                    noteType = com.neoruaa.xhsdn.data.NoteType.VIDEO,
+                    totalFiles = videoUrls.size
+                ).also {
+                    com.neoruaa.xhsdn.data.TaskManager.updateTaskStatus(it, com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING)
+                }
+                viewModel.onWebCrawlResult(videoUrls, content, taskToUse)
+                com.neoruaa.xhsdn.DownloadService.startWebCrawl(this, videoUrls, content, taskToUse)
+                return
             }
 
             if (urls.isNotEmpty()) {
@@ -901,6 +937,8 @@ private fun MainScreen(
     scrollBehavior: ScrollBehavior,
     detectedXhsLink: String?,
     detectedPlatform: String? = null,
+    taskTab: Int = 0,
+    onTabSelected: (Int) -> Unit = {},
     onClipboardBubbleActivate: () -> Unit = {},
     onDismissPrompt: () -> Unit,
     onCancelSelectiveDownload: () -> Unit,
@@ -1199,6 +1237,8 @@ private fun MainScreen(
                 onDeleteTask = onDeleteTask,
                 detectedXhsLink = detectedXhsLink,
                 detectedPlatform = detectedPlatform,
+                selectedTab = taskTab,
+                onTabSelected = onTabSelected,
                 onClipboardBubbleActivate = onClipboardBubbleActivate,
                 onDismissPrompt = onDismissPrompt,
                 modifier = Modifier
@@ -1341,6 +1381,8 @@ private fun HistoryPage(
     onDeleteTask: (com.neoruaa.xhsdn.data.DownloadTask) -> Unit,
     detectedXhsLink: String?,
     detectedPlatform: String? = null,
+    selectedTab: Int = 0,
+    onTabSelected: (Int) -> Unit = {},
     onClipboardBubbleActivate: () -> Unit = {},
     onDismissPrompt: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1395,15 +1437,17 @@ private fun HistoryPage(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-                // 筛选标签栏
-                var selectedFilter by remember { mutableStateOf(0) }
-                val waitingCount = tasks.count { it.status == com.neoruaa.xhsdn.data.TaskStatus.WAITING_FOR_USER }
-                val failedCount = tasks.count { it.status == com.neoruaa.xhsdn.data.TaskStatus.FAILED }
-                val filterLabels = listOf(stringResource(R.string.tab_all), stringResource(R.string.tab_waiting_for_selection, waitingCount), stringResource(R.string.tab_failed, failedCount))
+                // 平台页签：抖音 / 小红书 / 快手（按来源归类，识别到链接自动跳转）
+                val counts = listOf(
+                    tasks.count { it.source == "douyin" },
+                    tasks.count { it.source != "douyin" && it.source != "kuaishou" },
+                    tasks.count { it.source == "kuaishou" }
+                )
+                val filterLabels = listOf("抖音", "小红书", "快手").mapIndexed { i, label -> "$label ${counts[i]}" }
                 val configuration = LocalConfiguration.current
                 TabRowWithContour(
                     tabs = filterLabels,
-                    selectedTabIndex = selectedFilter,
+                    selectedTabIndex = selectedTab,
                     fontSize = 14.sp,
                     height = 40.dp,
                     colors = TabRowDefaults.tabRowColors(
@@ -1414,17 +1458,17 @@ private fun HistoryPage(
                        }
                     ),
                     itemSpacing = 2.dp,
-                    onTabSelected = { selectedFilter = it },
+                    onTabSelected = onTabSelected,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 10.dp)
                 )
 
-                // 根据筛选条件过滤任务
-                val filteredTasks = when (selectedFilter) {
-                    1 -> tasks.filter { it.status == com.neoruaa.xhsdn.data.TaskStatus.WAITING_FOR_USER }
-                    2 -> tasks.filter { it.status == com.neoruaa.xhsdn.data.TaskStatus.FAILED }
-                    else -> tasks
+                // 根据平台过滤任务（douyin→0 / xhs及其余→1 / kuaishou→2）
+                val filteredTasks = when (selectedTab) {
+                    0 -> tasks.filter { it.source == "douyin" }
+                    2 -> tasks.filter { it.source == "kuaishou" }
+                    else -> tasks.filter { it.source != "douyin" && it.source != "kuaishou" }
                 }
                 if (filteredTasks.isEmpty()) {
                     // 空状态
@@ -2173,4 +2217,27 @@ private fun createVideoThumbnail(file: File): android.graphics.Bitmap? {
             android.provider.MediaStore.Video.Thumbnails.MINI_KIND
         )
     }
+}
+
+/**
+ * 平台 → 任务栏页签索引：抖音=0 / 小红书=1 / 快手=2
+ */
+private fun platformTabIndex(platform: String?): Int = when (platform) {
+    "douyin" -> 0
+    "kuaishou" -> 2
+    else -> 1
+}
+
+/**
+ * 判断 URL 是否为快手视频直链（与 WebViewActivity 的 isKuaishouVideo 判定保持一致）。
+ * 用于从 WebView 嗅探结果里过滤出视频，排除图集图片。
+ */
+private fun isKuaishouVideoUrl(url: String): Boolean {
+    return url.contains("kwaicdn.com") ||
+        url.contains("chenzhongtech.com") ||
+        url.contains("gifshow.com") ||
+        url.contains("kwai-player") ||
+        url.contains("kwai") ||
+        url.contains("kuaishou") ||
+        url.contains(".mp4")
 }

@@ -121,6 +121,7 @@
     <!-- Toast messages -->
     <string name="unable_to_open_file">無法開啟檔案: %1$s</string>
     <string name="link_copied">連結已複製</string>
+    <string name="link_not_recognized">連結暫不可識別</string>
     <string name="no_valid_link_found">未找到有效連結</string>
     <string name="storage_permission_required">缺少儲存權限，請開啟 App 授予权限</string>
     <string name="clipboard_no_xhs_link">剪貼簿中未偵測到小紅書連結</string>

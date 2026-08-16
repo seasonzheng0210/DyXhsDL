@@ -121,6 +121,7 @@
     <!-- Toast messages -->
     <string name="unable_to_open_file">Unable to open file: %1$s</string>
     <string name="link_copied">Link copied</string>
+    <string name="link_not_recognized">Link not recognized</string>
     <string name="no_valid_link_found">No valid link found</string>
     <string name="storage_permission_required">Storage permission required, please open the app to grant permission</string>
     <string name="clipboard_no_xhs_link">No Xiaohongshu link detected in clipboard</string>
