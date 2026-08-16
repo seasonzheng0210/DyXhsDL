@@ -184,6 +184,7 @@
     <string name="clear_history_dialog_title">Clear History</string>
     <string name="clear_history_dialog_message">Are you sure you want to delete all download records? Downloaded files will not be deleted.</string>
     <string name="delete_task_dialog_title">Delete Task</string>
+    <string name="delete_task_menu">Delete</string>
     <string name="delete_task_dialog_message">Are you sure you want to delete this download record? Downloaded files will not be deleted.</string>
     <string name="copy_description">Copy Description</string>
     <string name="web_crawl_option">Web Crawl</string>

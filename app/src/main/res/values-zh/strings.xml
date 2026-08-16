@@ -184,6 +184,7 @@
     <string name="clear_history_dialog_title">清除历史记录</string>
     <string name="clear_history_dialog_message">确定要删除全部下载记录吗？已下载的文件不会被删除。</string>
     <string name="delete_task_dialog_title">删除任务</string>
+    <string name="delete_task_menu">删除</string>
     <string name="delete_task_dialog_message">确定要删除这条下载记录吗？已下载的文件不会被删除。</string>
     <string name="copy_description">提取文案</string>
     <string name="web_crawl_option">从网页爬取</string>

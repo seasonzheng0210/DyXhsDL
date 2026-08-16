@@ -163,9 +163,13 @@ object TaskManager {
     
     /**
      * 获取所有任务（按创建时间降序）
+     * 同一 noteUrl 仅保留最新一条，避免重复记录刷屏。
      */
-    fun getAllTasks(): Flow<List<DownloadTask>> = _tasks.map { 
-        it.sortedByDescending { task -> task.createdAt }
+    fun getAllTasks(): Flow<List<DownloadTask>> = _tasks.map { tasks ->
+        tasks.groupBy { it.noteUrl }
+            .mapValues { (_, list) -> list.maxByOrNull { it.createdAt } ?: list.first() }
+            .values
+            .sortedByDescending { it.createdAt }
     }
     
     /**
@@ -284,12 +288,22 @@ object TaskManager {
      * 标记任务完成
      */
     fun completeTask(taskId: Long, success: Boolean, errorMessage: String? = null) {
+        val url = getTaskById(taskId)?.noteUrl
         updateTask(taskId) { task ->
             task.copy(
                 status = if (success) TaskStatus.COMPLETED else TaskStatus.FAILED,
                 completedAt = System.currentTimeMillis(),
                 errorMessage = errorMessage
             )
+        }
+        // 成功后清除同链接的其他「失败」记录（失败任务重试成功 → 自动删掉那条失败的）
+        if (success && url != null) {
+            val before = _tasks.value
+            val after = before.filterNot { it.id != taskId && it.noteUrl == url && it.status == TaskStatus.FAILED }
+            if (after.size != before.size) {
+                _tasks.value = after
+                saveTasks()
+            }
         }
     }
     

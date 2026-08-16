@@ -495,8 +495,15 @@ class MainActivity : ComponentActivity() {
                     onRetryTask = { task ->
                         ensureStoragePermission {
                             when (task.source) {
-                                "douyin" -> launchDouyinWebView(task.noteUrl)
-                                "kuaishou" -> launchKuaishouWebView(task.noteUrl)
+                                "douyin" -> {
+                                    // 复用同一任务记录（重置进度），把原失败任务 id 透传下去，重试成功即原地变 COMPLETED
+                                    com.neoruaa.xhsdn.data.TaskManager.resetTask(task.id)
+                                    launchDouyinWebView(task.noteUrl, task.id)
+                                }
+                                "kuaishou" -> {
+                                    com.neoruaa.xhsdn.data.TaskManager.resetTask(task.id)
+                                    launchKuaishouWebView(task.noteUrl, task.id)
+                                }
                                 else -> {
                                     // 复用同一任务（重置进度），重新派发到前台服务下载
                                     com.neoruaa.xhsdn.data.TaskManager.resetTask(task.id)
@@ -515,8 +522,8 @@ class MainActivity : ComponentActivity() {
                     onWebCrawlTask = { task ->
                         viewModel.updateUrl(task.noteUrl)
                         when (task.source) {
-                            "kuaishou" -> launchKuaishouWebView(task.noteUrl)
-                            "douyin" -> launchDouyinWebView(task.noteUrl)
+                            "kuaishou" -> launchKuaishouWebView(task.noteUrl, task.id)
+                            "douyin" -> launchDouyinWebView(task.noteUrl, task.id)
                             else -> launchWebView(task.noteUrl, task.id)
                         }
                     },
@@ -641,7 +648,7 @@ class MainActivity : ComponentActivity() {
      * 成功则直接交给下载服务下载——「不跳提取页、直接下」。仅当直解失败时回退到
      * WebView 真浏览器解析（旧行为）。
      */
-    private fun launchDouyinWebView(input: String) {
+    private fun launchDouyinWebView(input: String, taskId: Long? = null) {
         val cleanUrl = UrlUtils.extractFirstUrl(input)
         if (cleanUrl == null) {
             showToast(getString(R.string.invalid_link_please_reenter))
@@ -652,26 +659,29 @@ class MainActivity : ComponentActivity() {
             val parsed = withContext(Dispatchers.IO) { runCatching { DouyinParser.parse(cleanUrl) } }
             if (parsed.isSuccess && parsed.getOrNull() != null) {
                 // 直解成功：直接下载，不跳 WebView 页
-                DownloadService.startDownload(this@MainActivity, cleanUrl, "douyin")
+                DownloadService.startDownload(this@MainActivity, cleanUrl, "douyin", taskId)
             } else {
                 Log.w("MainActivity", "douyin 直解失败，回退 WebView: ${parsed.exceptionOrNull()?.message}")
-                startDouyinWebViewFallback(cleanUrl)
+                startDouyinWebViewFallback(cleanUrl, taskId)
             }
         }
     }
 
-    private fun startDouyinWebViewFallback(cleanUrl: String) {
+    private fun startDouyinWebViewFallback(cleanUrl: String, taskId: Long? = null) {
         val intent = Intent(this, WebViewActivity::class.java)
         intent.putExtra("url", cleanUrl)
         intent.putExtra("source", "douyin")
         intent.putExtra("direct", true)
+        if (taskId != null && taskId > 0) {
+            intent.putExtra("task_id", taskId)
+        }
         startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
     }
 
     /**
      * 快手下载入口：同上，优先 HTTP 直解（匿名 GraphQL），失败回退 WebView。
      */
-    private fun launchKuaishouWebView(input: String) {
+    private fun launchKuaishouWebView(input: String, taskId: Long? = null) {
         val cleanUrl = UrlUtils.extractFirstUrl(input)
         if (cleanUrl == null) {
             showToast(getString(R.string.invalid_link_please_reenter))
@@ -681,20 +691,23 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val parsed = withContext(Dispatchers.IO) { runCatching { KuaishouParser.parse(cleanUrl) } }
             if (parsed.isSuccess && parsed.getOrNull() != null) {
-                DownloadService.startDownload(this@MainActivity, cleanUrl, "kuaishou")
+                DownloadService.startDownload(this@MainActivity, cleanUrl, "kuaishou", taskId)
             } else {
                 Log.w("MainActivity", "kuaishou 直解失败，回退 WebView: ${parsed.exceptionOrNull()?.message}")
-                startKuaishouWebViewFallback(cleanUrl)
+                startKuaishouWebViewFallback(cleanUrl, taskId)
             }
         }
     }
 
-    private fun startKuaishouWebViewFallback(cleanUrl: String) {
+    private fun startKuaishouWebViewFallback(cleanUrl: String, taskId: Long? = null) {
         // 快手匿名即可访问，无需登录态 cookie；短链跳转由 WebView 自行处理
         val intent = Intent(this, WebViewActivity::class.java)
         intent.putExtra("url", cleanUrl)
         intent.putExtra("source", "kuaishou")
         intent.putExtra("direct", true)
+        if (taskId != null && taskId > 0) {
+            intent.putExtra("task_id", taskId)
+        }
         startActivityForResult(intent, WEBVIEW_REQUEST_CODE)
     }
 
@@ -1749,10 +1762,11 @@ private fun TaskCell(
         com.neoruaa.xhsdn.data.NoteType.UNKNOWN -> stringResource(R.string.note_type_unknown)
     }
     
-    // 左滑露出删除按钮（卡片左移 REVEAL.dp），长按复制链接
+    // 左滑露出删除按钮（卡片左移 REVEAL.dp）；长按弹出菜单（复制链接 / 删除）作为左滑删除的兜底
     val offsetX = remember { mutableStateOf(0f) }
     val swipeScope = rememberCoroutineScope()
     val REVEAL = 76f
+    var showTaskMenu by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -1785,7 +1799,7 @@ private fun TaskCell(
                 .padding(12.dp)
                 .combinedClickable(
                     onClick = { onClick?.invoke() },
-                    onLongClick = onCopyUrl
+                    onLongClick = { showTaskMenu = true }
                 )
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures(
@@ -2049,6 +2063,37 @@ private fun TaskCell(
             }
         }
         } // card Column body
+
+        // 长按菜单：复制链接 / 删除（左滑删除在部分真机失效时的兜底交互）
+        WindowListPopup(
+            show = showTaskMenu,
+            popupPositionProvider = rememberOffsetPopupPositionProvider(x = 0.dp),
+            alignment = PopupPositionProvider.Align.TopEnd,
+            onDismissRequest = { showTaskMenu = false }
+        ) {
+            ListPopupColumn {
+                DropdownImpl(
+                    text = stringResource(R.string.copy_link),
+                    optionSize = 2,
+                    isSelected = false,
+                    onSelectedIndexChange = {
+                        showTaskMenu = false
+                        onCopyUrl()
+                    },
+                    index = 0
+                )
+                DropdownImpl(
+                    text = stringResource(R.string.delete_task_menu),
+                    optionSize = 2,
+                    isSelected = false,
+                    onSelectedIndexChange = {
+                        showTaskMenu = false
+                        onDelete()
+                    },
+                    index = 1
+                )
+            }
+        }
     } // Box (swipe reveal wrapper)
 }
 
