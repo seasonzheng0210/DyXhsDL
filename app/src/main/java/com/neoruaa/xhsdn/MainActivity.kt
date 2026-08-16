@@ -2390,13 +2390,16 @@ private fun platformTabIndex(platform: String?): Int = when (platform) {
  * 用于从 WebView 嗅探结果里过滤出视频，排除图集图片。
  */
 private fun isKuaishouVideoUrl(url: String): Boolean {
-    return url.contains("kwaicdn.com") ||
-        url.contains("chenzhongtech.com") ||
-        url.contains("gifshow.com") ||
-        url.contains("kwai-player") ||
-        url.contains("kwai") ||
-        url.contains("kuaishou") ||
-        url.contains(".mp4")
+    val u = url.lowercase()
+    // 只下载视频：先排除封面/图集/头像等图片资源（按扩展名与常见图片路径特征）
+    if (u.endsWith(".jpg") || u.endsWith(".jpeg") || u.endsWith(".png") ||
+        u.endsWith(".webp") || u.endsWith(".gif") ||
+        u.contains(".jpg?") || u.contains(".png?") || u.contains(".webp?") ||
+        u.contains("/img/") || u.contains("cover") || u.contains("water")) return false
+    return u.contains("kwaicdn.com") || u.contains("chenzhongtech.com") ||
+        u.contains("gifshow.com") || u.contains("kwai-player") ||
+        u.contains("kwai") || u.contains("kuaishou") ||
+        u.contains(".mp4") || u.contains(".m3u8")
 }
 
 /**

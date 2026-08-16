@@ -29,19 +29,9 @@
     var SKIP_KEYS = { mainMvUrls: 1, manifest: 1, manifestH265: 1 };
     function walk(node, depth) {
         if (!node || depth > 10 || typeof node !== 'object') return;
+        // 只下载视频：仅收集无水印播放源 photoUrl，跳过封面(coverUrl)与图集(images)
         if (typeof node.photoUrl === 'string' && node.photoUrl.indexOf('http') === 0 && !node.photoUrl.endsWith('.m3u8')) {
             add(node.photoUrl);
-        }
-        if (typeof node.coverUrl === 'string' && node.coverUrl.indexOf('http') === 0) {
-            add(node.coverUrl);
-        }
-        if (node.images && Array.isArray(node.images)) {
-            for (var i = 0; i < node.images.length; i++) {
-                var it = node.images[i];
-                var u = (it && typeof it === 'object') ? it.url
-                       : (typeof it === 'string' ? it : null);
-                if (u) add(u);
-            }
         }
         // 顺带收集标题(caption)与作者(authorName/author.name)
         if (!foundCaption && typeof node.caption === 'string' && node.caption.trim()) {
@@ -74,7 +64,7 @@
             walk(stateSources[s], 0);
         }
 
-        // 兜底：__INITIAL_STATE__ 没抠到时，扫描页面 <video>/<img>
+        // 兜底：__INITIAL_STATE__ 没抠到时，仅扫描页面 <video>（不扫 <img>，避免下载封面/图集图片）
         if (urls.length === 0) {
             var vids = document.querySelectorAll('video');
             for (var i = 0; i < vids.length; i++) {
@@ -84,13 +74,6 @@
                 add(v.getAttribute('poster'));
                 var ss = v.querySelectorAll('source');
                 for (var j = 0; j < ss.length; j++) { add(ss[j].src); add(ss[j].getAttribute('data-src')); }
-            }
-            var imgs = document.querySelectorAll('img');
-            for (var m = 0; m < imgs.length; m++) {
-                var im = imgs[m];
-                add(im.src);
-                add(im.getAttribute('data-src'));
-                add(im.getAttribute('data-original'));
             }
         }
 

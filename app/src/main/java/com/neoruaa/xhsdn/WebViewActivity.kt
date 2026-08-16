@@ -594,16 +594,20 @@ private fun WebViewScreen(
                         it.contains("ib.douyin.com") ||
                         it.contains(".mp4")
                     )
-                    // 快手视频嗅探（PC/H5 详情页 CDN 特征）
-                    val isKuaishouVideo = source == "kuaishou" && (
-                        it.contains("kwaicdn.com") ||
-                        it.contains("chenzhongtech.com") ||
-                        it.contains("gifshow.com") ||
-                        it.contains("kwai-player") ||
-                        it.contains("kwai") ||
-                        it.contains("kuaishou") ||
-                        it.contains(".mp4")
-                    )
+                    // 快手视频嗅探（PC/H5 详情页 CDN 特征）；先排除封面/图集等图片资源，只认视频
+                    val isKuaishouVideo = source == "kuaishou" && run {
+                        val ku = it.lowercase()
+                        val isKuaishouImage = ku.endsWith(".jpg") || ku.endsWith(".jpeg") || ku.endsWith(".png") ||
+                            ku.endsWith(".webp") || ku.endsWith(".gif") ||
+                            ku.contains(".jpg?") || ku.contains(".png?") || ku.contains(".webp?") ||
+                            ku.contains("/img/") || ku.contains("cover") || ku.contains("water")
+                        !isKuaishouImage && (
+                            ku.contains("kwaicdn.com") || ku.contains("chenzhongtech.com") ||
+                            ku.contains("gifshow.com") || ku.contains("kwai-player") ||
+                            ku.contains("kwai") || ku.contains("kuaishou") ||
+                            ku.contains(".mp4") || ku.contains(".m3u8")
+                        )
+                    }
 
                     if (isXhsVideo || isDouyinVideo || isKuaishouVideo) {
                         if (!sniffedVideoUrls.contains(it)) {
