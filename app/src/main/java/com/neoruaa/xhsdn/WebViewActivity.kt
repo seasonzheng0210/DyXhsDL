@@ -304,8 +304,8 @@ private fun WebViewScreen(
         })
     ) { padding ->
         if (invisible) {
-            // 直达下载浮层：透明背景，仅展示「解析中」；WebView 在后台（INVISIBLE）跑 a_bogus 签名，
-            // 成功后由 onResult 直接下载，用户全程不看到抖音/快手/小红书网页。
+            // 直达下载：透明背景、不绘制任何浮层。WebView 在后台（INVISIBLE）跑提取，
+            // 成功后由 onResult 直接下载。用户全程看不到抖音/快手/小红书网页，也不弹「解析中」卡片。
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -315,33 +315,6 @@ private fun WebViewScreen(
                     factory = { webView.apply { layoutParams = android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT) } },
                     modifier = Modifier.fillMaxSize()
                 )
-                Box(
-                    modifier = Modifier.align(Alignment.Center)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .background(MiuixTheme.colorScheme.surface, ContinuousRoundedRectangle(16.dp))
-                            .padding(horizontal = 22.dp, vertical = 18.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = "正在解析视频，请稍候…",
-                            fontSize = 14.sp,
-                            color = MiuixTheme.colorScheme.onSurface
-                        )
-                        if (loading) {
-                            LinearProgressIndicator(progress = progress / 100f, color = MiuixTheme.colorScheme.primary)
-                        } else {
-                            LinearProgressIndicator(color = MiuixTheme.colorScheme.primary)
-                        }
-                        Text(
-                            text = if (loading) "页面加载中" else "正在提取视频地址…",
-                            fontSize = 12.sp,
-                            color = MiuixTheme.colorScheme.primary
-                        )
-                    }
-                }
             }
         } else {
         Column(

@@ -946,7 +946,9 @@ class MainActivity : ComponentActivity() {
                                 totalFiles = directUrls.size
                             )
                             com.neoruaa.xhsdn.data.TaskManager.updateTaskStatus(batchTaskId, com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING)
-                            viewModel.onWebCrawlResult(directUrls, "", batchTaskId)
+                            // 只走服务 startWebCrawl（已按 host 带 Referer/UA 下抖音 CDN）。
+                            // 不再调 onWebCrawlResult：XHSDownloader 处理不了抖音直链，会与 startWebCrawl 抢同一条 task，
+                            // 导致主页下载任务卡在 DOWNLOADING（显示「停止」）。
                             com.neoruaa.xhsdn.DownloadService.startWebCrawl(this@MainActivity, directUrls, "", batchTaskId)
                         } else {
                             showToast("主页视频解析失败（可能需登录），请在设置中登录抖音后重试")
@@ -999,7 +1001,9 @@ class MainActivity : ComponentActivity() {
                 ).also {
                     com.neoruaa.xhsdn.data.TaskManager.updateTaskStatus(it, com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING)
                 }
-                viewModel.onWebCrawlResult(videoUrls, content, taskToUse)
+                // 只走服务的 startWebCrawl（FileDownloader，已按 host 带 Referer/UA 下快手 CDN）。
+                // 不要再用 onWebCrawlResult：那条是 XHSDownloader（小红书专用），处理不了快手 CDN，
+                // 会与 startWebCrawl 抢同一条 taskId，导致任务状态卡在 DOWNLOADING（显示「停止」）。
                 com.neoruaa.xhsdn.DownloadService.startWebCrawl(this, videoUrls, content, taskToUse)
                 return
             }

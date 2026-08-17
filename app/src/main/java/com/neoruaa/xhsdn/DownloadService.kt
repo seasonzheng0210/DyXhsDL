@@ -647,8 +647,18 @@ class DownloadService : Service() {
 
                 finalUrls.forEach { rawUrl ->
                     val transformed = rawUrl
-                    val isVideoUrl = transformed.contains(".mp4") || transformed.contains("sns-video")
-                        || transformed.contains("aweme.snssdk.com") || transformed.contains("douyinvod.com")
+                    val low = transformed.lowercase()
+                    // 视频直链判定：命中抖音/快手系 CDN（含无扩展名的播放直链）按视频处理，带对应站点 Referer/UA
+                    val isVideoUrl = low.contains(".mp4") || low.contains("sns-video")
+                        || low.contains("aweme.snssdk.com") || low.contains("douyinvod.com")
+                        || low.contains("kwaicdn") || low.contains("chenzhongtech")
+                        || low.contains("gifshow") || low.contains("kwai") || low.contains("tiktokcdn")
+                    // 按 host 选择 Referer/UA：抖音/快手 CDN 不带 Referer 常被 403，与 downloadDirectVideo 保持一致
+                    val (referer, ua) = when {
+                        low.contains("douyin") -> DouyinParser.REFERER to DouyinParser.MOBILE_UA
+                        low.contains("kuaishou") -> "https://www.kuaishou.com/" to KuaishouParser.MOBILE_UA
+                        else -> null to DIRECT_UA
+                    }
                     val extension = when {
                         transformed.contains(".mp4") -> "mp4"
                         transformed.contains(".png") -> "png"
@@ -657,9 +667,11 @@ class DownloadService : Service() {
                         else -> "jpg"
                     }
                     val fileName = "webview_${System.currentTimeMillis()}_${completed.get() + 1}.$extension"
-                    // 视频类（含第三方直链如抖音系 CDN）用移动 UA 直连，避免默认 Referer 被拦
                     val ok = if (isVideoUrl) {
-                        runCatching { downloader.downloadFile(transformed, fileName, null, DIRECT_UA) }.getOrElse { false }
+                        // 视频类：解析最终直链（跟随 302）后用对应站点 Referer/UA 直连，失败回退原 URL 重试一次
+                        val resolved = resolveFinalUrl(transformed, ua, referer) ?: transformed
+                        runCatching { downloader.downloadFile(resolved, fileName, referer, ua) }.getOrElse { false }
+                            || runCatching { downloader.downloadFile(transformed, fileName, referer, ua) }.getOrElse { false }
                     } else {
                         runCatching { downloader.downloadFile(transformed, fileName) }.getOrElse { false }
                     }
