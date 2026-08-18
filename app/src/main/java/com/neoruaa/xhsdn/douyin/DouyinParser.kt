@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -330,8 +331,10 @@ object DouyinParser {
      * 从作品 JSON 中提取图集图片地址。
      *  - 抖音官方字段 images[i].url_list[0]（优先）；
      *  - 旧版 / TikTok 风格 image_post_info.image_list[i] 的
-     *    origin_image / display_image / url_list（清晰度优先）。
-     * 任一结构取到图片即返回，顺序：images[] 在前。
+     *    origin_image / display_image / url_list（清晰度优先）；
+     *  - 兜底：在 image_post_info 内递归扫描任意 url_list[0]（兼容抖音字段命名/层级变动，
+     *    例如某些图文帖把图集藏在更深一层或改用新键名，导致前两步漏抓 → 误判成视频）。
+     * 图文帖被误判成视频（下成"随机视频"）多源于此，故这里尽量多抓。
      */
     private fun extractDouyinImages(data: JSONObject): List<String> {
         val result = mutableListOf<String>()
@@ -358,7 +361,36 @@ object DouyinParser {
             val u = urlList?.optString(0)?.takeIf { s -> s.isNotBlank() }
             if (u != null) result.add(u)
         }
+        if (result.isNotEmpty()) return result
+
+        // 3) 兜底：递归扫描 image_post_info 内任意 url_list[0]（兼容字段命名/层级变动）
+        result.addAll(scanImageUrls(ipi))
         return result
+    }
+
+    /**
+     * 递归扫描 JSONObject/JSONArray，收集所有 url_list[0] 中以 http(s) 开头的地址。
+     * 用于图文帖图集字段结构变动时的兜底提取（避免误判为视频）。深度限制防止异常嵌套。
+     */
+    private fun scanImageUrls(obj: Any?, depth: Int = 0): List<String> {
+        val out = mutableListOf<String>()
+        if (depth > 6 || obj == null) return out
+        when (obj) {
+            is JSONObject -> {
+                obj.keys().forEach { k ->
+                    if (k == "url_list") {
+                        val arr = obj.optJSONArray(k)
+                        arr?.optString(0)?.takeIf { it.isNotBlank() && it.startsWith("http") }?.let { out.add(it) }
+                    } else {
+                        out.addAll(scanImageUrls(obj.opt(k), depth + 1))
+                    }
+                }
+            }
+            is JSONArray -> {
+                for (i in 0 until obj.length()) out.addAll(scanImageUrls(obj.opt(i), depth + 1))
+            }
+        }
+        return out
     }
 
     /** 把作品描述清洗成安全的文件名（保留前 80 字）。 */
