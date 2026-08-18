@@ -1296,7 +1296,8 @@ private fun MainScreen(
                         // 正常日志查看对话框（与失败日志对称，便于对照排查）
                         if (showNormalLogDialog) {
                             val logCtx = LocalContext.current
-                            val logContent = DownloadLogger.getNormalLogContent(logCtx)
+                            var normalLogVersion by remember { mutableStateOf(0) }
+                            val logContent = remember(normalLogVersion) { DownloadLogger.getNormalLogContent(logCtx) }
                             WindowDialog(
                                 title = stringResource(R.string.normal_log_title),
                                 show = true,
@@ -1325,6 +1326,15 @@ private fun MainScreen(
                                         horizontalArrangement = Arrangement.End,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
+                                        TextButton(
+                                            text = stringResource(R.string.clear_normal_log),
+                                            onClick = {
+                                                DownloadLogger.clearNormalLog(logCtx)
+                                                normalLogVersion++
+                                                android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.normal_log_cleared), android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        )
+                                        Spacer(Modifier.width(8.dp))
                                         TextButton(
                                             text = stringResource(R.string.cancel),
                                             onClick = { showNormalLogDialog = false }

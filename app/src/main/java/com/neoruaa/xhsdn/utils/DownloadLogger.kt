@@ -76,6 +76,19 @@ object DownloadLogger {
         }
     }
 
+    /**
+     * 清除正常日志：仅删除 normal.log，保留 failures.log（失败记录）。
+     * 删除后下次写入会自动重建文件，不影响后续日志。
+     */
+    @Synchronized
+    fun clearNormalLog(context: Context) {
+        runCatching {
+            File(resolveDir(context), FILE_NORMAL).delete()
+        }.onFailure {
+            android.util.Log.e(TAG, "clear normal log failed: ${it.message}")
+        }
+    }
+
     fun getNormalLogFilePath(context: Context) =
         File(resolveDir(context), FILE_NORMAL).absolutePath
 

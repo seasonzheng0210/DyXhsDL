@@ -193,6 +193,9 @@ object DouyinParser {
         if (itemList.length() == 0) return null
 
         val data = itemList.getJSONObject(0)
+        // 校验返回项确为目标作品：iteminfo 按 item_ids 查询通常直接匹配；
+        // 但偶发错位/空响应时若不校验 id，会把图文帖误判成视频，故显式校验。
+        if (data.optString("aweme_id", "") != id) return null
         val safeTitle = safeTitleOf(data.optString("desc", "").trim().ifEmpty { "douyin_$id" }, id)
 
         // 图集优先（抖音字段 images[]，回退 image_post_info）
@@ -239,7 +242,18 @@ object DouyinParser {
             ?: return null
         if (list.length() == 0) return null
 
-        val data = list.getJSONObject(0)
+        // 在列表中查找 aweme_id 匹配目标 id 的作品。
+        // 关键修复：移动端 feed 接口在匿名请求（App 的 OkHttp 不带 WebView 登录 Cookie）下会忽略
+        // aweme_id、返回泛推荐流（第一条是随机视频）。若不校验 id，就会把图文帖误判成「随机视频」下，
+        // 这正是「抖音图文帖下成随机视频」的根因。找不到匹配项则返回 null，让调用方试下一个候选源
+        // （最终落到 share/note 页面，其含正确图集数据）。匹配到目标帖时也会正确走 images[] → IMAGE。
+        val data = run {
+            for (i in 0 until list.length()) {
+                val it = list.optJSONObject(i) ?: continue
+                if (it.optString("aweme_id", "") == id) return@run it
+            }
+            null
+        } ?: return null
         val safeTitle = safeTitleOf(data.optString("desc", "").trim().ifEmpty { "douyin_$id" }, id)
 
         // 图集优先

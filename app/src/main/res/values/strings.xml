@@ -204,6 +204,8 @@
     <string name="menu_normal_log">Normal Log</string>
     <string name="normal_log_title">Download Normal Log</string>
     <string name="normal_log_empty">No normal logs recorded</string>
+    <string name="clear_normal_log">Clear Normal</string>
+    <string name="normal_log_cleared">Normal log cleared</string>
     <string name="menu_package_log">Package Logs</string>
     <string name="package_log_share">Share logs</string>
     <string name="package_log_success">Logs packaged: %1$s</string>

@@ -201,6 +201,8 @@
     <string name="log_copied">日誌已複製</string>
     <string name="clear_failure_log">清除失敗</string>
     <string name="failure_log_cleared">失敗日誌已清除</string>
+    <string name="clear_normal_log">清除正常</string>
+    <string name="normal_log_cleared">正常日誌已清除</string>
     <string name="fg_channel_name">背景下載</string>
     <string name="fg_service_running">正在背景下載</string>
 
