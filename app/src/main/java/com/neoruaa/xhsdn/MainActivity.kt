@@ -908,15 +908,16 @@ class MainActivity : ComponentActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == WEBVIEW_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
-            val urls = data.getStringArrayListExtra("image_urls") ?: emptyList()
+            val imageUrls = data.getStringArrayListExtra("image_urls") ?: emptyList()
+            val videoUrls = data.getStringArrayListExtra("urls") ?: emptyList()
             val content = data.getStringExtra("content_text")
             val taskId = data.getLongExtra("task_id", -1L).takeIf { it > 0 }
             val source = data.getStringExtra("source") ?: "xhs"
             val forceDirect = data.getBooleanExtra("force_direct", false)
 
             if (source == "douyin_home") {
-                // 主页下载：urls 为 WebView 收集到的视频页链接（/video/{id}），逐条解析直链后批量下载
-                val videoPageUrls = urls.filter { it.contains("/video/") }
+                // 主页下载：videoUrls 为 WebView 收集到的视频页链接（/video/{id}），逐条解析直链后批量下载
+                val videoPageUrls = videoUrls.filter { it.contains("/video/") }
                 if (videoPageUrls.isEmpty()) {
                     showToast("未收集到主页视频链接，请重试或登录后重试")
                     return
@@ -963,15 +964,22 @@ class MainActivity : ComponentActivity() {
                 if (forceDirect) {
                     // 抖音 HTTP 直解已被风控打死，走此路必败；引导用户登录后重试提取
                     showToast("抖音 HTTP 直解已失效（平台风控），请点「去登录抖音」登录后点「重试提取」")
-                } else if (urls.isNotEmpty()) {
-                    // WebView 提取成功：直链走中立下载，不进 HTTP 解析器
+                } else if (imageUrls.isNotEmpty()) {
+                    // 图文/图集帖：imageUrls 非空 ⟺ 是抖音图文帖，下载全部图片（不再误当视频下）
+                    com.neoruaa.xhsdn.DownloadService.startDownloadDouyinImages(
+                        this, imageUrls, webViewUrl, taskId
+                    )
+                } else if (videoUrls.isNotEmpty()) {
+                    // 视频帖：直链走中立下载，不进 HTTP 解析器
                     com.neoruaa.xhsdn.DownloadService.startDownload(
                         this,
-                        urls.firstOrNull { it.startsWith("http") } ?: webViewUrl,
-                        "douyin"
+                        videoUrls.firstOrNull { it.startsWith("http") } ?: webViewUrl,
+                        "douyin",
+                        taskId
                     )
                 } else {
-                    showToast("WebView 未能提取抖音视频，可重试或点「直链解析」")
+                    // 两条列表都为空：退回 HTTP 直解重新解析（拿到结构化结果，正确分流图文/视频）
+                    com.neoruaa.xhsdn.DownloadService.startDownload(this, webViewUrl, "douyin")
                 }
                 return
             }
@@ -983,13 +991,13 @@ class MainActivity : ComponentActivity() {
                     showToast("快手 HTTP 直解已失效（平台风控），请点「去登录快手」登录后点「重试提取」")
                     return
                 }
-                if (urls.isEmpty()) {
+                if (videoUrls.isEmpty()) {
                     showToast("WebView 未能提取快手作品，可重试或点「直链解析」")
                     return
                 }
                 // 快手只要视频：从 WebView 嗅探结果中过滤出视频直链，排除图集图片
-                val videoUrls = urls.filter { isKuaishouVideoUrl(it) }
-                if (videoUrls.isEmpty()) {
+                val videoUrlsFiltered = videoUrls.filter { isKuaishouVideoUrl(it) }
+                if (videoUrlsFiltered.isEmpty()) {
                     showToast("WebView 提取结果中未找到视频直链，可重试或登录后重试提取")
                     return
                 }
@@ -997,18 +1005,18 @@ class MainActivity : ComponentActivity() {
                     noteUrl = webViewUrl,
                     noteTitle = null,
                     noteType = com.neoruaa.xhsdn.data.NoteType.VIDEO,
-                    totalFiles = videoUrls.size
+                    totalFiles = videoUrlsFiltered.size
                 ).also {
                     com.neoruaa.xhsdn.data.TaskManager.updateTaskStatus(it, com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING)
                 }
                 // 只走服务的 startWebCrawl（FileDownloader，已按 host 带 Referer/UA 下快手 CDN）。
                 // 不要再用 onWebCrawlResult：那条是 XHSDownloader（小红书专用），处理不了快手 CDN，
                 // 会与 startWebCrawl 抢同一条 taskId，导致任务状态卡在 DOWNLOADING（显示「停止」）。
-                com.neoruaa.xhsdn.DownloadService.startWebCrawl(this, videoUrls, content, taskToUse)
+                com.neoruaa.xhsdn.DownloadService.startWebCrawl(this, videoUrlsFiltered, content, taskToUse)
                 return
             }
 
-            if (urls.isNotEmpty()) {
+            if (imageUrls.isNotEmpty()) {
                 // Check if a task ID was passed from WebViewActivity (meaning task was already created)
                 val taskToUse = if (taskId != null) {
                     // Task was already created in WebViewActivity
@@ -1020,7 +1028,7 @@ class MainActivity : ComponentActivity() {
                         noteUrl = webViewUrl,
                         noteTitle = null,
                         noteType = com.neoruaa.xhsdn.data.NoteType.UNKNOWN,
-                        totalFiles = urls.size
+                        totalFiles = imageUrls.size
                     )
 
                     // Update the task status to DOWNLOADING immediately since we have the URLs
@@ -1028,9 +1036,9 @@ class MainActivity : ComponentActivity() {
                     newTaskId
                 }
 
-                viewModel.onWebCrawlResult(urls, content, taskToUse)
+                viewModel.onWebCrawlResult(imageUrls, content, taskToUse)
                 // 网页爬取同样需要在后台持续，转派前台服务执行
-                com.neoruaa.xhsdn.DownloadService.startWebCrawl(this, urls, content, taskToUse)
+                com.neoruaa.xhsdn.DownloadService.startWebCrawl(this, imageUrls, content, taskToUse)
             } else {
                 showToast("未发现可下载的资源")
             }

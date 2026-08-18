@@ -129,9 +129,10 @@ class WebViewActivity : ComponentActivity() {
                     direct = direct,
                     fallback = fallback,
                     onBack = { flushWebViewCookies(); finish() },
-                    onResult = { urls, content, taskId, forceDirect ->
+                    onResult = { videoUrls: List<String>, imageUrls: List<String>, content: String, taskId: Long?, forceDirect: Boolean ->
                         val resultIntent = Intent().apply {
-                            putStringArrayListExtra("image_urls", ArrayList(urls))
+                            putStringArrayListExtra("urls", ArrayList(videoUrls))
+                    putStringArrayListExtra("image_urls", ArrayList(imageUrls))
                             if (content.isNotEmpty()) {
                                 putExtra("content_text", content)
                             }
@@ -163,7 +164,7 @@ private fun WebViewScreen(
     direct: Boolean = false,
     fallback: MutableState<Boolean> = remember { mutableStateOf(false) },
     onBack: () -> Unit,
-    onResult: (List<String>, String, Long?, Boolean) -> Unit
+    onResult: (List<String>, List<String>, String, Long?, Boolean) -> Unit
 ) {
     val context = LocalContext.current
     var urlText by remember { mutableStateOf(TextFieldValue(initialUrl ?: "")) }
@@ -178,6 +179,8 @@ private fun WebViewScreen(
     val sniffedVideoUrls = remember { mutableSetOf<String>() }
     // Set to store video URLs captured by the injected XHR/fetch hook (web_inject.js)
     val capturedUrls = remember { mutableSetOf<String>() }
+    // 帖子图集图片（抖音图文帖）：由 web_inject.js 的 onImageUrl 桥回传，与视频严格分离
+    val capturedImageUrls = remember { mutableSetOf<String>() }
     // 主页爬取模式：收集到的全部视频页 URL（/video/{id}）
     val collectedVideoUrls = remember { mutableSetOf<String>() }
     // Guard to ensure we only finish once
@@ -223,6 +226,10 @@ private fun WebViewScreen(
                 @JavascriptInterface
                 fun onVideoUrl(url: String) {
                     if (url.isNotBlank()) capturedUrls.add(url)
+                }
+                @JavascriptInterface
+                fun onImageUrl(url: String) {
+                    if (url.isNotBlank()) capturedImageUrls.add(url)
                 }
             }, "AndroidVideoBridge")
 
@@ -273,6 +280,7 @@ private fun WebViewScreen(
             extractionFailed.value = false
             finished.value = false
             capturedUrls.clear()
+            capturedImageUrls.clear()
             sniffedVideoUrls.clear()
             statusMsg.value = "已重新加载，正在提取视频地址…"
             val target = retryUrl.value ?: urlText.text
@@ -373,7 +381,7 @@ private fun WebViewScreen(
                                     finishHomepageCrawl(context, webView, collectedVideoUrls, onResult, finished, statusMsg)
                                 }
                             } else if (!finished.value) {
-                                extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0, statusMsg, extractionFailed, retryUrl, direct, fallback)
+                                extractImages(context, webView, sniffedVideoUrls, capturedUrls, capturedImageUrls, source, finished, onResult, 0, statusMsg, extractionFailed, retryUrl, direct, fallback)
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -391,7 +399,7 @@ private fun WebViewScreen(
                             onClick = {
                                 if (!finished.value) {
                                     finished.value = true
-                                    onResult(emptyList(), "", null, true)
+                                    onResult(emptyList(), emptyList(), "", null, true)
                                 }
                             },
                             modifier = Modifier.weight(1f),
@@ -527,7 +535,7 @@ private fun WebViewScreen(
                     statusMsg.value = "页面已加载，正在提取视频地址…"
                     view?.postDelayed({
                         if (!finished.value) {
-                            extractImages(context, webView, sniffedVideoUrls, capturedUrls, source, finished, onResult, 0, statusMsg, extractionFailed, retryUrl, direct, fallback)
+                            extractImages(context, webView, sniffedVideoUrls, capturedUrls, capturedImageUrls, source, finished, onResult, 0, statusMsg, extractionFailed, retryUrl, direct, fallback)
                         }
                     }, 1500)
                 }
@@ -667,9 +675,10 @@ private fun extractImages(
     webView: WebView,
     sniffedUrls: Set<String>,
     capturedUrls: Set<String>,
+    capturedImageUrls: Set<String>,
     source: String,
     finished: MutableState<Boolean>,
-    onResult: (List<String>, String, Long?, Boolean) -> Unit,
+    onResult: (List<String>, List<String>, String, Long?, Boolean) -> Unit,
     attempt: Int,
     statusMsg: MutableState<String>,
     extractionFailed: MutableState<Boolean>,
@@ -691,7 +700,7 @@ private fun extractImages(
         webView.evaluateJavascript(jsCode) { result ->
             try {
                 if (result == null || result == "null" || result.isEmpty()) {
-                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg, extractionFailed, retryUrl, direct, fallback)
+                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, capturedImageUrls, source, finished, onResult, attempt, statusMsg, extractionFailed, retryUrl, direct, fallback)
                     return@evaluateJavascript
                 }
                 var cleanResult = result
@@ -705,28 +714,52 @@ private fun extractImages(
                 }
                 val json = org.json.JSONObject(cleanResult)
                 val urlsArray = json.getJSONArray("urls")
+                val jsImageArr = json.optJSONArray("image_urls")
                 val contentObj = json.optJSONObject("content")
                 val contentText = contentObj?.optString("content", "") ?: ""
 
-                val allUrls = mutableListOf<String>()
-                for (i in 0 until urlsArray.length()) {
-                    val url = urlsArray.getString(i)
-                    if (url.isNullOrEmpty()) continue
-                    if (url.startsWith("http") && !url.startsWith("blob:") && !url.startsWith("data:") && !url.endsWith(".m3u8")) {
-                        allUrls.add(url)
+                // 按平台分流：抖音/快手把「视频直链」与「帖子图集图片」分成两条列表；
+                // 小红书没有视频/图片之分，提取器返回的 urls 即图片，统一走 image_urls（urls 留空）。
+                val videoUrls = mutableListOf<String>()
+                val imageUrls = mutableListOf<String>()
+                if (source == "xhs") {
+                    for (i in 0 until urlsArray.length()) {
+                        val url = urlsArray.getString(i)
+                        if (url.startsWith("http") && !url.startsWith("blob:") && !url.startsWith("data:") && !url.endsWith(".m3u8")) {
+                            imageUrls.add(url)
+                        }
                     }
+                } else {
+                    // 抖音/快手：urls = 视频直链；image_urls = 帖子图集图片（仅抖音图文帖有）
+                    for (i in 0 until urlsArray.length()) {
+                        val url = urlsArray.getString(i)
+                        if (url.startsWith("http") && !url.startsWith("blob:") && !url.startsWith("data:") && !url.endsWith(".m3u8")) {
+                            videoUrls.add(url)
+                        }
+                    }
+                    if (jsImageArr != null) {
+                        for (i in 0 until jsImageArr.length()) {
+                            val url = jsImageArr.getString(i)
+                            if (url.startsWith("http") && !url.startsWith("blob:") && !url.startsWith("data:") && !url.endsWith(".m3u8")) {
+                                imageUrls.add(url)
+                            }
+                        }
+                    }
+                    // 合并嗅探到的视频地址（onLoadResource，仅视频 CDN）与 XHR/fetch 钩子捕获的视频
+                    for (u in sniffedUrls) if (!u.endsWith(".m3u8")) videoUrls.add(u)
+                    for (u in capturedUrls) if (!u.endsWith(".m3u8")) videoUrls.add(u)
+                    // 抖音图文帖：钩子捕获的帖子图集图片（images[]）单独成列表
+                    for (u in capturedImageUrls) if (!u.endsWith(".m3u8")) imageUrls.add(u)
                 }
-                // 合并嗅探到的地址与 XHR/fetch 钩子捕获到的地址（跳过无法直下的 HLS）
-                for (u in sniffedUrls) if (!u.endsWith(".m3u8")) allUrls.add(u)
-                for (u in capturedUrls) if (!u.endsWith(".m3u8")) allUrls.add(u)
 
-                if (allUrls.isNotEmpty()) {
+                if (videoUrls.isNotEmpty() || imageUrls.isNotEmpty()) {
                     // Create a task for the web crawl
+                    val totalFiles = videoUrls.size + imageUrls.size
                     val taskId = com.neoruaa.xhsdn.data.TaskManager.createTask(
                         noteUrl = webView.url ?: "",
                         noteTitle = webView.title ?: "",
                         noteType = com.neoruaa.xhsdn.data.NoteType.UNKNOWN,
-                        totalFiles = allUrls.size,
+                        totalFiles = totalFiles,
                         noteContent = contentText
                     )
 
@@ -735,12 +768,12 @@ private fun extractImages(
 
                     finished.value = true
                     statusMsg.value = ""
-                    onResult(allUrls, contentText, taskId, false)
+                    onResult(videoUrls, imageUrls, contentText, taskId, false)
                 } else {
-                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg, extractionFailed, retryUrl, direct, fallback)
+                    scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, capturedImageUrls, source, finished, onResult, attempt, statusMsg, extractionFailed, retryUrl, direct, fallback)
                 }
             } catch (e: Exception) {
-                scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt, statusMsg, extractionFailed, retryUrl)
+                scheduleNextOrFallback(context, webView, sniffedUrls, capturedUrls, capturedImageUrls, source, finished, onResult, attempt, statusMsg, extractionFailed, retryUrl)
             }
         }
     }, if (attempt == 0) 10 else 0)
@@ -751,9 +784,10 @@ private fun scheduleNextOrFallback(
     webView: WebView,
     sniffedUrls: Set<String>,
     capturedUrls: Set<String>,
+    capturedImageUrls: Set<String>,
     source: String,
     finished: MutableState<Boolean>,
-    onResult: (List<String>, String, Long?, Boolean) -> Unit,
+    onResult: (List<String>, List<String>, String, Long?, Boolean) -> Unit,
     attempt: Int,
     statusMsg: MutableState<String>,
     extractionFailed: MutableState<Boolean>,
@@ -772,7 +806,7 @@ private fun scheduleNextOrFallback(
         statusMsg.value = "正在提取视频地址…（第 ${attempt + 1} 次轮询）"
         webView.postDelayed({
             if (!finished.value) {
-                extractImages(context, webView, sniffedUrls, capturedUrls, source, finished, onResult, attempt + 1, statusMsg, extractionFailed, retryUrl, direct, fallback)
+                extractImages(context, webView, sniffedUrls, capturedUrls, capturedImageUrls, source, finished, onResult, attempt + 1, statusMsg, extractionFailed, retryUrl, direct, fallback)
             }
         }, 800)
     } else {
@@ -788,7 +822,7 @@ private fun scheduleNextOrFallback(
             val label = if (source == "douyin") "抖音" else if (source == "kuaishou") "快手" else "该平台"
             retryUrl.value = diagUrl
             extractionFailed.value = true
-            statusMsg.value = "提取超时（钩子${capturedUrls.size}/嗅探${sniffedUrls.size}）。${label}可能要求登录，可在本窗口登录后点「重试提取」。"
+            statusMsg.value = "提取超时（钩子${capturedUrls.size}/图片${capturedImageUrls.size}/嗅探${sniffedUrls.size}）。${label}可能要求登录，可在本窗口登录后点「重试提取」。"
             Toast.makeText(context, "提取超时，可登录${label}后重试", Toast.LENGTH_LONG).show()
             webView.evaluateJavascript(
                 "(function(){try{var vs=document.querySelectorAll('video').length;var im=document.querySelectorAll('img').length;var t=(document.title||'').slice(0,80);var b=(document.body?(document.body.innerText||''):'').slice(0,120).replace(/\\n/g,' ');return JSON.stringify({videos:vs,imgs:im,title:t,body:b});}catch(e){return JSON.stringify({err:String(e)});}})()"
@@ -814,7 +848,7 @@ private fun crawlHomepage(
     webView: WebView,
     collectedUrls: MutableSet<String>,
     statusMsg: MutableState<String>,
-    onResult: (List<String>, String, Long?, Boolean) -> Unit,
+    onResult: (List<String>, List<String>, String, Long?, Boolean) -> Unit,
     attempt: Int,
     finished: MutableState<Boolean>
 ) {
@@ -870,14 +904,14 @@ private fun finishHomepageCrawl(
     context: android.content.Context,
     webView: WebView,
     collectedUrls: MutableSet<String>,
-    onResult: (List<String>, String, Long?, Boolean) -> Unit,
+    onResult: (List<String>, List<String>, String, Long?, Boolean) -> Unit,
     finished: MutableState<Boolean>,
     statusMsg: MutableState<String>
 ) {
     if (finished.value) return
     finished.value = true
     if (collectedUrls.isNotEmpty()) {
-        onResult(collectedUrls.toList(), "", null, false)
+        onResult(collectedUrls.toList(), emptyList(), "", null, false)
     } else {
         Toast.makeText(context, "未收集到主页视频，请确认已登录抖音或重试", Toast.LENGTH_LONG).show()
         statusMsg.value = "未收集到视频，请在登录后重试"

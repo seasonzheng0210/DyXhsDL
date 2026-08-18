@@ -29,6 +29,19 @@
         } catch (e) {}
     }
 
+    // 帖子图集图片：只认 images[]，单独回传，绝不混入视频/封面（修复图文帖被误当视频下）
+    function postImage(u) {
+        try {
+            if (!u || typeof u !== 'string') return;
+            u = String(u).trim();
+            if (u.indexOf('//') === 0) u = 'https:' + u;
+            if (u.indexOf('http') !== 0) return;
+            if (u.indexOf('blob:') === 0 || u.indexOf('data:') === 0) return;
+            if (u.endsWith('.m3u8')) return;
+            if (window.AndroidVideoBridge) window.AndroidVideoBridge.onImageUrl(u);
+        } catch (e) {}
+    }
+
     // 递归扫描对象树，抠出视频/图集地址
     function scanObj(node, depth) {
         if (!node || depth > 14 || typeof node !== 'object') return;
@@ -44,7 +57,7 @@
             for (var j = 0; j < node.images.length; j++) {
                 var it = node.images[j];
                 var u = (it && typeof it === 'object') ? it.url : (typeof it === 'string' ? it : null);
-                if (u) post(u);
+                if (u) postImage(u);
             }
         }
         var keys = Object.keys(node);

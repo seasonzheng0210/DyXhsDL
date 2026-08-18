@@ -101,6 +101,12 @@ class DownloadService : Service() {
                 val content = intent.getStringExtra(EXTRA_WEB_CONTENT)
                 startWebCrawl(urls, content, taskIdExtra)
             }
+            MODE_DOUYIN_IMAGES -> {
+                // 抖音图文/图集帖：WebView 兜底路径已提取出帖子图集图片，逐张下载
+                val urls = intent.getStringArrayListExtra(EXTRA_URLS) ?: emptyList()
+                val pageUrl = intent.getStringExtra(EXTRA_URL)
+                startDownloadDouyinImagesInternal(urls, pageUrl, taskIdExtra)
+            }
             else -> when (source) {
                 "douyin" -> startDouyin(url, mode, taskIdExtra)
                 "kuaishou" -> startKuaishou(url, mode, taskIdExtra)
@@ -352,6 +358,43 @@ class DownloadService : Service() {
             }
         }
         return okAll
+    }
+    // endregion
+
+    // region 抖音图文/图集下载（WebView 兜底路径）
+    /**
+     * 抖音图文/图集帖下载（WebView 兜底路径）：复用/预建 IMAGE 任务，逐张下载帖子图集图片。
+     * 与 [startDouyin] 的 IMAGE 分支同构，区别在于这里直接拿到图片直链列表、无需再 HTTP 解析。
+     */
+    private fun startDownloadDouyinImagesInternal(imageUrls: List<String>, pageUrl: String?, taskIdExtra: Long?) {
+        if (imageUrls.isEmpty()) return
+        val targetTaskId = taskIdExtra ?: TaskManager.createTask(
+            pageUrl ?: imageUrls.first(), null, NoteType.IMAGE, imageUrls.size, source = "douyin"
+        ).also { TaskManager.startTask(it) }
+        // 复用 WebView 预建任务时，把类型/总数纠正为图片（预建可能是 UNKNOWN + 视频图片合并计数）
+        TaskManager.updateTask(targetTaskId) { t -> t.copy(noteType = NoteType.IMAGE, totalFiles = imageUrls.size) }
+        scope.launch {
+            try {
+                val rawTitle = pageUrl?.split("/")?.last()?.takeIf { it.isNotBlank() } ?: "douyin_image"
+                val title = rawTitle.replace(Regex("""[\\/:*?"<>|#\n\r]"""), "_").take(80)
+                val info = DouyinMediaInfo(DouyinMediaType.IMAGE, title, null, imageUrls, null, "", DouyinParser.MOBILE_UA)
+                val downloader = FileDownloader(this@DownloadService, createCallback(targetTaskId))
+                val ok = downloadImages(downloader, info, targetTaskId)
+                TaskManager.completeTask(targetTaskId, ok, if (ok) null else "部分图片下载失败")
+                updateNotification(
+                    if (ok) getString(R.string.download_completed_notification_title)
+                    else getString(R.string.download_failed_notification_title),
+                    if (ok) getString(R.string.download_completed_files_count, imageUrls.size)
+                    else getString(R.string.download_failed_check_network),
+                    false
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "douyin images download error", e)
+            } finally {
+                taskIdExtra?.let { activeJobs.remove(it) }
+                maybeStop()
+            }
+        }
     }
     // endregion
 
@@ -820,6 +863,7 @@ class DownloadService : Service() {
         const val MODE_NORMAL = "normal"
         const val MODE_SELECTIVE = "selective"
         const val MODE_WEBCRAWL = "webcrawl"
+        const val MODE_DOUYIN_IMAGES = "douyin_images"
         private const val ACTION_STOP = "com.neoruaa.xhsdn.action.STOP"
 
         /** 网页爬取（多 URL）下载入口。 */
@@ -846,6 +890,17 @@ class DownloadService : Service() {
             val intent = Intent(context, DownloadService::class.java).apply {
                 putExtra(EXTRA_URL, url)
                 putExtra(EXTRA_SOURCE, source ?: UrlUtils.detectPlatform(url) ?: "xhs")
+                taskId?.let { putExtra(EXTRA_TASK_ID, it) }
+            }
+            context.startForegroundService(intent)
+        }
+
+        /** 抖音图文/图集帖：传入帖子图集图片直链列表，逐张下载（不进视频解析器）。 */
+        fun startDownloadDouyinImages(context: Context, imageUrls: List<String>, pageUrl: String? = null, taskId: Long? = null) {
+            val intent = Intent(context, DownloadService::class.java).apply {
+                putExtra(EXTRA_MODE, MODE_DOUYIN_IMAGES)
+                putStringArrayListExtra(EXTRA_URLS, ArrayList(imageUrls))
+                pageUrl?.let { putExtra(EXTRA_URL, it) }
                 taskId?.let { putExtra(EXTRA_TASK_ID, it) }
             }
             context.startForegroundService(intent)
