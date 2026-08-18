@@ -29,6 +29,20 @@
         } catch (e) {}
     }
 
+    // 从图集图片对象中取直链：抖音真实结构为 images[i].url_list[0]（多 CDN 候选），
+    // 旧结构可能用 .url；统一兼容。
+    function getImageUrl(it) {
+        if (!it) return null;
+        if (typeof it === 'string') return it;
+        if (Array.isArray(it.url_list) && it.url_list.length) return String(it.url_list[0]);
+        if (typeof it.url === 'string' && it.url) return it.url;
+        if (it.origin_image && Array.isArray(it.origin_image.url_list) && it.origin_image.url_list.length)
+            return String(it.origin_image.url_list[0]);
+        if (it.display_image && Array.isArray(it.display_image.url_list) && it.display_image.url_list.length)
+            return String(it.display_image.url_list[0]);
+        return null;
+    }
+
     // 帖子图集图片：只认 images[]，单独回传，绝不混入视频/封面（修复图文帖被误当视频下）
     function postImage(u) {
         try {
@@ -56,7 +70,7 @@
         if (node.images && Array.isArray(node.images)) {
             for (var j = 0; j < node.images.length; j++) {
                 var it = node.images[j];
-                var u = (it && typeof it === 'object') ? it.url : (typeof it === 'string' ? it : null);
+                var u = getImageUrl(it);
                 if (u) postImage(u);
             }
         }

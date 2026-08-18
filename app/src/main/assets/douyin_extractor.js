@@ -42,6 +42,19 @@
             if (u.endsWith('.m3u8')) return;
             if (!seenI[u]) { seenI[u] = 1; imageUrls.push(u); }
         }
+        // 从图集图片对象中取直链：抖音真实结构为 images[i].url_list[0]（多 CDN 候选），
+        // 旧结构可能用 .url；image_post_info 用 origin_image/display_image.url_list。统一在此兼容。
+        function getImageUrl(it) {
+            if (!it) return null;
+            if (typeof it === 'string') return it;
+            if (Array.isArray(it.url_list) && it.url_list.length) return String(it.url_list[0]);
+            if (typeof it.url === 'string' && it.url) return it.url;
+            if (it.origin_image && Array.isArray(it.origin_image.url_list) && it.origin_image.url_list.length)
+                return String(it.origin_image.url_list[0]);
+            if (it.display_image && Array.isArray(it.display_image.url_list) && it.display_image.url_list.length)
+                return String(it.display_image.url_list[0]);
+            return null;
+        }
 
         var content = { content: '', title: '', desc: '' };
 
@@ -61,7 +74,7 @@
             if (node.images && Array.isArray(node.images)) {
                 for (var j = 0; j < node.images.length; j++) {
                     var it = node.images[j];
-                    var u = (it && typeof it === 'object') ? it.url : (typeof it === 'string' ? it : null);
+                    var u = getImageUrl(it);
                     if (u) addImage(u);
                 }
             }
@@ -113,7 +126,7 @@
                             if (d.images && Array.isArray(d.images)) {
                                 for (var im = 0; im < d.images.length; im++) {
                                     var di = d.images[im];
-                                    var du = (di && typeof di === 'object') ? di.url : (typeof di === 'string' ? di : null);
+                                    var du = getImageUrl(di);
                                     if (du) addImage(du);
                                 }
                             }
