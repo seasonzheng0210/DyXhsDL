@@ -6,8 +6,14 @@ object UrlUtils {
      */
     fun extractFirstUrl(text: String?): String? {
         if (text.isNullOrBlank()) return null
-        val regex = Regex("https?://[\\w\\-.]+(?:/[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=%]*)?")
-        return regex.find(text)?.value
+        // 1. 标准带协议 URL
+        val re = Regex("https?://[\\w\\-.]+(?:/[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=%]*)?")
+        re.find(text)?.value?.let { return it }
+        // 2. 无协议但含已知域名的分享短链（如 v.douyin.com/xxx、iesdouyin.com/share/note/xxx、
+        //    xhslink.com/xxx、kuaishou.com/xxx）。补全 https:// 后返回，避免「链接暂不可识别」。
+        val re2 = Regex("(?:[\\w\\-]+\\.)?(douyin\\.com|iesdouyin\\.com|kuaishou\\.com|kuaishou\\.cn|gifshow\\.com|xiaohongshu\\.com|xhslink\\.com|xhslink\\.cn)(?:/[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=%]*)?")
+        re2.find(text)?.value?.let { return "https://$it" }
+        return null
     }
 
     /**

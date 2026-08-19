@@ -546,6 +546,17 @@ private fun WebViewScreen(
                 request: WebResourceRequest?
             ): Boolean {
                 val u = request?.url?.toString() ?: return false
+                // 抖音图文帖分享短链 302 到 iesdouyin.com/share/note/{id} 也是「请在抖音 App 内观看」拒绝页，
+                // 浏览器（含真机 WebView）拿不到图集数据。改写为真·桌面图文页 www.douyin.com/note/{id}，
+                // 该页在真机 WebView（带登录态 Cookie）下可正常渲染图文帖，由 web_inject.js 的 XHR 钩子
+                // 捕获 images[] 回传 onImageUrl 桥，最终走 startDownloadDouyinImages 下载全部图片。
+                // （此前缺失此改写，导致图文帖在 WebView 兜底路径加载拒绝页 → 空白、零图。）
+                val mn = Regex("""iesdouyin\.com/share/note/(\d+)""").find(u)
+                if (mn != null) {
+                    val id = mn.groupValues[1]
+                    view?.loadUrl("https://www.douyin.com/note/$id")
+                    return true
+                }
                 // 抖音分享短链 302 到 iesdouyin.com/share/video/{id} 是「请在抖音极速版内观看」拒绝页，
                 // 浏览器（含真机 WebView）拿不到视频数据。改写为真·桌面播放页 www.douyin.com/video/{id}，
                 // 该页在真机/模拟器 WebView（真实浏览器指纹）下可正常加载并由 XHR 钩子捕获播放地址。

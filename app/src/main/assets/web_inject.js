@@ -203,7 +203,7 @@
             if (typeof window.__getABogus !== 'function') return;
             var host = (location.host || '');
             if (host.indexOf('douyin.com') < 0) return;
-            var m = (location.pathname || '').match(/\/video\/(\d+)/);
+            var m = (location.pathname || '').match(/\/(?:video|note)\/(\d+)/);
             if (!m) return;
             var id = m[1];
             // 优先用拦截到的「抖音自己签过名」的 detail 请求直接重放（a_bogus 由抖音在同环境算，最稳）
