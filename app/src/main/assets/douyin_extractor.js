@@ -56,7 +56,67 @@
             return null;
         }
 
+        // ===== 图文笔记图集提取（v1.10.9 新增）=====
+        // 背景：抖音图文笔记页(www.douyin.com/note/{id})是 React SPA，笔记数据以
+        //   React Flight 水合负载(self.__pace_f.push)内嵌在初始 HTML 里，并不挂到
+        //   window._ROUTER_DATA / RENDER_DATA 等全局。旧逻辑 walk() 扫全局抓不到，
+        //   反而把页面里"相关推荐"的视频 play_addr 当成结果返回 → 图文帖被下成随机视频。
+        // 本函数直接扫整页 HTML，按图文图集专属标记 biz_tag=aweme_images（目标笔记
+        //   图集，区别于相关推荐的 RELATED_AWEME、视频封面的 pcweb_cover、头像/UI）
+        //   抠出目标笔记的全部图集直链；每张图优先无水印(tplv-dy-aweme-images)变体，
+        //   保留完整签名 query（缺一将 403）。返回去重后的图集 URL 数组。
+        function extractNoteGallery() {
+            var found = {}; // photoId -> { clean, water }
+            var html = '';
+            try { html = document.documentElement.innerHTML || ''; } catch (e) { return []; }
+            // 反转义 React Flight / JSON 转义，暴露完整图片直链
+            html = html.replace(/\\u0026/gi, '&').replace(/\\u003d/gi, '=')
+                       .replace(/\\u0025/gi, '%').replace(/\\\//g, '/');
+            var re = /https?:\/\/[^"'\s\\]*?(?:douyinpic|byteimg|ibyteimg)\.com\/[^"'\s\\]*?\.(?:webp|jpeg|jpg|png|heic)(?:\?[^"'\s\\]*)?/gi;
+            var m;
+            while ((m = re.exec(html))) {
+                var u = m[0];
+                // innerHTML 序列化会把 & 转成 &amp;，必须还原，否则带签名 query 被破坏 → 403
+                u = u.replace(/&amp;/gi, '&');
+                var lu = u.toLowerCase();
+                // 排除：相关推荐、头像、表情包、UI 资源、壁纸扩展
+                if (lu.indexOf('related_aweme') !== -1) continue;
+                if (lu.indexOf('avatar') !== -1 || lu.indexOf('tos-cn-i-avt') !== -1) continue;
+                if (lu.indexOf('im-resource') !== -1 || lu.indexOf('static-resource') !== -1) continue;
+                if (lu.indexOf('twemoji') !== -1 || lu.indexOf('emoji') !== -1) continue;
+                if (lu.indexOf('web-extension') !== -1 || lu.indexOf('pc-weboff') !== -1) continue;
+                // 只收目标图文笔记图集：biz_tag=aweme_images（图文帖 images[] 专属标记）
+                if (lu.indexOf('biz_tag=aweme_images') === -1) continue;
+                // 提取图片唯一 id（用于按图去重多 CDN/多清晰度变体）
+                var pm = u.match(/(tos-cn-i-[a-z0-9-]+\/[A-Za-z0-9]+)/i) || u.match(/(image-cut-tos-priv\/[a-z0-9]+)/i);
+                if (!pm) continue;
+                var pid = pm[1];
+                if (!found[pid]) found[pid] = { clean: null, water: null };
+                if (lu.indexOf('water-v2') !== -1 || lu.indexOf('watermark') !== -1) {
+                    if (!found[pid].water) found[pid].water = u;
+                } else if (!found[pid].clean) {
+                    found[pid].clean = u;
+                }
+            }
+            var out = [];
+            for (var pid in found) { if (found.hasOwnProperty(pid)) out.push(found[pid].clean || found[pid].water); }
+            return out;
+        }
+
         var content = { content: '', title: '', desc: '' };
+
+        // 图文笔记图集优先：命中即判定为图文帖，直接返回图集、不下任何推荐视频
+        var noteGallery = extractNoteGallery();
+        if (noteGallery.length > 0) {
+            for (var ng = 0; ng < noteGallery.length; ng++) addImage(noteGallery[ng]);
+            if (!content.title) {
+                var dt = document.title || '';
+                content.title = dt.replace(/\s*-\s*抖音\s*$/, '');
+                content.content = content.title;
+            }
+            console.log('=== Douyin Extractor === 图文笔记图集=' + imageUrls.length + '（已抑制推荐视频）');
+            return { urls: [], image_urls: imageUrls, content: content };
+        }
 
         // 1) 递归扫描已知全局，抠出嵌套的播放地址 / 图集图片
         function walk(node, depth) {
