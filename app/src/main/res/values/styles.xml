@@ -15,11 +15,21 @@
     </style>
 
     <!-- 抖音/快手/小红书「直达下载」模式：透明主题，不向用户展示平台网页本身，
-         仅显示一个「解析中」浮层；WebView 在后台（INVISIBLE）跑 a_bogus 签名与抓 token，成功后直接下载。 -->
+         仅显示一个「解析中」浮层；WebView 在后台（INVISIBLE）跑 a_bogus 签名与抓 token，成功后直接下载。
+         同时作为 WebViewActivity 的清单主题，使启动/关闭的「起始窗口」即为透明，杜绝黑窗闪动。 -->
     <style name="Theme.WebViewDirect" parent="Theme.MiuixApp">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowIsFloating">false</item>
+        <item name="android:windowAnimationStyle">@style/WebViewDirectAnim</item>
+    </style>
+
+    <!-- 透明淡入淡出：直达模式打开/关闭活动时不露黑窗，平滑叠在 MainActivity 之上 -->
+    <style name="WebViewDirectAnim" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@android:anim/fade_in</item>
+        <item name="android:activityOpenExitAnimation">@android:anim/fade_out</item>
+        <item name="android:activityCloseEnterAnimation">@android:anim/fade_in</item>
+        <item name="android:activityCloseExitAnimation">@android:anim/fade_out</item>
     </style>
 </resources>

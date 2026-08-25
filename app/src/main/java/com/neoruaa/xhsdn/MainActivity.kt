@@ -300,6 +300,8 @@ class MainActivity : ComponentActivity() {
                         if (currentAutoRead && UrlUtils.detectPlatform(clipText) == "douyin") {
                             // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
                             lastHandledUrl = dedupeKey
+                            // 识别到平台后自动跳到对应任务页签（无论当前停留在哪个页签）
+                            taskTab = platformTabIndex("douyin")
                             launchDouyinWebView(url ?: clipText)
                             // 读取后清空剪贴板，避免同链接被反复读取
                             clipboard.setPrimaryClip(android.content.ClipData.newPlainText("", ""))
@@ -308,6 +310,8 @@ class MainActivity : ComponentActivity() {
                                 // A. Auto Download Priority
                                 lastHandledUrl = dedupeKey
                                 val autoPlat = UrlUtils.detectPlatform(clipText)
+                                // 识别到平台后自动跳到对应任务页签（无论当前停留在哪个页签）
+                                taskTab = platformTabIndex(autoPlat)
                                 if (autoPlat == "kuaishou") {
                                     // 快手：HTTP 直解不稳，改用 WebView 真浏览器解析
                                     launchKuaishouWebView(clipText)

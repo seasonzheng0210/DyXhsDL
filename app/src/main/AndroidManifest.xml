@@ -34,7 +34,7 @@
         
         <activity
             android:name=".WebViewActivity"
-            android:theme="@style/Theme.MiuixCompatActionBar"
+            android:theme="@style/Theme.WebViewDirect"
             android:exported="false" />
         <activity
             android:name=".SettingsActivity"
