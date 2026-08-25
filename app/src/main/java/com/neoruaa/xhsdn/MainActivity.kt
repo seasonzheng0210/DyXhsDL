@@ -724,17 +724,10 @@ class MainActivity : ComponentActivity() {
             showToast(getString(R.string.invalid_link_please_reenter))
             return
         }
-        viewModel.resetWebCrawlFlag()
-        lifecycleScope.launch {
-            val parsed = withContext(Dispatchers.IO) { runCatching { DouyinParser.parse(cleanUrl) } }
-            if (parsed.isSuccess && parsed.getOrNull() != null) {
-                // 直解成功：直接下载，不跳 WebView 页
-                DownloadService.startDownload(this@MainActivity, cleanUrl, "douyin", taskId)
-            } else {
-                Log.w("MainActivity", "douyin 直解失败，回退 WebView: ${parsed.exceptionOrNull()?.message}")
-                startDouyinWebViewFallback(cleanUrl, taskId)
-            }
-        }
+        // 抖音图文/视频统一走后台 HTTP 解析（DouyinParser.parse 现已含 note 页整页 HTML 解析），
+        // 成功即直接 createTask 跳任务卡片，与小红书/视频下载体验完全一致；彻底不启动 WebViewActivity，
+        // 消除直达下载时的黑窗闪动。主页爬取走 launchDouyinHomepageDownload，不受影响。
+        DownloadService.startDownload(this@MainActivity, cleanUrl, "douyin", taskId)
     }
 
     private fun startDouyinWebViewFallback(cleanUrl: String, taskId: Long? = null) {

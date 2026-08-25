@@ -46,6 +46,9 @@ object DouyinParser {
     private const val TAG = "DouyinParser"
     const val MOBILE_UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Mobile Safari/537.36"
     const val REFERER = "https://www.douyin.com/"
+    // 桌面 Chrome UA：用于直连 www.douyin.com/note/{id} 抓 React SPA 初始 HTML（含 pace 图集负载）。
+    // 移动端 UA 访问 note 页会被重定向/返回精简页，拿不到图集数据，故单独用桌面 UA。
+    const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
     // 照搬 DouyinDL：随机 iPhone UA（Safari/CriOS/EdgiOS/FxiOS）
     private fun randomUserAgent(): String {
@@ -138,7 +141,8 @@ object DouyinParser {
             "https://aweme.snssdk.com/aweme/v1/feed/?type=7&aweme_id=$id&iid=0&device_id=0&version_code=27.0.0&version_name=27.0.0",
             "https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids=$id",
             "https://www.iesdouyin.com/share/video/$id",
-            "https://www.iesdouyin.com/share/note/$id"
+            "https://www.iesdouyin.com/share/note/$id",
+            "https://www.douyin.com/note/$id"
         )
         var lastErr: String? = null
         for (c in candidates) {
@@ -146,6 +150,7 @@ object DouyinParser {
                 val info = when {
                     c.contains("aweme/v1/feed") -> parseFromMobileFeed(c, ua, id)
                     c.contains("iteminfo") -> parseFromItemInfo(c, ua, id)
+                    c.contains("douyin.com/note") -> parseFromNoteHtml(c, ua, id)
                     else -> parseFromShare(c, ua, id)
                 }
                 if (info != null) return@withContext info
@@ -339,6 +344,102 @@ object DouyinParser {
 
         // 本端点既无图集字段也无 video：返回 null，调用方会试下一个源
         return null
+    }
+
+    /**
+     * 抖音图文笔记页(www.douyin.com/note/{id})整页 HTML 解析。
+     *  - 该页是 React SPA，笔记图集数据以 React Flight 水合负载(self.__pace_f.push)内嵌在
+     *    初始 HTML，并不挂 window._ROUTER_DATA / RENDER_DATA 等全局变量；
+     *  - 旧逻辑扫 JS 全局抓不到目标图集，反而把"相关推荐"视频当结果 → 图文帖被下成随机视频；
+     *  - 这里直接 GET 初始 HTML（桌面 UA），移植自验证过的 extractNoteGallery 逻辑，按图文图集
+     *    专属标记 biz_tag=aweme_images 精准抠出目标笔记图集，排除相关推荐/视频封面/头像/UI 噪声；
+     *  - 命中即返回 [DouyinMediaInfo](IMAGE)，调用方(DownloadService.startDouyin)据此直接
+     *    createTask 跳任务卡片，全程后台、不启动 WebViewActivity，彻底消除直达下载的黑窗闪动；
+     *  - 匿名会话下抖音对 note 页有登录墙，初始 HTML 仅含首图（与 WebView 直达模式限制一致），
+     *    多图笔记全量图集需登录态；解析不到图集返回 null 让调用方按失败处理。
+     */
+    private fun parseFromNoteHtml(noteUrl: String, ua: String, id: String): DouyinMediaInfo? {
+        val request = Request.Builder()
+            .url(noteUrl)
+            .header("User-Agent", DESKTOP_UA)
+            .header("Referer", REFERER)
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+            .build()
+
+        val html = client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw Exception("获取抖音 note 页失败: HTTP ${response.code}")
+            response.body.string()
+        }
+
+        val imageUrls = extractNoteGalleryFromHtml(html)
+        if (imageUrls.isEmpty()) {
+            Log.w(TAG, "note 页未提取到图集(可能登录墙/风控): noteUrl=$noteUrl")
+            return null
+        }
+        val rawTitle = extractRawTitleFromHtml(html) ?: "douyin_$id"
+        val title = safeTitleOf(rawTitle, id)
+        Log.d(TAG, "note 页解析成功: 图集=${imageUrls.size} title=$title")
+        return DouyinMediaInfo(DouyinMediaType.IMAGE, title, null, imageUrls, null, id, ua)
+    }
+
+    /**
+     * 从 note 页初始 HTML 中提取目标图文笔记图集直链（移植自 douyin_extractor.js 的 extractNoteGallery）。
+     *  - 先反转义 React Flight / JSON 转义(\u0026→&、\u003d→=、\u0025→%、\/→/)，暴露完整带签名 query 的直链；
+     *  - 还原 innerHTML 序列化产生的 &amp;→&（否则签名 query 被破坏 → 403）；
+     *  - 用正则扫全部 douyinpic/byteimg/ibyteimg CDN 直链，按 biz_tag=aweme_images 标记只收目标图文图集，
+     *    排除 related_aweme(相关推荐)/avatar/avt(头像)/im-resource/static-resource(UI)/twemoji/emoji(表情)/web-extension/pc-weboff；
+     *  - 按图片唯一 id(photoId) 去重多 CDN/多清晰度变体，优先无水印(tplv-dy-aweme-images)，回退水印(water-v2/watermark)。
+     */
+    private fun extractNoteGalleryFromHtml(html: String): List<String> {
+        // 1) 反转义：React Flight 负载里图片直链以 \u0026 等字面转义出现，须还原才能拿到完整签名 query
+        var h = html
+            .replace("""\u0026""", "&")
+            .replace("""\u003d""", "=")
+            .replace("""\u0025""", "%")
+            .replace("""\/""", "/")
+        // 2) innerHTML 序列化会把 & 转成 &amp;，还原保住签名 query（缺一即 403）
+        h = h.replace("&amp;", "&", ignoreCase = true)
+
+        val found = LinkedHashMap<String, GalleryEntry>()
+        val re = Regex(
+            """https?://[^"'\s\\]*?(?:douyinpic|byteimg|ibyteimg)\.com/[^"'\s\\]*?\.(?:webp|jpeg|jpg|png|heic)(?:\?[^"'\s\\]*)?""",
+            RegexOption.IGNORE_CASE
+        )
+        re.findAll(h).forEach { m ->
+            val u = m.value
+            val lu = u.lowercase()
+            // 排除：相关推荐、头像、表情包、UI 资源、壁纸扩展
+            if (lu.contains("related_aweme")) return@forEach
+            if (lu.contains("avatar") || lu.contains("tos-cn-i-avt")) return@forEach
+            if (lu.contains("im-resource") || lu.contains("static-resource")) return@forEach
+            if (lu.contains("twemoji") || lu.contains("emoji")) return@forEach
+            if (lu.contains("web-extension") || lu.contains("pc-weboff")) return@forEach
+            // 只收目标图文笔记图集：biz_tag=aweme_images（图文帖 images[] 专属标记）
+            if (!lu.contains("biz_tag=aweme_images")) return@forEach
+            // 提取图片唯一 id（用于按图去重多 CDN/多清晰度变体）
+            val pm = Regex("""(tos-cn-i-[a-z0-9-]+/[A-Za-z0-9]+)""").find(u)
+                ?: Regex("""(image-cut-tos-priv/[a-z0-9]+)""").find(u)
+            val pid = pm?.groupValues?.getOrNull(1) ?: return@forEach
+            val entry = found.getOrPut(pid) { GalleryEntry() }
+            if (lu.contains("water-v2") || lu.contains("watermark")) {
+                if (entry.water == null) entry.water = u
+            } else if (entry.clean == null) {
+                entry.clean = u
+            }
+        }
+        return found.values.mapNotNull { it.clean ?: it.water }
+    }
+
+    /** 图集去重辅助结构：同一张图的多个 CDN/清晰度变体，clean=无水印、water=水印。 */
+    private data class GalleryEntry(var clean: String? = null, var water: String? = null)
+
+    /** 从 note 页 <title> 提取笔记标题，去掉末尾 " - 抖音" 后缀；取不到返回 null 由调用方兜底。 */
+    private fun extractRawTitleFromHtml(html: String): String? {
+        val m = Regex("""<title>(.*?)</title>""", RegexOption.DOT_MATCHES_ALL).find(html)
+        return m?.groupValues?.getOrNull(1)
+            ?.trim()
+            ?.replace(Regex("""\s*-\s*抖音\s*$"""), "")
+            ?.takeIf { it.isNotBlank() }
     }
 
     /**
