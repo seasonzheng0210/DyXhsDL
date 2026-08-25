@@ -93,6 +93,8 @@ class WebViewActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        // 解析期间保持亮屏，避免息屏导致 WebView 暂停、解析卡住（用户感知的「切后台没跑完」主因之一）
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window.navigationBarDividerColor = android.graphics.Color.TRANSPARENT
         }
@@ -290,6 +292,26 @@ private fun WebViewScreen(
 
     DisposableEffect(webView) {
         onDispose { webView.destroy() }
+    }
+
+    // 切后台再回前台：若解析未完成，重新触发提取轮询（WebView 在后台被暂停，恢复后可能漏掉
+    // onPageFinished 的自动提取，导致任务停留在解析阶段、不派发下载——用户感知为「切后台没把任务跑完」）。
+    val resumeLifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(resumeLifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && !finished.value && !isHomepage) {
+                val autoExtract = direct || source == "douyin" || source == "kuaishou"
+                if (autoExtract) {
+                    webView.postDelayed({
+                        if (!finished.value) {
+                            extractImages(context, webView, sniffedVideoUrls, capturedUrls, capturedImageUrls, source, finished, onResult, 0, statusMsg, extractionFailed, retryUrl, direct, fallback)
+                        }
+                    }, 800)
+                }
+            }
+        }
+        resumeLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { resumeLifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     Scaffold(
@@ -771,7 +793,9 @@ private fun extractImages(
                         noteTitle = webView.title ?: "",
                         noteType = com.neoruaa.xhsdn.data.NoteType.UNKNOWN,
                         totalFiles = totalFiles,
-                        noteContent = contentText
+                        noteContent = contentText,
+                        // 按平台归类，确保任务进入正确的下载页签（抖音/快手/小红书），而非默认 xhs
+                        source = source
                     )
 
                     // Update the task status to DOWNLOADING immediately

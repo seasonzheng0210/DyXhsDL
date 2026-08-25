@@ -161,6 +161,21 @@
             }
         }
 
+        // 4) 兜底：仅当图文/视频都未抓到时，扫描页面 <img> 图集。
+        //    抖音 web 端图文帖图片常是懒加载 <img> 直链（而非 JS 状态的 images[]）。
+        //    只取图集 CDN 域名、排除头像/表情（avatar / avt），避免混入作者头像与视频封面。
+        if (imageUrls.length === 0 && videoUrls.length === 0) {
+            var imgs = document.querySelectorAll('img');
+            for (var p = 0; p < imgs.length; p++) {
+                var isrc = imgs[p].currentSrc || imgs[p].src;
+                if (!isrc) continue;
+                var ils = String(isrc).toLowerCase();
+                if (ils.indexOf('douyinpic.com') === -1 && ils.indexOf('byteimg.com') === -1) continue;
+                if (ils.indexOf('avatar') !== -1 || ils.indexOf('tos-cn-i-avt') !== -1) continue;
+                addImage(isrc);
+            }
+        }
+
         if (content.title && !content.content) content.content = content.title;
         console.log('=== Douyin Extractor === videos=' + videoUrls.length + ' images=' + imageUrls.length + ' title="' + content.title + '"');
         return { urls: videoUrls, image_urls: imageUrls, content: content };

@@ -347,7 +347,8 @@ class DownloadService : Service() {
             val ext = DouyinParser.mediaExtension(url)
             val fileName = "${info.title}_${index + 1}.$ext"
             val ok = runCatching {
-                downloader.downloadFile(url, fileName, "", info.userAgent)
+                // 抖音图床（douyinpic.com）必须带抖音 Referer，否则返回 403 导致图片下载失败
+                downloader.downloadFile(url, fileName, DouyinParser.REFERER, info.userAgent)
             }.getOrElse { e ->
                 DownloadLogger.logFailure(this@DownloadService, "douyin", url, "下载图片异常: ${e.message}")
                 false
@@ -371,8 +372,8 @@ class DownloadService : Service() {
         val targetTaskId = taskIdExtra ?: TaskManager.createTask(
             pageUrl ?: imageUrls.first(), null, NoteType.IMAGE, imageUrls.size, source = "douyin"
         ).also { TaskManager.startTask(it) }
-        // 复用 WebView 预建任务时，把类型/总数纠正为图片（预建可能是 UNKNOWN + 视频图片合并计数）
-        TaskManager.updateTask(targetTaskId) { t -> t.copy(noteType = NoteType.IMAGE, totalFiles = imageUrls.size) }
+        // 复用 WebView 预建任务时，把类型/总数/来源纠正为抖音图片（预建可能是 UNKNOWN + 视频图片合并计数，且来源默认 xhs）
+        TaskManager.updateTask(targetTaskId) { t -> t.copy(noteType = NoteType.IMAGE, totalFiles = imageUrls.size, source = "douyin") }
         scope.launch {
             try {
                 val rawTitle = pageUrl?.split("/")?.last()?.takeIf { it.isNotBlank() } ?: "douyin_image"
