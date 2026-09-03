@@ -724,9 +724,10 @@ class MainActivity : ComponentActivity() {
             showToast(getString(R.string.invalid_link_please_reenter))
             return
         }
-        // 抖音图文/视频统一走后台 HTTP 解析（DouyinParser.parse 现已含 note 页整页 HTML 解析），
-        // 成功即直接 createTask 跳任务卡片，与小红书/视频下载体验完全一致；彻底不启动 WebViewActivity，
-        // 消除直达下载时的黑窗闪动。主页爬取走 launchDouyinHomepageDownload，不受影响。
+        // 抖音图文/视频统一派发前台服务：服务内先 HTTP 快解（DouyinParser.parse 含 note 页
+        // 整页 HTML 解析），失败转后台不可见 WebView 真浏览器兜底（复用登录态 Cookie）——
+        // 成功即 createTask 跳任务卡片，与视频下载体验完全一致；全程不启动可见 WebViewActivity，
+        // 无黑窗闪动。主页批量走 launchDouyinHomepageDownload，不受影响。
         DownloadService.startDownload(this@MainActivity, cleanUrl, "douyin", taskId)
     }
 
@@ -742,7 +743,9 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 快手下载入口：同上，优先 HTTP 直解（匿名 GraphQL），失败回退 WebView。
+     * 快手下载入口：直接派发前台服务。v1.10.12 起不在 MainActivity 预解析、也不再启动
+     * 可见 WebViewActivity——服务内先 HTTP GraphQL 快解（10s），失败转后台不可见 WebView
+     * 真浏览器兜底（复用登录态 Cookie），解析全程无 Activity/黑窗。
      */
     private fun launchKuaishouWebView(input: String, taskId: Long? = null) {
         val cleanUrl = UrlUtils.extractFirstUrl(input)
@@ -750,16 +753,7 @@ class MainActivity : ComponentActivity() {
             showToast(getString(R.string.invalid_link_please_reenter))
             return
         }
-        viewModel.resetWebCrawlFlag()
-        lifecycleScope.launch {
-            val parsed = withContext(Dispatchers.IO) { runCatching { KuaishouParser.parse(cleanUrl) } }
-            if (parsed.isSuccess && parsed.getOrNull() != null) {
-                DownloadService.startDownload(this@MainActivity, cleanUrl, "kuaishou", taskId)
-            } else {
-                Log.w("MainActivity", "kuaishou 直解失败，回退 WebView: ${parsed.exceptionOrNull()?.message}")
-                startKuaishouWebViewFallback(cleanUrl, taskId)
-            }
-        }
+        DownloadService.startDownload(this@MainActivity, cleanUrl, "kuaishou", taskId)
     }
 
     private fun startKuaishouWebViewFallback(cleanUrl: String, taskId: Long? = null) {
@@ -913,46 +907,20 @@ class MainActivity : ComponentActivity() {
             val forceDirect = data.getBooleanExtra("force_direct", false)
 
             if (source == "douyin_home") {
-                // 主页下载：videoUrls 为 WebView 收集到的视频页链接（/video/{id}），逐条解析直链后批量下载
-                val videoPageUrls = videoUrls.filter { it.contains("/video/") }
+                // 主页下载：videoUrls 为 WebView 主页爬取收集到的视频页链接（/video/{id}）。
+                // v1.10.12：逐条解析下放给 DownloadService 后台完成（HTTP 快解 → 后台 WebView
+                // 兜底，复用登录态 Cookie，不弹 Activity），不再拿回 MainActivity 逐条走已被
+                // 风控打死的 HTTP DouyinParser.parse（此前必现「主页视频解析失败」）。
+                val videoPageUrls = videoUrls.filter { it.contains("/video/") || it.contains("/note/") }
                 if (videoPageUrls.isEmpty()) {
                     showToast("未收集到主页视频链接，请重试或登录后重试")
                     return
                 }
                 val homepageUrl = data.getStringExtra("url") ?: ""
                 showToast(getString(R.string.homepage_parsing, videoPageUrls.size))
-                lifecycleScope.launch {
-                    val directUrls = mutableListOf<String>()
-                    withContext(Dispatchers.IO) {
-                        for (u in videoPageUrls.distinct()) {
-                            runCatching {
-                                val info = DouyinParser.parse(u)
-                                if (info.type == DouyinMediaType.VIDEO && !info.videoUrl.isNullOrBlank()) {
-                                    directUrls.add(info.videoUrl)
-                                } else if (info.type == DouyinMediaType.IMAGE && info.imageUrls.isNotEmpty()) {
-                                    directUrls.addAll(info.imageUrls)
-                                }
-                            }
-                        }
-                    }
-                    withContext(Dispatchers.Main) {
-                        if (directUrls.isNotEmpty()) {
-                            val batchTaskId = com.neoruaa.xhsdn.data.TaskManager.createTask(
-                                noteUrl = homepageUrl,
-                                noteTitle = "主页视频(${directUrls.size})",
-                                noteType = com.neoruaa.xhsdn.data.NoteType.VIDEO,
-                                totalFiles = directUrls.size
-                            )
-                            com.neoruaa.xhsdn.data.TaskManager.updateTaskStatus(batchTaskId, com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING)
-                            // 只走服务 startWebCrawl（已按 host 带 Referer/UA 下抖音 CDN）。
-                            // 不再调 onWebCrawlResult：XHSDownloader 处理不了抖音直链，会与 startWebCrawl 抢同一条 task，
-                            // 导致主页下载任务卡在 DOWNLOADING（显示「停止」）。
-                            com.neoruaa.xhsdn.DownloadService.startWebCrawl(this@MainActivity, directUrls, "", batchTaskId)
-                        } else {
-                            showToast("主页视频解析失败（可能需登录），请在设置中登录抖音后重试")
-                        }
-                    }
-                }
+                com.neoruaa.xhsdn.DownloadService.startDouyinHomeBatch(
+                    this@MainActivity, videoPageUrls.distinct(), homepageUrl
+                )
                 return
             }
 

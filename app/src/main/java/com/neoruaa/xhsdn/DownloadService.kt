@@ -22,12 +22,16 @@ import com.neoruaa.xhsdn.kuaishou.KuaishouMediaType
 import com.neoruaa.xhsdn.kuaishou.KuaishouParser
 import com.neoruaa.xhsdn.utils.DownloadLogger
 import com.neoruaa.xhsdn.utils.UrlUtils
+import com.neoruaa.xhsdn.web.BgWebViewParser
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.CoroutineContext
@@ -50,6 +54,13 @@ class DownloadService : Service() {
     private val scope = CoroutineScope(Dispatchers.IO + serviceJob)
     private val activeJobs = ConcurrentHashMap<Long, Job>()
     private val activeUrls = ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * 后台不可见 WebView 解析器（懒加载，首个解析任务发起时才创建）：
+     * HTTP 直解被风控打挂后的兜底引擎，在 Service 内静默解析抖音/快手作品页，
+     * 复用 app_webview 持久化登录态 Cookie，不弹任何 Activity（无黑窗）。
+     */
+    private val bgParser by lazy { BgWebViewParser(applicationContext) }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -106,6 +117,13 @@ class DownloadService : Service() {
                 val urls = intent.getStringArrayListExtra(EXTRA_URLS) ?: emptyList()
                 val pageUrl = intent.getStringExtra(EXTRA_URL)
                 startDownloadDouyinImagesInternal(urls, pageUrl, taskIdExtra)
+            }
+            MODE_DOUYIN_HOME -> {
+                // 抖音主页批量：WebView 主页爬取收集到全部 /video/{id} 页链接，
+                // 逐条后台解析（HTTP 快解 → 后台 WebView 兜底）后同任务卡批量下载
+                val urls = intent.getStringArrayListExtra(EXTRA_URLS) ?: emptyList()
+                val pageUrl = intent.getStringExtra(EXTRA_URL)
+                startDouyinHomeBatch(urls, pageUrl, taskIdExtra)
             }
             else -> when (source) {
                 "douyin" -> startDouyin(url, mode, taskIdExtra)
@@ -236,6 +254,8 @@ class DownloadService : Service() {
 
     override fun onDestroy() {
         scope.cancel()
+        // 销毁后台 WebView（懒加载字段：仅当初始化过才真正销毁）
+        runCatching { bgParser.destroy() }
         super.onDestroy()
     }
 
@@ -276,11 +296,15 @@ class DownloadService : Service() {
 
                 updateNotification(getString(R.string.downloading_files), "抖音解析中…", true)
 
-                val info = runCatching { DouyinParser.parse(targetUrl) }.getOrElse { e ->
-                    DownloadLogger.logFailure(this@DownloadService, "douyin", targetUrl, "解析失败: ${e.message}")
-                    TaskManager.completeTask(myTaskId, false, "解析失败: ${e.message}")
+                // 解析：HTTP 直解（10s 快解）失败 → 后台不可见 WebView 真浏览器兜底
+                //（复用登录态 Cookie，不弹 Activity / 无黑窗）。两条路都拿不到媒体才算失败。
+                val info = resolveDouyinMediaInfo(targetUrl)
+                if (info == null) {
+                    DownloadLogger.logFailure(this@DownloadService, "douyin", targetUrl,
+                        "解析失败：HTTP 直解与后台 WebView 均未取到媒体（可能需登录抖音）")
+                    TaskManager.completeTask(myTaskId, false, "解析失败（可能需登录抖音）")
                     updateNotification(getString(R.string.download_failed_notification_title),
-                        "抖音解析失败: ${e.message}", false)
+                        "抖音解析失败（可能需登录抖音）", false)
                     return@launch
                 }
 
@@ -362,6 +386,181 @@ class DownloadService : Service() {
     }
     // endregion
 
+    // region 抖音/快手解析工具（HTTP 快解 + 后台 WebView 兜底）
+
+    /**
+     * 抖音解析主入口：先 HTTP 快解（10s 上限；抖音已全站风控，多数场景秒失败返回空），
+     * 失败再转后台不可见 WebView 真浏览器兜底（复用登录态 Cookie、不弹 Activity）。
+     * 两条路都拿不到媒体返回 null。
+     */
+    private suspend fun resolveDouyinMediaInfo(targetUrl: String): DouyinMediaInfo? {
+        val httpInfo = fastHttpResolve { DouyinParser.parse(targetUrl) }
+        if (httpInfo != null) return httpInfo
+        DownloadLogger.logInfo(this@DownloadService, "douyin", targetUrl, "HTTP 直解未取到媒体，转后台 WebView 解析…")
+        val bg = bgParser.parse(targetUrl, "douyin") ?: return null
+        val id = extractDouyinId(targetUrl)
+        val safeTitle = safeFileName(bg.title.ifBlank { "douyin_$id" })
+        return when {
+            bg.imageUrls.isNotEmpty() -> DouyinMediaInfo(
+                DouyinMediaType.IMAGE, safeTitle, null, bg.imageUrls, null, id, DouyinParser.MOBILE_UA
+            )
+            else -> bg.videoUrls.firstOrNull { it.startsWith("http") }?.let { v ->
+                DouyinMediaInfo(DouyinMediaType.VIDEO, safeTitle, v, emptyList(), null, id, DouyinParser.MOBILE_UA)
+            }
+        }
+    }
+
+    /**
+     * 快手解析主入口：先 HTTP GraphQL 快解（10s 上限），失败转后台 WebView 兜底。
+     */
+    private suspend fun resolveKuaishouMediaInfo(targetUrl: String): KuaishouMediaInfo? {
+        val httpInfo = fastHttpResolve { KuaishouParser.parse(targetUrl) }
+        if (httpInfo != null) return httpInfo
+        DownloadLogger.logInfo(this@DownloadService, "kuaishou", targetUrl, "HTTP 直解未取到媒体，转后台 WebView 解析…")
+        val bg = bgParser.parse(targetUrl, "kuaishou") ?: return null
+        val id = targetUrl.substringAfterLast('/').substringBefore('?').takeIf { it.isNotBlank() } ?: "ks"
+        val safeTitle = safeFileName(bg.title.ifBlank { "kuaishou_$id" })
+        return when {
+            bg.imageUrls.isNotEmpty() -> KuaishouMediaInfo(
+                KuaishouMediaType.IMAGE, safeTitle, null, bg.imageUrls, null, id, KuaishouParser.MOBILE_UA
+            )
+            else -> bg.videoUrls.firstOrNull { it.startsWith("http") }?.let { v ->
+                KuaishouMediaInfo(KuaishouMediaType.VIDEO, safeTitle, v, emptyList(), null, id, KuaishouParser.MOBILE_UA)
+            }
+        }
+    }
+
+    /**
+     * HTTP 快解：给平台 Parser 一个短预算，避免被风控的空响应/慢连接拖住几十秒才轮到
+     * 后台 WebView 兜底。普通异常/超时返回 null；协程取消(CancellationException)原样上抛。
+     */
+    private suspend fun <T> fastHttpResolve(block: suspend () -> T): T? {
+        return try {
+            withTimeout(HTTP_FAST_TIMEOUT_MS) { block() }
+        } catch (e: TimeoutCancellationException) {
+            Log.w(TAG, "HTTP 直解超时(${HTTP_FAST_TIMEOUT_MS}ms)，转后台 WebView")
+            null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "HTTP 直解失败: ${e.message}")
+            null
+        }
+    }
+
+    private fun extractDouyinId(url: String): String {
+        Regex("""(?:video|note)/(\d+)""").find(url)?.groupValues?.getOrNull(1)?.let { return it }
+        Regex("""modal_id=(\d+)""").find(url)?.groupValues?.getOrNull(1)?.let { return it }
+        return url.substringAfterLast('/').substringBefore('?').takeIf { it.isNotBlank() } ?: "dy"
+    }
+
+    /** 清洗成安全文件名（文件名非法字符替换、限长 80）。 */
+    private fun safeFileName(raw: String): String = raw
+        .replace(Regex("""[\\/:*?"<>|#\n\r]"""), "_")
+        .trim(' ', '.')
+        .take(80)
+        .ifBlank { "download" }
+
+    // endregion
+
+    // region 抖音主页批量下载（后台逐条解析 + 同任务卡下载）
+    /**
+     * 抖音作者主页批量下载：MainActivity 的 WebView 主页爬取收集到全部 /video/{id} 页链接后，
+     * 逐条在后台解析（HTTP 快解 → 后台 WebView 兜底），每条解析成功即下载进同一批任务卡。
+     * 修复 v1.10.11「主页视频解析失败」——此前把 /video/{id} 列表拿回 MainActivity 再走已被
+     * 风控打死的 HTTP DouyinParser.parse，必然全空。
+     */
+    private fun startDouyinHomeBatch(videoPageUrls: List<String>, homepageUrl: String?, taskIdExtra: Long?) {
+        val pageUrls = videoPageUrls.distinct().filter { it.contains("/video/") || it.contains("/note/") }
+        if (pageUrls.isEmpty()) {
+            updateNotification(getString(R.string.download_failed_notification_title),
+                getString(R.string.no_valid_link_found), false)
+            return
+        }
+        val batchKey = homepageUrl?.takeIf { it.isNotBlank() } ?: pageUrls.first()
+        if (!activeUrls.add(batchKey)) return
+
+        scope.launch {
+            try {
+                val myTaskId = taskIdExtra
+                    ?: TaskManager.createTask(
+                        batchKey, "主页视频(${pageUrls.size})", NoteType.VIDEO, pageUrls.size, source = "douyin"
+                    ).also { TaskManager.startTask(it) }
+                activeJobs[myTaskId] = coroutineContext[Job]!!
+
+                updateNotification(getString(R.string.downloading_files), "主页视频 解析中(0/${pageUrls.size})…", true)
+
+                val completed = AtomicInteger(0)
+                val failed = AtomicInteger(0)
+                val myJob = coroutineContext[Job]
+                // 进度回调只负责登记文件路径；条数进度由循环内显式 updateProgress 驱动
+                //（条数=URL 数；图集帖多张图片全部成功也只算 1 条，避免 completed 超 totalFiles）
+                val cb = object : DownloadCallback {
+                    override fun onFileDownloaded(path: String) {
+                        TaskManager.addFilePath(myTaskId, path)
+                    }
+                    override fun onDownloadError(status: String, originalUrl: String) {}
+                    override fun onDownloadProgress(status: String) {}
+                    override fun onDownloadProgressUpdate(downloaded: Long, total: Long) {}
+                    override fun onVideoDetected() {}
+                }
+                val downloader = FileDownloader(this@DownloadService, cb)
+
+                pageUrls.forEachIndexed { index, pageUrl ->
+                    // 任务被用户取消时优雅跳过后续条目（协程挂起点也会自动抛取消异常兜底）
+                    if (myJob?.isActive == false) return@forEachIndexed
+                    updateNotification(getString(R.string.downloading_files),
+                        "主页视频 解析+下载中(${index + 1}/${pageUrls.size})…", true)
+                    val info = resolveDouyinMediaInfo(pageUrl)
+                    val ok = if (info == null) {
+                        DownloadLogger.logFailure(this@DownloadService, "douyin", pageUrl, "主页批量：单条解析失败")
+                        false
+                    } else if (info.type == DouyinMediaType.IMAGE) {
+                        // 图集帖：单条下载全部图片（文件名带序号前缀避免与其它帖撞名覆盖）
+                        val prefixed = info.copy(title = "${index + 1}_${info.title}")
+                        downloadImages(downloader, prefixed, myTaskId)
+                    } else {
+                        val fileName = "${index + 1}_${info.title}.mp4"
+                        runCatching {
+                            downloader.downloadFile(info.videoUrl, fileName, DouyinParser.REFERER, info.userAgent)
+                        }.getOrElse { e ->
+                            DownloadLogger.logFailure(this@DownloadService, "douyin",
+                                info.videoUrl ?: pageUrl, "主页批量：单条下载异常: ${e.message}")
+                            false
+                        }
+                    }
+                    if (ok) {
+                        completed.incrementAndGet()
+                        DownloadLogger.logInfo(this@DownloadService, "douyin", pageUrl, "主页批量：单条完成")
+                    } else {
+                        failed.incrementAndGet()
+                    }
+                    TaskManager.updateProgress(myTaskId, completed.get(), failed.get(), 0f)
+                }
+
+                val success = completed.get() > 0 && failed.get() == 0
+                TaskManager.completeTask(myTaskId, success,
+                    if (success) null
+                    else if (completed.get() > 0) "部分主页视频下载失败"
+                    else "主页视频全部解析失败（可能需登录抖音）")
+                updateNotification(
+                    if (success) getString(R.string.download_completed_notification_title)
+                    else getString(R.string.download_failed_notification_title),
+                    if (success) getString(R.string.download_completed_files_count, completed.get())
+                    else "主页视频：成功 ${completed.get()}，失败 ${failed.get()}",
+                    false
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "douyin home batch error", e)
+            } finally {
+                activeUrls.remove(batchKey)
+                taskIdExtra?.let { activeJobs.remove(it) }
+                maybeStop()
+            }
+        }
+    }
+    // endregion
+
     // region 抖音图文/图集下载（WebView 兜底路径）
     /**
      * 抖音图文/图集帖下载（WebView 兜底路径）：复用/预建 IMAGE 任务，逐张下载帖子图集图片。
@@ -437,11 +636,14 @@ class DownloadService : Service() {
 
                 updateNotification(getString(R.string.downloading_files), "快手解析中…", true)
 
-                val info = runCatching { KuaishouParser.parse(targetUrl) }.getOrElse { e ->
-                    DownloadLogger.logFailure(this@DownloadService, "kuaishou", targetUrl, "解析失败: ${e.message}")
-                    TaskManager.completeTask(myTaskId, false, "解析失败: ${e.message}")
+                // 解析：HTTP GraphQL 直解（10s 快解）失败 → 后台不可见 WebView 真浏览器兜底
+                val info = resolveKuaishouMediaInfo(targetUrl)
+                if (info == null) {
+                    DownloadLogger.logFailure(this@DownloadService, "kuaishou", targetUrl,
+                        "解析失败：HTTP 直解与后台 WebView 均未取到媒体")
+                    TaskManager.completeTask(myTaskId, false, "解析失败")
                     updateNotification(getString(R.string.download_failed_notification_title),
-                        "快手解析失败: ${e.message}", false)
+                        "快手解析失败", false)
                     return@launch
                 }
 
@@ -865,6 +1067,10 @@ class DownloadService : Service() {
         const val MODE_SELECTIVE = "selective"
         const val MODE_WEBCRAWL = "webcrawl"
         const val MODE_DOUYIN_IMAGES = "douyin_images"
+        const val MODE_DOUYIN_HOME = "douyin_home_batch"
+
+        /** HTTP 直解快解预算：超过即转后台 WebView 兜底（避免被风控空响应拖死）。 */
+        private const val HTTP_FAST_TIMEOUT_MS = 10_000L
         private const val ACTION_STOP = "com.neoruaa.xhsdn.action.STOP"
 
         /** 网页爬取（多 URL）下载入口。 */
@@ -902,6 +1108,21 @@ class DownloadService : Service() {
                 putExtra(EXTRA_MODE, MODE_DOUYIN_IMAGES)
                 putStringArrayListExtra(EXTRA_URLS, ArrayList(imageUrls))
                 pageUrl?.let { putExtra(EXTRA_URL, it) }
+                taskId?.let { putExtra(EXTRA_TASK_ID, it) }
+            }
+            context.startForegroundService(intent)
+        }
+
+        /**
+         * 抖音主页批量下载入口：videoPageUrls 为 WebView 主页爬取收集到的视频页链接列表
+         * （/video/{id}），由服务后台逐条解析（HTTP 快解 → 后台 WebView 兜底）并同卡下载。
+         */
+        fun startDouyinHomeBatch(context: Context, videoPageUrls: List<String>, homepageUrl: String? = null, taskId: Long? = null) {
+            if (videoPageUrls.isEmpty()) return
+            val intent = Intent(context, DownloadService::class.java).apply {
+                putExtra(EXTRA_MODE, MODE_DOUYIN_HOME)
+                putStringArrayListExtra(EXTRA_URLS, ArrayList(videoPageUrls))
+                homepageUrl?.let { putExtra(EXTRA_URL, it) }
                 taskId?.let { putExtra(EXTRA_TASK_ID, it) }
             }
             context.startForegroundService(intent)
