@@ -166,14 +166,22 @@ class DownloadService : Service() {
             return
         }
 
-        if (!activeUrls.add(targetUrl)) return
+        if (!activeUrls.add(targetUrl)) {
+            updateNotification(getString(R.string.downloading_files), "该链接正在下载中，已忽略重复", false)
+            return
+        }
 
         scope.launch {
+            var myTaskId: Long = taskIdExtra ?: -1L
             try {
-                val myTaskId = taskIdExtra
-                    ?: TaskManager.createTask(targetUrl, null, NoteType.VIDEO, 1, source = "direct").also {
-                        TaskManager.startTask(it)
-                    }
+                if (myTaskId < 0) {
+                    val plan = TaskManager.planDownloadTask(targetUrl)
+                    if (plan.ignore) return@launch
+                    myTaskId = plan.taskId?.also { TaskManager.resetTask(it) }
+                        ?: TaskManager.createTask(targetUrl, null, NoteType.VIDEO, 1, source = "direct").also {
+                            TaskManager.startTask(it)
+                        }
+                }
                 activeJobs[myTaskId] = coroutineContext[Job]!!
 
                 updateNotification(getString(R.string.downloading_files), "视频直链下载中…", true)
@@ -228,11 +236,18 @@ class DownloadService : Service() {
                     else getString(R.string.download_failed_check_network),
                     false
                 )
+            } catch (e: CancellationException) {
+                // 用户手动停止：不写失败日志（ACTION_STOP 分支已置 FAILED），这里仅兜底保证终态
+                if (myTaskId > 0) TaskManager.failIfActive(myTaskId, getString(R.string.download_cancelled_by_user))
             } catch (e: Exception) {
                 Log.e(TAG, "direct video download error", e)
+                if (myTaskId > 0) {
+                    DownloadLogger.logFailure(this@DownloadService, "direct", targetUrl, "下载异常终止: ${e.message}")
+                    TaskManager.failIfActive(myTaskId, "下载异常: ${e.message}")
+                }
             } finally {
                 activeUrls.remove(targetUrl)
-                taskIdExtra?.let { activeJobs.remove(it) }
+                if (myTaskId > 0) activeJobs.remove(myTaskId)
                 maybeStop()
             }
         }
@@ -281,17 +296,26 @@ class DownloadService : Service() {
         }
 
         if (!activeUrls.add(targetUrl)) {
-            // 正在下载，忽略重复
+            updateNotification(getString(R.string.downloading_files), "该链接正在下载中，已忽略重复", false)
             return
         }
 
         scope.launch {
+            var myTaskId: Long = taskIdExtra ?: -1L
             try {
-                val myTaskId = taskIdExtra
-                    ?: TaskManager.findActiveTaskIdByUrl(targetUrl)
-                    ?: TaskManager.createTask(
-                        targetUrl, null, NoteType.VIDEO, 1, source = "douyin"
-                    ).also { TaskManager.startTask(it) }
+                if (myTaskId < 0) {
+                    val plan = TaskManager.planDownloadTask(targetUrl)
+                    // 查重（复用同一条任务）：同链接正在下载 → 忽略本次触发
+                    if (plan.ignore) {
+                        updateNotification(getString(R.string.downloading_files), "该链接正在下载中，已忽略重复", false)
+                        return@launch
+                    }
+                    // 同链接已有完成/失败记录 → 原地重置复用（保持单条记录）；无记录 → 新建
+                    myTaskId = plan.taskId?.also { TaskManager.resetTask(it) }
+                        ?: TaskManager.createTask(
+                            targetUrl, null, NoteType.VIDEO, 1, source = "douyin"
+                        ).also { TaskManager.startTask(it) }
+                }
                 activeJobs[myTaskId] = coroutineContext[Job]!!
 
                 updateNotification(getString(R.string.downloading_files), "抖音解析中…", true)
@@ -349,11 +373,20 @@ class DownloadService : Service() {
                     if (success) info.title else getString(R.string.download_failed_check_network),
                     false
                 )
+            } catch (e: CancellationException) {
+                // 用户手动停止：不写失败日志，兜底保证终态
+                if (myTaskId > 0) TaskManager.failIfActive(myTaskId, getString(R.string.download_cancelled_by_user))
             } catch (e: Exception) {
                 Log.e(TAG, "douyin download error", e)
+                // 关键修复：任何未预期异常都必须把任务置为 FAILED + 落失败日志，
+                // 否则任务会永远停在 DOWNLOADING（UI 表现为「卡在停止」且无失败记录）。
+                if (myTaskId > 0) {
+                    DownloadLogger.logFailure(this@DownloadService, "douyin", targetUrl, "下载异常终止: ${e.message}")
+                    TaskManager.failIfActive(myTaskId, "下载异常: ${e.message}")
+                }
             } finally {
                 activeUrls.remove(targetUrl)
-                taskIdExtra?.let { activeJobs.remove(it) }
+                if (myTaskId > 0) activeJobs.remove(myTaskId)
                 maybeStop()
             }
         }
@@ -481,11 +514,13 @@ class DownloadService : Service() {
         if (!activeUrls.add(batchKey)) return
 
         scope.launch {
+            var myTaskId: Long = taskIdExtra ?: -1L
             try {
-                val myTaskId = taskIdExtra
-                    ?: TaskManager.createTask(
+                if (myTaskId < 0) {
+                    myTaskId = TaskManager.createTask(
                         batchKey, "主页视频(${pageUrls.size})", NoteType.VIDEO, pageUrls.size, source = "douyin"
                     ).also { TaskManager.startTask(it) }
+                }
                 activeJobs[myTaskId] = coroutineContext[Job]!!
 
                 updateNotification(getString(R.string.downloading_files), "主页视频 解析中(0/${pageUrls.size})…", true)
@@ -550,11 +585,18 @@ class DownloadService : Service() {
                     else "主页视频：成功 ${completed.get()}，失败 ${failed.get()}",
                     false
                 )
+            } catch (e: CancellationException) {
+                // 用户手动停止：不写失败日志，兜底保证终态
+                if (myTaskId > 0) TaskManager.failIfActive(myTaskId, getString(R.string.download_cancelled_by_user))
             } catch (e: Exception) {
                 Log.e(TAG, "douyin home batch error", e)
+                if (myTaskId > 0) {
+                    DownloadLogger.logFailure(this@DownloadService, "douyin", batchKey, "主页批量异常终止: ${e.message}")
+                    TaskManager.failIfActive(myTaskId, "主页批量异常: ${e.message}")
+                }
             } finally {
                 activeUrls.remove(batchKey)
-                taskIdExtra?.let { activeJobs.remove(it) }
+                if (myTaskId > 0) activeJobs.remove(myTaskId)
                 maybeStop()
             }
         }
@@ -588,8 +630,14 @@ class DownloadService : Service() {
                     else getString(R.string.download_failed_check_network),
                     false
                 )
+            } catch (e: CancellationException) {
+                // 用户手动停止：不写失败日志，兜底保证终态
+                TaskManager.failIfActive(targetTaskId, getString(R.string.download_cancelled_by_user))
             } catch (e: Exception) {
                 Log.e(TAG, "douyin images download error", e)
+                // 关键修复：未预期异常也必须置 FAILED + 落失败日志，避免「卡在停止」且无失败记录
+                DownloadLogger.logFailure(this@DownloadService, "douyin", pageUrl ?: imageUrls.firstOrNull().orEmpty(), "图集下载异常终止: ${e.message}")
+                TaskManager.failIfActive(targetTaskId, "图集下载异常: ${e.message}")
             } finally {
                 taskIdExtra?.let { activeJobs.remove(it) }
                 maybeStop()
@@ -623,15 +671,27 @@ class DownloadService : Service() {
             return
         }
 
-        if (!activeUrls.add(targetUrl)) return
+        if (!activeUrls.add(targetUrl)) {
+            updateNotification(getString(R.string.downloading_files), "该链接正在下载中，已忽略重复", false)
+            return
+        }
 
         scope.launch {
+            var myTaskId: Long = taskIdExtra ?: -1L
             try {
-                val myTaskId = taskIdExtra
-                    ?: TaskManager.findActiveTaskIdByUrl(targetUrl)
-                    ?: TaskManager.createTask(
-                        targetUrl, null, NoteType.VIDEO, 1, source = "kuaishou"
-                    ).also { TaskManager.startTask(it) }
+                if (myTaskId < 0) {
+                    val plan = TaskManager.planDownloadTask(targetUrl)
+                    // 查重（复用同一条任务）：同链接正在下载 → 忽略本次触发
+                    if (plan.ignore) {
+                        updateNotification(getString(R.string.downloading_files), "该链接正在下载中，已忽略重复", false)
+                        return@launch
+                    }
+                    // 同链接已有完成/失败记录 → 原地重置复用（保持单条记录）；无记录 → 新建
+                    myTaskId = plan.taskId?.also { TaskManager.resetTask(it) }
+                        ?: TaskManager.createTask(
+                            targetUrl, null, NoteType.VIDEO, 1, source = "kuaishou"
+                        ).also { TaskManager.startTask(it) }
+                }
                 activeJobs[myTaskId] = coroutineContext[Job]!!
 
                 updateNotification(getString(R.string.downloading_files), "快手解析中…", true)
@@ -687,11 +747,19 @@ class DownloadService : Service() {
                     if (success) info.title else getString(R.string.download_failed_check_network),
                     false
                 )
+            } catch (e: CancellationException) {
+                // 用户手动停止：不写失败日志，兜底保证终态
+                if (myTaskId > 0) TaskManager.failIfActive(myTaskId, getString(R.string.download_cancelled_by_user))
             } catch (e: Exception) {
                 Log.e(TAG, "kuaishou download error", e)
+                // 关键修复：未预期异常也必须置 FAILED + 落失败日志，避免「卡在停止」且无失败记录
+                if (myTaskId > 0) {
+                    DownloadLogger.logFailure(this@DownloadService, "kuaishou", targetUrl, "下载异常终止: ${e.message}")
+                    TaskManager.failIfActive(myTaskId, "下载异常: ${e.message}")
+                }
             } finally {
                 activeUrls.remove(targetUrl)
-                taskIdExtra?.let { activeJobs.remove(it) }
+                if (myTaskId > 0) activeJobs.remove(myTaskId)
                 maybeStop()
             }
         }
@@ -749,20 +817,32 @@ class DownloadService : Service() {
             return
         }
 
-        if (!activeUrls.add(targetUrl)) return
+        if (!activeUrls.add(targetUrl)) {
+            updateNotification(getString(R.string.downloading_files), "该链接正在下载中，已忽略重复", false)
+            return
+        }
 
         scope.launch {
+            var myTaskId: Long = taskIdExtra ?: -1L
             try {
                 val mediaCount = runCatching { XHSDownloader(this@DownloadService).getMediaCount(targetUrl) }.getOrElse { e ->
                     DownloadLogger.logFailure(this@DownloadService, "xhs", targetUrl, "获取媒体数量失败: ${e.message}")
                     Log.e(TAG, "xhs getMediaCount failed", e)
                     0
                 }
-                val myTaskId = taskIdExtra
-                    ?: TaskManager.findActiveTaskIdByUrl(targetUrl)
-                    ?: TaskManager.createTask(
-                        targetUrl, null, NoteType.IMAGE, if (mediaCount > 0) mediaCount else 1
-                    ).also { TaskManager.startTask(it) }
+                if (myTaskId < 0) {
+                    val plan = TaskManager.planDownloadTask(targetUrl)
+                    // 查重（复用同一条任务）：同链接正在下载 → 忽略本次触发
+                    if (plan.ignore) {
+                        updateNotification(getString(R.string.downloading_files), "该链接正在下载中，已忽略重复", false)
+                        return@launch
+                    }
+                    // 同链接已有完成/失败记录 → 原地重置复用（保持单条记录）；无记录 → 新建
+                    myTaskId = plan.taskId?.also { TaskManager.resetTask(it) }
+                        ?: TaskManager.createTask(
+                            targetUrl, null, NoteType.IMAGE, if (mediaCount > 0) mediaCount else 1
+                        ).also { TaskManager.startTask(it) }
+                }
                 activeJobs[myTaskId] = coroutineContext[Job]!!
 
                 updateNotification(getString(R.string.downloading_files),
@@ -827,11 +907,19 @@ class DownloadService : Service() {
                             getString(R.string.download_failed_no_files), false)
                     }
                 }
+            } catch (e: CancellationException) {
+                // 用户手动停止：不写失败日志，兜底保证终态
+                if (myTaskId > 0) TaskManager.failIfActive(myTaskId, getString(R.string.download_cancelled_by_user))
             } catch (e: Exception) {
                 Log.e(TAG, "xhs download error", e)
+                // 关键修复：未预期异常也必须置 FAILED + 落失败日志，避免「卡在停止」且无失败记录
+                if (myTaskId > 0) {
+                    DownloadLogger.logFailure(this@DownloadService, "xhs", targetUrl, "下载异常终止: ${e.message}")
+                    TaskManager.failIfActive(myTaskId, "下载异常: ${e.message}")
+                }
             } finally {
                 activeUrls.remove(targetUrl)
-                taskIdExtra?.let { activeJobs.remove(it) }
+                if (myTaskId > 0) activeJobs.remove(myTaskId)
                 maybeStop()
             }
         }
@@ -942,8 +1030,14 @@ class DownloadService : Service() {
                     else getString(R.string.download_failed_check_network),
                     false
                 )
+            } catch (e: CancellationException) {
+                // 用户手动停止：不写失败日志，兜底保证终态
+                TaskManager.failIfActive(myTaskId, getString(R.string.download_cancelled_by_user))
             } catch (e: Exception) {
                 Log.e(TAG, "web crawl error", e)
+                // 关键修复：未预期异常也必须置 FAILED + 落失败日志，避免「卡在停止」且无失败记录
+                DownloadLogger.logFailure(this@DownloadService, "web", finalUrls.firstOrNull().orEmpty(), "网页爬取异常终止: ${e.message}")
+                TaskManager.failIfActive(myTaskId, "下载异常: ${e.message}")
             } finally {
                 taskIdExtra?.let { activeJobs.remove(it) }
                 maybeStop()

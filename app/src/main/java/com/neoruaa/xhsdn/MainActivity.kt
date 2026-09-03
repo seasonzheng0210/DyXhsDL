@@ -1570,13 +1570,20 @@ private fun HistoryPage(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-                // 平台页签：抖音 / 小红书 / 快手（按来源归类，识别到链接自动跳转）
+                // 平台页签：抖音 / 小红书 / 快手 / 失败（失败 = 全平台失败任务，按状态归类）
+                val tabScope: (com.neoruaa.xhsdn.data.DownloadTask) -> Boolean = when (selectedTab) {
+                    0 -> { t -> t.source == "douyin" || t.source == "douyin_home" }
+                    1 -> { t -> t.source != "douyin" && t.source != "douyin_home" && t.source != "kuaishou" }
+                    2 -> { t -> t.source == "kuaishou" }
+                    else -> { t -> t.status == com.neoruaa.xhsdn.data.TaskStatus.FAILED }
+                }
                 val counts = listOf(
                     tasks.count { it.source == "douyin" || it.source == "douyin_home" },
                     tasks.count { it.source != "douyin" && it.source != "douyin_home" && it.source != "kuaishou" },
-                    tasks.count { it.source == "kuaishou" }
+                    tasks.count { it.source == "kuaishou" },
+                    tasks.count { it.status == com.neoruaa.xhsdn.data.TaskStatus.FAILED }
                 )
-                val filterLabels = listOf("抖音", "小红书", "快手").mapIndexed { i, label -> "$label ${counts[i]}" }
+                val filterLabels = listOf("抖音", "小红书", "快手", "失败").mapIndexed { i, label -> "$label ${counts[i]}" }
                 val configuration = LocalConfiguration.current
                 TabRowWithContour(
                     tabs = filterLabels,
@@ -1597,11 +1604,55 @@ private fun HistoryPage(
                         .padding(horizontal = 16.dp, vertical = 10.dp)
                 )
 
-                // 根据平台过滤任务（douyin→0 / xhs及其余→1 / kuaishou→2；douyin_home 归入抖音页签）
-                val filteredTasks = when (selectedTab) {
-                    0 -> tasks.filter { it.source == "douyin" || it.source == "douyin_home" }
-                    2 -> tasks.filter { it.source == "kuaishou" }
-                    else -> tasks.filter { it.source != "douyin" && it.source != "douyin_home" && it.source != "kuaishou" }
+                // 根据页签过滤任务：0=抖音 / 1=小红书(其余) / 2=快手 / 3=失败(全平台)
+                val filteredTasks = tasks.filter(tabScope)
+                // 当前页签内「已成功(COMPLETED)」任务数：>0 时显示「清除已完成」一键按钮（失败/下载中保留可重试）
+                val completedInTab = filteredTasks.count { it.status == com.neoruaa.xhsdn.data.TaskStatus.COMPLETED }
+                var showClearCompletedDialog by remember { mutableStateOf(false) }
+                if (showClearCompletedDialog) {
+                    WindowDialog(
+                        title = "清除已完成任务",
+                        summary = "确定清除当前页签的 $completedInTab 条已成功下载的任务？\n（失败 / 下载中的任务会保留，可继续重试）",
+                        show = true,
+                        onDismissRequest = { showClearCompletedDialog = false }
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.padding(top = 8.dp)
+                        ) {
+                            TextButton(
+                                text = stringResource(R.string.cancel),
+                                onClick = { showClearCompletedDialog = false },
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            TextButton(
+                                text = "清除",
+                                onClick = {
+                                    com.neoruaa.xhsdn.data.TaskManager.clearCompletedTasks(tabScope)
+                                    showClearCompletedDialog = false
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.textButtonColorsPrimary()
+                            )
+                        }
+                    }
+                }
+                // 「清除已完成」入口：当前页签有已完成任务时展示（页签栏下沿右对齐小按钮）
+                if (completedInTab > 0) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            text = "清除已完成 ($completedInTab)",
+                            onClick = { showClearCompletedDialog = true },
+                            modifier = Modifier.height(28.dp)
+                        )
+                    }
                 }
                 if (filteredTasks.isEmpty()) {
                     // 空状态
