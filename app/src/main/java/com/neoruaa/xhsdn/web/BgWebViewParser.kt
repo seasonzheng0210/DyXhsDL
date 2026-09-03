@@ -1,5 +1,6 @@
 package com.neoruaa.xhsdn.web
 
+import androidx.annotation.RequiresApi
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
@@ -8,6 +9,7 @@ import android.os.Looper
 import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -168,7 +170,7 @@ class BgWebViewParser(private val appContext: Context) {
             }
             settings.allowUniversalAccessFromFileURLs = true
             settings.allowFileAccessFromFileURLs = true
-            settings.mediaPlaybackRequiresUserGesture = false
+            settings.mediaPlaybackRequiresUserGesture = true
             // 视频地址/图集图片回传桥：web_inject.js 捕获到后经此回调
             addJavascriptInterface(androidVideoBridge, "AndroidVideoBridge")
         }.also { webView = it }
@@ -223,6 +225,26 @@ class BgWebViewParser(private val appContext: Context) {
                     return true
                 }
                 return false
+            }
+
+            /**
+             * WebView 渲染进程崩溃/被系统 OOM 回收时接管，避免 aw_browser_terminator 连带杀掉宿主 App
+             * （实测：模拟器 2.5GB 内存加载抖音重型 note 页时 renderer 被 OOM 杀，无本回调则整个
+             *  DownloadService 进程 signal 9 死亡）。
+             * 返回 true = 宿主自行处理：结束本次解析（返回 null 优雅失败）并销毁重建 WebView。
+             */
+            @RequiresApi(android.os.Build.VERSION_CODES.O)
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                Log.w(TAG, "WebView 渲染进程 gone(crash=${detail?.didCrash()})，接管：结束解析并重建，不杀宿主")
+                if (!session.done) {
+                    session.done = true
+                    activeSession = null
+                    onDone(null)
+                }
+                runCatching { view?.stopLoading() }
+                runCatching { view?.destroy() }
+                if (webView === view) webView = null
+                return true
             }
         }
     }
