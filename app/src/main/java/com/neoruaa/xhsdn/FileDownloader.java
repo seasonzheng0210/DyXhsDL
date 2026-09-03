@@ -349,18 +349,27 @@ public class FileDownloader {
                 relativePath = Environment.DIRECTORY_DOWNLOADS + File.separator + "xhsdn";
             }
             
-            // 删除已存在的同名文件，以避免重复文件
-            deleteExistingFilesInMediaStore(contentResolver, collectionUri, fileName, relativePath);
-            
-            // 准备插入新文件 (we can now use the original filename since duplicates have been removed)
-            ContentValues values = new ContentValues();
-            String mimeType = getMimeTypeForFileExtension(fileExtension);
-            values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
-            values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
-            values.put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath);
-            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
-            
-            Uri uri = contentResolver.insert(collectionUri, values);
+            // 去重策略：优先"原地覆写"同名旧行（保留原名，避免 delete→insert 被物理文件残留
+            // 触发自动改名 X(1)/X(2) 与孤儿行复活）；无旧行才走插入新行。
+            Uri existingItem = findExistingMediaItem(contentResolver, collectionUri, fileName, relativePath);
+            Uri uri;
+            if (existingItem != null) {
+                Log.d(TAG, "Overwriting existing MediaStore item (keep name): " + existingItem);
+                ContentValues pendingValues = new ContentValues();
+                pendingValues.put(MediaStore.MediaColumns.IS_PENDING, 1);
+                contentResolver.update(existingItem, pendingValues, null, null);
+                uri = existingItem;
+            } else {
+                // 准备插入新文件
+                ContentValues values = new ContentValues();
+                String mimeType = getMimeTypeForFileExtension(fileExtension);
+                values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+                values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
+                values.put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath);
+                values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+                
+                uri = contentResolver.insert(collectionUri, values);
+            }
             
             if (uri != null) {
                 try {
@@ -375,14 +384,15 @@ public class FileDownloader {
                     finalizeValues.put(MediaStore.MediaColumns.IS_PENDING, 0);
                     contentResolver.update(uri, finalizeValues, null, null);
 
-                    File mediaStoreFile = buildMediaStoreFile(relativePath, fileName);
-                    if (mediaStoreFile.exists()) {
-                        return mediaStoreFile;
-                    }
-
+                    // 真实落盘路径优先（MediaStore 可能自动改名 X(1)/X(2)，请求名构造的路径可能是陈旧旧文件）
                     File fileFromUri = getFileFromUri(uri);
                     if (fileFromUri != null && fileFromUri.exists()) {
                         return fileFromUri;
+                    }
+
+                    File mediaStoreFile = buildMediaStoreFile(relativePath, fileName);
+                    if (mediaStoreFile.exists()) {
+                        return mediaStoreFile;
                     }
 
                     return mediaStoreFile;
@@ -433,15 +443,24 @@ public class FileDownloader {
                 relativePath = Environment.DIRECTORY_DOWNLOADS + File.separator + "xhsdn";
             }
 
-            deleteExistingFilesInMediaStore(contentResolver, collectionUri, fileName, relativePath);
+            // 去重策略：优先"原地覆写"同名旧行（保留原名）；无旧行才走插入新行（同 saveToMediaStore）。
+            Uri existingItem = findExistingMediaItem(contentResolver, collectionUri, fileName, relativePath);
+            Uri uri;
+            if (existingItem != null) {
+                Log.d(TAG, "Overwriting existing MediaStore item (keep name): " + existingItem);
+                ContentValues pendingValues = new ContentValues();
+                pendingValues.put(MediaStore.MediaColumns.IS_PENDING, 1);
+                contentResolver.update(existingItem, pendingValues, null, null);
+                uri = existingItem;
+            } else {
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+                values.put(MediaStore.MediaColumns.MIME_TYPE, getMimeTypeForFileExtension(fileExtension));
+                values.put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath);
+                values.put(MediaStore.MediaColumns.IS_PENDING, 1);
 
-            ContentValues values = new ContentValues();
-            values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
-            values.put(MediaStore.MediaColumns.MIME_TYPE, getMimeTypeForFileExtension(fileExtension));
-            values.put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath);
-            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
-
-            Uri uri = contentResolver.insert(collectionUri, values);
+                uri = contentResolver.insert(collectionUri, values);
+            }
             if (uri != null) {
                 try {
                     try (InputStream inputStream = new FileInputStream(sourceFile);
@@ -455,14 +474,15 @@ public class FileDownloader {
                     finalizeValues.put(MediaStore.MediaColumns.IS_PENDING, 0);
                     contentResolver.update(uri, finalizeValues, null, null);
 
-                    File mediaStoreFile = buildMediaStoreFile(relativePath, fileName);
-                    if (mediaStoreFile.exists()) {
-                        return mediaStoreFile;
-                    }
-
+                    // 真实落盘路径优先（MediaStore 可能自动改名 X(1)/X(2)，请求名构造的路径可能是陈旧旧文件）
                     File fileFromUri = getFileFromUri(uri);
                     if (fileFromUri != null && fileFromUri.exists()) {
                         return fileFromUri;
+                    }
+
+                    File mediaStoreFile = buildMediaStoreFile(relativePath, fileName);
+                    if (mediaStoreFile.exists()) {
+                        return mediaStoreFile;
                     }
 
                     return mediaStoreFile;
@@ -1058,59 +1078,28 @@ public class FileDownloader {
     }
     
     /**
-     * Delete existing files in MediaStore with the same name
-     * @param contentResolver ContentResolver instance
-     * @param collectionUri The MediaStore collection URI
-     * @param fileName The file name to check
-     * @param relativePath The relative path where the file is located
-     * @return Number of files deleted
+     * 查找 MediaStore 中同 display_name + relative_path 的既有条目（用于"原地覆写"去重）。
+     * 命中返回其 item Uri（形如 content://.../media/<id>），未命中返回 null。
      */
-    @RequiresApi(api = Build.VERSION_CODES.Q)
-    private int deleteExistingFilesInMediaStore(ContentResolver contentResolver, Uri collectionUri, 
-                                                String fileName, String relativePath) {
-        try {
-            Log.d(TAG, "Deleting existing files in MediaStore with name: " + fileName);
-            String selection = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " + 
-                              MediaStore.MediaColumns.RELATIVE_PATH + "=?";
-            String[] selectionArgs = new String[]{fileName, relativePath + File.separator};
-            
-            // Query for existing files to get their IDs
-            String[] projection = {MediaStore.MediaColumns._ID};
-            
-            android.database.Cursor cursor = contentResolver.query(
-                collectionUri,
-                projection,
-                selection,
-                selectionArgs,
-                null
-            );
-            
-            int deletedCount = 0;
-            if (cursor != null) {
-                try {
-                    while (cursor.moveToNext()) {
-                        int idColumn = cursor.getColumnIndex(MediaStore.MediaColumns._ID);
-                        if (idColumn != -1) {
-                            long id = cursor.getLong(idColumn);
-                            Uri fileUri = Uri.withAppendedPath(collectionUri, String.valueOf(id));
-                            
-                            // Delete the existing file
-                            int deleted = contentResolver.delete(fileUri, null, null);
-                            if (deleted > 0) {
-                                deletedCount++;
-                                Log.d(TAG, "Deleted existing file with ID: " + id);
-                            }
-                        }
-                    }
-                } finally {
-                    cursor.close();
+    private Uri findExistingMediaItem(ContentResolver contentResolver, Uri collectionUri,
+                                      String fileName, String relativePath) {
+        String selection = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " +
+                          MediaStore.MediaColumns.RELATIVE_PATH + "=?";
+        String[] selectionArgs = new String[]{fileName, relativePath + File.separator};
+        String[] projection = {MediaStore.MediaColumns._ID};
+        try (android.database.Cursor cursor = contentResolver.query(
+                collectionUri, projection, selection, selectionArgs, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int idColumn = cursor.getColumnIndex(MediaStore.MediaColumns._ID);
+                if (idColumn != -1) {
+                    long id = cursor.getLong(idColumn);
+                    return Uri.withAppendedPath(collectionUri, String.valueOf(id));
                 }
             }
-            return deletedCount;
         } catch (Exception e) {
-            Log.e(TAG, "Error deleting existing files: " + e.getMessage());
-            return 0;
+            Log.e(TAG, "Error finding existing MediaStore item: " + e.getMessage());
         }
+        return null;
     }
     
     /**
