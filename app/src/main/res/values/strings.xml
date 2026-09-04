@@ -229,4 +229,12 @@
     <string name="homepage_start_download">Start Homepage Download</string>
     <string name="homepage_supported">Supports: Douyin video link (auto-resolves the author homepage), Douyin homepage share text (\"View more of their works\"), www.douyin.com/user/xxx. Copying a homepage share to clipboard also triggers download automatically.</string>
     <string name="homepage_parsing">Batch-parsing %1$d homepage videos…</string>
+
+    <!-- Usage event tracking (v1.13.0) -->
+    <string name="menu_events_log">Usage Events</string>
+    <string name="events_log_title">Feature Usage Log</string>
+    <string name="events_log_desc">Records every feature interaction to help decide which features are rarely used and can be removed. Copy or package this log and send it to the developer for analysis.</string>
+    <string name="events_log_empty">No events recorded yet — interact with the app and they will appear here.</string>
+    <string name="clear_events_log">Clear Events</string>
+    <string name="events_log_cleared">Events log cleared</string>
 </resources>

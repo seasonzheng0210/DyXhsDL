@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import com.neoruaa.xhsdn.utils.UrlUtils
 import com.neoruaa.xhsdn.utils.DownloadLogger
+import com.neoruaa.xhsdn.utils.EventTracker
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -189,6 +190,7 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(autoUrl) {
                 autoUrl?.let { url ->
                      if (url.isNotEmpty()) {
+                        trackEvent("entry_share", mapOf("platform" to (UrlUtils.detectPlatform(url) ?: "unknown")))
                         // 快手链接：HTTP 直解不稳定（匿名 GraphQL 偶被风控返回空），改用 WebView 真浏览器解析（与抖音一致）
                         if (UrlUtils.detectPlatform(url) == "kuaishou") {
                             launchKuaishouWebView(url)
@@ -298,6 +300,7 @@ class MainActivity : ComponentActivity() {
                         }
 
                         if (currentAutoRead && UrlUtils.detectPlatform(clipText) == "douyin") {
+                            trackEvent("auto_download", mapOf("platform" to "douyin"))
                             // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
                             lastHandledUrl = dedupeKey
                             // 识别到平台后自动跳到对应任务页签（无论当前停留在哪个页签）
@@ -310,6 +313,7 @@ class MainActivity : ComponentActivity() {
                                 // A. Auto Download Priority
                                 lastHandledUrl = dedupeKey
                                 val autoPlat = UrlUtils.detectPlatform(clipText)
+                                trackEvent("auto_download", mapOf("platform" to (autoPlat ?: "unknown")))
                                 // 识别到平台后自动跳到对应任务页签（无论当前停留在哪个页签）
                                 taskTab = platformTabIndex(autoPlat)
                                 if (autoPlat == "kuaishou") {
@@ -322,6 +326,7 @@ class MainActivity : ComponentActivity() {
                                 Log.d("XHS_Debug", "Triggering Auto Download")
 
                                 if (selectiveDownload) {
+                                    trackEvent("selective_start")
                                     viewModel.startSelectiveDownload { showToast(it) }
                                 } else {
                                     dispatchDownload(clipText, null)
@@ -420,7 +425,10 @@ class MainActivity : ComponentActivity() {
                     onShowInputDialogChange = { showInputDialog = it },
                     scrollBehavior = scrollBehavior,
                     mainTab = mainTab,
-                    onMainTabSelected = { mainTab = it },
+                    onMainTabSelected = {
+                        trackEvent("main_tab_switch", mapOf("tab" to if (it == 0) "video" else "homepage"))
+                        mainTab = it
+                    },
                     onHomepageDownload = { link -> launchDouyinHomepageDownload(link) },
                     onDownload = {
                         if (!manualInputLinks) {
@@ -437,17 +445,21 @@ class MainActivity : ComponentActivity() {
                                 val platform = UrlUtils.detectPlatform(clipText)
                                 if (platform == "douyin") {
                                     // 抖音：HTTP 直解已被风控拦截（空响应/安全页），改用 WebView 真浏览器解析
+                                    trackEvent("entry_button", mapOf("platform" to "douyin"))
                                     taskTab = platformTabIndex(platform)
                                     launchDouyinWebView(clipText)
                                 } else if (platform == "kuaishou") {
                                     // 快手：HTTP 直解不稳定（匿名 GraphQL 偶被风控），改用 WebView 真浏览器解析（与抖音一致）
+                                    trackEvent("entry_button", mapOf("platform" to "kuaishou"))
                                     taskTab = platformTabIndex(platform)
                                     launchKuaishouWebView(clipText)
                                 } else if (platform == "xhs") {
+                                    trackEvent("entry_button", mapOf("platform" to "xhs"))
                                     taskTab = platformTabIndex(platform)
                                     viewModel.updateUrl(clipText)
 
                                     if (selectiveDownload) {
+                                        trackEvent("selective_start")
                                         viewModel.startSelectiveDownload { showToast(it) }
                                     } else {
                                         // 派发到前台服务下载（普通模式）
@@ -460,6 +472,7 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onCopyText = { 
+                        trackEvent("copy_description")
                         // 先读取剪贴板
                         val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
                         val clipText = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
@@ -468,7 +481,7 @@ class MainActivity : ComponentActivity() {
                         }
                         ensureStoragePermission { viewModel.copyDescription({ showToast(getString(R.string.copied_description)) }, { showToast(it) }) } 
                     },
-                    onOpenSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
+                    onOpenSettings = { trackEvent("settings_open"); startActivity(Intent(this, SettingsActivity::class.java)) },
                     onWebCrawlFromClipboard = homepageGuard@{
                         // 先读取剪贴板
                         val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -486,12 +499,15 @@ class MainActivity : ComponentActivity() {
                                 val platform = UrlUtils.detectPlatform(cleanUrl)
                                 if (platform == "kuaishou") {
                                     // 快手链接走专用 WebView 入口（kuaishou_extractor 兜底）
+                                    trackEvent("entry_webcrawl", mapOf("platform" to "kuaishou"))
                                     taskTab = platformTabIndex(platform)
                                     launchKuaishouWebView(cleanUrl)
                                 } else if (platform == "douyin") {
+                                    trackEvent("entry_webcrawl", mapOf("platform" to "douyin"))
                                     taskTab = platformTabIndex(platform)
                                     launchDouyinWebView(cleanUrl)
                                 } else if (platform == "xhs") {
+                                    trackEvent("entry_webcrawl", mapOf("platform" to "xhs"))
                                     taskTab = platformTabIndex(platform)
                                     val webViewIntent = Intent(this, WebViewActivity::class.java).apply {
                                         putExtra("url", cleanUrl)
@@ -509,8 +525,12 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     },
-                    onMediaClick = { openFile(it) },
+                    onMediaClick = {
+                        trackEvent("media_open")
+                        openFile(it)
+                    },
                     onCopyUrl = { url ->
+                        trackEvent("copy_url")
                         val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
                         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("xhs_url", url))
                         showToast(getString(R.string.link_copied))
@@ -534,6 +554,7 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onRetryTask = { task ->
+                        trackEvent("retry_task", mapOf("source" to (task.source ?: "")))
                         when (task.source) {
                             "douyin_home" -> {
                                 // 主页批次重试：重新反查作者并爬取（旧失败记录不再复用，直接删除避免僵尸）
@@ -562,12 +583,15 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onDeleteTask = { task ->
+                        trackEvent("task_delete", mapOf("source" to (task.source ?: "")))
                         com.neoruaa.xhsdn.data.TaskManager.deleteTask(task.id)
                     },
                     onContinueTask = { task -> 
+                        trackEvent("task_continue")
                         viewModel.continueTask(task)
                     },
                     onWebCrawlTask = { task ->
+                        trackEvent("task_webcrawl", mapOf("source" to (task.source ?: "")))
                         viewModel.updateUrl(task.noteUrl)
                         when (task.source) {
                             "kuaishou" -> launchKuaishouWebView(task.noteUrl, task.id)
@@ -576,10 +600,11 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onStopTask = { task ->
+                         trackEvent("task_stop")
                          // 停止前台服务中正在进行的任务
                          com.neoruaa.xhsdn.DownloadService.stopTask(this, task.id)
                     },
-                    onClearHistory = { viewModel.clearHistory() },
+                    onClearHistory = { trackEvent("clear_history"); viewModel.clearHistory() },
                     onManualInputDownload = homepageGuard@{ inputLink ->
                         // 抖音主页链接（分享文案 / /user/{sec_uid}）：走主页下载，反查作者并批量下载
                         if (UrlUtils.isDouyinHomepageLink(inputLink)) {
@@ -590,15 +615,19 @@ class MainActivity : ComponentActivity() {
                             val plat = UrlUtils.detectPlatform(inputLink)
                             if (plat == "douyin") {
                                 // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
+                                trackEvent("entry_manual", mapOf("platform" to "douyin"))
                                 taskTab = platformTabIndex(plat)
                                 launchDouyinWebView(inputLink)
                             } else if (plat == "kuaishou") {
+                                trackEvent("entry_manual", mapOf("platform" to "kuaishou"))
                                 taskTab = platformTabIndex(plat)
                                 launchKuaishouWebView(inputLink)
                             } else if (plat == "xhs") {
+                                trackEvent("entry_manual", mapOf("platform" to "xhs"))
                                 taskTab = platformTabIndex(plat)
                                 viewModel.updateUrl(inputLink)
                                 if (selectiveDownload) {
+                                    trackEvent("selective_start")
                                     viewModel.startSelectiveDownload { showToast(it) }
                                 } else {
                                     dispatchDownload(inputLink, "xhs")
@@ -612,10 +641,18 @@ class MainActivity : ComponentActivity() {
                     detectedXhsLink = detectedXhsLink,
                     detectedPlatform = detectedPlatform,
                     taskTab = taskTab,
-                    onTabSelected = { taskTab = it },
+                    onTabSelected = {
+                        trackEvent("tab_switch", mapOf("tab" to tabNameOf(it)))
+                        taskTab = it
+                    },
                     onClipboardBubbleActivate = homepageGuard@{
                         val link = detectedXhsLink
                         if (!link.isNullOrBlank()) {
+                                val bubblePlatform = when {
+                                    UrlUtils.isDouyinHomepageLink(link) -> "douyin_home"
+                                    else -> UrlUtils.detectPlatform(link) ?: "unknown"
+                                }
+                                trackEvent("entry_bubble", mapOf("platform" to bubblePlatform))
                                 // 主页链接：走主页下载，反查作者并批量下载
                                 if (UrlUtils.isDouyinHomepageLink(link)) {
                                     launchDouyinHomepageDownload(link)
@@ -637,6 +674,7 @@ class MainActivity : ComponentActivity() {
                                 } else {
                                     viewModel.updateUrl(link)
                                     if (selectiveDownload) {
+                                        trackEvent("selective_start")
                                         viewModel.startSelectiveDownload { showToast(it) }
                                     } else {
                                         dispatchDownload(link, "xhs")
@@ -648,6 +686,7 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onDismissPrompt = {
+                        trackEvent("bubble_dismiss")
                         detectedXhsLink = null
                         detectedPlatform = null
                         lastHandledUrl = null
@@ -698,6 +737,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+
+    /**
+     * 埋码事件（events.log）：Activity 侧功能点操作的统一入口。与 DownloadService 内的
+     * download_requested / parse_* / download_done 互补——本方法记录「用户点了哪个功能」。
+     */
+    private fun trackEvent(event: String, attrs: Map<String, String>? = null) {
+        EventTracker.track(this, event, attrs)
+    }
+
+    /** 平台页签名（与 taskTab 索引对应），供埋码 tab_switch 使用。 */
+    private fun tabNameOf(taskTabIndex: Int): String = when (taskTabIndex) {
+        0 -> "douyin"; 1 -> "xhs"; 2 -> "kuaishou"; else -> "failed"
+    }
 
     private fun launchWebView(input: String, taskId: Long? = null) {
         val cleanUrl = UrlUtils.extractFirstUrl(input)
@@ -776,6 +828,7 @@ class MainActivity : ComponentActivity() {
      *  - 视频链接：用移动端 aweme/v1/feed 接口反查 author.sec_uid → /user/{sec_uid} 再爬取。
      */
     private fun launchDouyinHomepageDownload(input: String) {
+        trackEvent("homepage_download")
         val cleanUrl = UrlUtils.extractFirstUrl(input)
         if (cleanUrl == null) {
             showToast(getString(R.string.invalid_link_please_reenter))
@@ -1069,6 +1122,8 @@ private fun MainScreen(
     var showFailureLogDialog by remember { mutableStateOf(false) }
     // 正常日志查看对话框状态
     var showNormalLogDialog by remember { mutableStateOf(false) }
+    // 埋码（功能使用）日志查看对话框状态
+    var showEventsLogDialog by remember { mutableStateOf(false) }
     // 在 Composable 作用域取一次 Context，供菜单 onClick（非 Composable）复用
     val ctx = LocalContext.current
 
@@ -1095,7 +1150,7 @@ private fun MainScreen(
 //                                modifier = Modifier.size(24.dp)
                             )
 
-                            val menuItems = listOf(stringResource(R.string.copy_description), stringResource(R.string.web_crawl_option), stringResource(R.string.clear_history), stringResource(R.string.menu_failure_log), stringResource(R.string.menu_normal_log), stringResource(R.string.menu_package_log))
+                            val menuItems = listOf(stringResource(R.string.copy_description), stringResource(R.string.clear_history), stringResource(R.string.menu_failure_log), stringResource(R.string.menu_normal_log), stringResource(R.string.menu_package_log), stringResource(R.string.menu_events_log))
 
                             WindowListPopup(
                                 show = menuExpanded && !uiState.isDownloading,
@@ -1116,18 +1171,18 @@ private fun MainScreen(
                                                         onCopyText()
                                                     }
                                                     1 -> {
-                                                        onWebCrawlFromClipboard()
-                                                    }
-                                                    2 -> {
                                                         showClearHistoryDialog = true
                                                     }
-                                                    3 -> {
+                                                    2 -> {
+                                                        EventTracker.track(ctx, "logs_view", mapOf("type" to "failure"))
                                                         showFailureLogDialog = true
                                                     }
-                                                    4 -> {
+                                                    3 -> {
+                                                        EventTracker.track(ctx, "logs_view", mapOf("type" to "normal"))
                                                         showNormalLogDialog = true
                                                     }
-                                                    5 -> {
+                                                    4 -> {
+                                                        EventTracker.track(ctx, "logs_view", mapOf("type" to "package"))
                                                         // 打包日志：压缩 正常日志 + 失败日志，并通过分享面板导出
                                                         val zip = DownloadLogger.packageLogs(ctx)
                                                         if (zip == null) {
@@ -1159,6 +1214,10 @@ private fun MainScreen(
                                                                 android.widget.Toast.LENGTH_LONG
                                                             ).show()
                                                         }
+                                                    }
+                                                    5 -> {
+                                                        EventTracker.track(ctx, "logs_view", mapOf("type" to "events"))
+                                                        showEventsLogDialog = true
                                                     }
                                                 }
                                             },
@@ -1313,6 +1372,72 @@ private fun MainScreen(
                                                 val cm = logCtx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                                 cm.setPrimaryClip(android.content.ClipData.newPlainText("normal_log", logContent))
                                                 android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 埋码（功能使用）日志查看对话框：复制给开发者分析哪些功能用得少
+                        if (showEventsLogDialog) {
+                            val evCtx = LocalContext.current
+                            var eventsLogVersion by remember { mutableStateOf(0) }
+                            val eventsContent = remember(eventsLogVersion) { EventTracker.getEventsLogContent(evCtx) }
+                            WindowDialog(
+                                title = stringResource(R.string.events_log_title),
+                                show = true,
+                                onDismissRequest = { showEventsLogDialog = false }
+                            ) {
+                                Column(modifier = Modifier.padding(top = 8.dp)) {
+                                    Text(
+                                        text = stringResource(R.string.events_log_desc),
+                                        fontSize = 12.sp,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    if (eventsContent.isBlank()) {
+                                        Text(
+                                            text = stringResource(R.string.events_log_empty),
+                                            fontSize = 14.sp,
+                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                        )
+                                    } else {
+                                        Text(
+                                            text = eventsContent,
+                                            fontSize = 11.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = 320.dp)
+                                                .verticalScroll(rememberScrollState())
+                                        )
+                                    }
+                                    Spacer(Modifier.height(12.dp))
+                                    Row(
+                                        horizontalArrangement = Arrangement.End,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        TextButton(
+                                            text = stringResource(R.string.clear_events_log),
+                                            onClick = {
+                                                EventTracker.clear(evCtx)
+                                                eventsLogVersion++
+                                                android.widget.Toast.makeText(evCtx, evCtx.getString(R.string.events_log_cleared), android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        TextButton(
+                                            text = stringResource(R.string.cancel),
+                                            onClick = { showEventsLogDialog = false }
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        TextButton(
+                                            text = stringResource(R.string.copy_log),
+                                            onClick = {
+                                                val cm = evCtx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                                cm.setPrimaryClip(android.content.ClipData.newPlainText("events_log", eventsContent))
+                                                android.widget.Toast.makeText(evCtx, evCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
                                             }
                                         )
                                     }
@@ -1612,6 +1737,10 @@ private fun HistoryPage(
                 val completedInTab = filteredTasks.count { it.status == com.neoruaa.xhsdn.data.TaskStatus.COMPLETED }
                 var showClearCompletedDialog by remember { mutableStateOf(false) }
                 if (showClearCompletedDialog) {
+                    val clearTabLabel = when (selectedTab) {
+                        0 -> "douyin"; 1 -> "xhs"; 2 -> "kuaishou"; else -> "failed"
+                    }
+                    val clearCtx = LocalContext.current
                     WindowDialog(
                         title = "清除已完成任务",
                         summary = "确定清除当前页签的 $completedInTab 条已成功下载的任务？\n（失败 / 下载中的任务会保留，可继续重试）",
@@ -1631,6 +1760,7 @@ private fun HistoryPage(
                             TextButton(
                                 text = "清除",
                                 onClick = {
+                                    EventTracker.track(clearCtx, "clear_completed", mapOf("tab" to clearTabLabel, "n" to completedInTab.toString()))
                                     com.neoruaa.xhsdn.data.TaskManager.clearCompletedTasks(tabScope)
                                     showClearCompletedDialog = false
                                 },
@@ -1640,20 +1770,33 @@ private fun HistoryPage(
                         }
                     }
                 }
-                // 「清除已完成」入口：当前页签有已完成任务时展示（页签栏下沿右对齐小按钮）
+                // 「清除已完成」入口：当前页签有已完成任务时展示（页签栏下沿右对齐小胶囊）
                 if (completedInTab > 0) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
+                            .padding(start = 16.dp, end = 16.dp, top = 2.dp),
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(
-                            text = "清除已完成 ($completedInTab)",
-                            onClick = { showClearCompletedDialog = true }
-                        )
+                        Card(
+                            modifier = Modifier.clickable { showClearCompletedDialog = true },
+                            cornerRadius = 14.dp,
+                            colors = CardDefaults.defaultColors(
+                                color = MiuixTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Text(
+                                text = "清除已完成 $completedInTab",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
                     }
+                    // 与下方任务列表之间留出呼吸间距，避免按钮紧贴卡片
+                    Spacer(Modifier.height(6.dp))
                 }
                 if (filteredTasks.isEmpty()) {
                     // 空状态

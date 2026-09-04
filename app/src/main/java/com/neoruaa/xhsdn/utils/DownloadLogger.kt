@@ -27,7 +27,7 @@ object DownloadLogger {
     private const val FILE_FAILURE = "failures.log"
     private const val FILE_NORMAL = "normal.log"
 
-    private fun resolveDir(context: Context): File {
+    internal fun resolveDir(context: Context): File {
         val ext = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
         val base = if (ext != null) File(ext, DIR) else File(context.filesDir, DIR)
         if (!base.exists()) base.mkdirs()

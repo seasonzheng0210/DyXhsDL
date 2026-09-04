@@ -21,6 +21,7 @@ import com.neoruaa.xhsdn.kuaishou.KuaishouMediaInfo
 import com.neoruaa.xhsdn.kuaishou.KuaishouMediaType
 import com.neoruaa.xhsdn.kuaishou.KuaishouParser
 import com.neoruaa.xhsdn.utils.DownloadLogger
+import com.neoruaa.xhsdn.utils.EventTracker
 import com.neoruaa.xhsdn.utils.UrlUtils
 import com.neoruaa.xhsdn.web.BgWebViewParser
 import kotlinx.coroutines.CancellationException
@@ -45,6 +46,10 @@ import kotlin.coroutines.CoroutineContext
  * 完成解析与下载，并通过 TaskManager 持久化任务状态（回到 App 进度照常显示）。
  */
 class DownloadService : Service() {
+
+    /** HTTP 快解结果：value=媒体数据（成功），error=失败末因（供失败文案精确定位，非 null 表示失败）。 */
+    private data class HttpOutcome<T>(val value: T?, val error: String?)
+
     // 视频直链下载用的移动 UA（iPhone），对抖音系/第三方直链最稳
     private val DIRECT_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
     // 快手 CDN（kwaicdn.com）需带快手 Referer，否则返回 403
@@ -126,9 +131,18 @@ class DownloadService : Service() {
                 startDouyinHomeBatch(urls, pageUrl, taskIdExtra)
             }
             else -> when (source) {
-                "douyin" -> startDouyin(url, mode, taskIdExtra)
-                "kuaishou" -> startKuaishou(url, mode, taskIdExtra)
-                else -> startXhs(url, taskIdExtra)
+                "douyin" -> {
+                    EventTracker.track(this, "download_requested", mapOf("source" to "douyin", "mode" to mode))
+                    startDouyin(url, mode, taskIdExtra)
+                }
+                "kuaishou" -> {
+                    EventTracker.track(this, "download_requested", mapOf("source" to "kuaishou", "mode" to mode))
+                    startKuaishou(url, mode, taskIdExtra)
+                }
+                else -> {
+                    EventTracker.track(this, "download_requested", mapOf("source" to "xhs", "mode" to mode))
+                    startXhs(url, taskIdExtra)
+                }
             }
         }
 
@@ -322,15 +336,22 @@ class DownloadService : Service() {
 
                 // 解析：HTTP 直解（10s 快解）失败 → 后台不可见 WebView 真浏览器兜底
                 //（复用登录态 Cookie，不弹 Activity / 无黑窗）。两条路都拿不到媒体才算失败。
-                val info = resolveDouyinMediaInfo(targetUrl)
+                val (info, failReason) = resolveDouyinMediaInfo(targetUrl)
                 if (info == null) {
-                    DownloadLogger.logFailure(this@DownloadService, "douyin", targetUrl,
-                        "解析失败：HTTP 直解与后台 WebView 均未取到媒体（可能需登录抖音）")
-                    TaskManager.completeTask(myTaskId, false, "解析失败（可能需登录抖音）")
+                    // 失败文案携带各环节末因（HTTP 快解/预热/WebView），用户复制日志即可精确定位
+                    val fullReason = failReason.ifBlank { "未知原因" }
+                    EventTracker.track(this@DownloadService, "parse_fail", mapOf("source" to "douyin", "reason" to fullReason))
+                    DownloadLogger.logFailure(this@DownloadService, "douyin", targetUrl, "解析失败: $fullReason")
+                    TaskManager.completeTask(myTaskId, false, "解析失败: ${fullReason.take(60)}")
                     updateNotification(getString(R.string.download_failed_notification_title),
-                        "抖音解析失败（可能需登录抖音）", false)
+                        "抖音解析失败", false)
                     return@launch
                 }
+                EventTracker.track(this@DownloadService, "parse_success", mapOf(
+                    "source" to "douyin",
+                    "type" to (if (info.type == DouyinMediaType.IMAGE) "image" else "video"),
+                    "n" to (if (info.type == DouyinMediaType.IMAGE) info.imageUrls.size.toString() else "1")
+                ))
 
                 // 图集/图文：更新任务类型为图片，文件总数为图片数量
                 if (info.type == DouyinMediaType.IMAGE) {
@@ -361,6 +382,11 @@ class DownloadService : Service() {
                     }
                 }
 
+                EventTracker.track(this@DownloadService, "download_done", mapOf(
+                    "source" to "douyin",
+                    "ok" to success.toString(),
+                    "type" to (if (info.type == DouyinMediaType.IMAGE) "image" else "video")
+                ))
                 if (success) {
                     DownloadLogger.logInfo(this@DownloadService, "douyin", targetUrl, "下载完成(成功): ${info.title}")
                 }
@@ -428,22 +454,39 @@ class DownloadService : Service() {
      * 直解图文，绕开页面渲染/登录墙），仍失败再转后台不可见 WebView 真浏览器兜底
      * （复用登录态 Cookie、不弹 Activity）。三条路都拿不到媒体返回 null。
      */
-    private suspend fun resolveDouyinMediaInfo(targetUrl: String): DouyinMediaInfo? {
-        val httpInfo = fastHttpResolve { DouyinParser.parse(targetUrl) }
-        if (httpInfo != null) return httpInfo
+    /**
+     * 抖音解析主入口。返回 (媒体信息, 失败原因)：成功时 info 非 null、reason 空串；
+     * 失败时 info 为 null、reason 携带各失败环节末因（HTTP 快解 → 预热 → 后台 WebView），
+     * 供上层失败文案精确定位，用户复制日志即可诊断。
+     */
+    private suspend fun resolveDouyinMediaInfo(targetUrl: String): Pair<DouyinMediaInfo?, String> {
+        val reasons = mutableListOf<String>()
+
+        val http = fastHttpResolve { DouyinParser.parse(targetUrl) }
+        if (http.value != null) return http.value to ""
+        http.error?.let { reasons += it }
 
         // Cookie 懒预热 + HTTP 重试（v1.12.0 note 免登录方案 P2）
-        if (warmupDouyinCookie(targetUrl)) {
-            DownloadLogger.logInfo(this@DownloadService, "douyin", targetUrl, "Cookie 预热完成，重试 HTTP 直解…")
+        val warmed = warmupDouyinCookie(targetUrl)
+        if (warmed) {
+            reasons += "预热成功仍失败"
             val retry = fastHttpResolve { DouyinParser.parse(targetUrl) }
-            if (retry != null) return retry
+            if (retry.value != null) return retry.value to ""
+            retry.error?.let { reasons += "预热后: $it" }
+        } else {
+            reasons += "Cookie 预热未触发/失败(跳过重试)"
         }
 
+        reasons += "转后台 WebView 兜底"
         DownloadLogger.logInfo(this@DownloadService, "douyin", targetUrl, "HTTP 直解未取到媒体，转后台 WebView 解析…")
-        val bg = bgParser.parse(targetUrl, "douyin") ?: return null
+        val bg = bgParser.parse(targetUrl, "douyin")
+        if (bg == null) {
+            reasons += "WebView 未取到媒体"
+            return null to reasons.joinToString("; ")
+        }
         val id = extractDouyinId(targetUrl)
         val safeTitle = safeFileName(bg.title.ifBlank { "douyin_$id" })
-        return when {
+        val info = when {
             bg.imageUrls.isNotEmpty() -> DouyinMediaInfo(
                 DouyinMediaType.IMAGE, safeTitle, null, bg.imageUrls, null, id, DouyinParser.MOBILE_UA
             )
@@ -451,6 +494,8 @@ class DownloadService : Service() {
                 DouyinMediaInfo(DouyinMediaType.VIDEO, safeTitle, v, emptyList(), null, id, DouyinParser.MOBILE_UA)
             }
         }
+        if (info == null) reasons += "WebView 有数据但无可用媒体"
+        return info to if (info == null) reasons.joinToString("; ") else ""
     }
 
     /**
@@ -488,14 +533,26 @@ class DownloadService : Service() {
     /**
      * 快手解析主入口：先 HTTP GraphQL 快解（10s 上限），失败转后台 WebView 兜底。
      */
-    private suspend fun resolveKuaishouMediaInfo(targetUrl: String): KuaishouMediaInfo? {
-        val httpInfo = fastHttpResolve { KuaishouParser.parse(targetUrl) }
-        if (httpInfo != null) return httpInfo
+    /**
+     * 快手解析主入口：先 HTTP GraphQL 快解（10s 上限），失败转后台 WebView 兜底。
+     * 返回 (媒体信息, 失败原因)——失败时 reason 携带各环节末因供文案精确定位。
+     */
+    private suspend fun resolveKuaishouMediaInfo(targetUrl: String): Pair<KuaishouMediaInfo?, String> {
+        val reasons = mutableListOf<String>()
+        val http = fastHttpResolve { KuaishouParser.parse(targetUrl) }
+        if (http.value != null) return http.value to ""
+        http.error?.let { reasons += it }
+
+        reasons += "转后台 WebView 兜底"
         DownloadLogger.logInfo(this@DownloadService, "kuaishou", targetUrl, "HTTP 直解未取到媒体，转后台 WebView 解析…")
-        val bg = bgParser.parse(targetUrl, "kuaishou") ?: return null
+        val bg = bgParser.parse(targetUrl, "kuaishou")
+        if (bg == null) {
+            reasons += "WebView 未取到媒体"
+            return null to reasons.joinToString("; ")
+        }
         val id = targetUrl.substringAfterLast('/').substringBefore('?').takeIf { it.isNotBlank() } ?: "ks"
         val safeTitle = safeFileName(bg.title.ifBlank { "kuaishou_$id" })
-        return when {
+        val info = when {
             bg.imageUrls.isNotEmpty() -> KuaishouMediaInfo(
                 KuaishouMediaType.IMAGE, safeTitle, null, bg.imageUrls, null, id, KuaishouParser.MOBILE_UA
             )
@@ -503,25 +560,28 @@ class DownloadService : Service() {
                 KuaishouMediaInfo(KuaishouMediaType.VIDEO, safeTitle, v, emptyList(), null, id, KuaishouParser.MOBILE_UA)
             }
         }
+        if (info == null) reasons += "WebView 有数据但无可用媒体"
+        return info to if (info == null) reasons.joinToString("; ") else ""
     }
 
     /**
      * HTTP 快解：给平台 Parser 一个短预算，避免被风控的空响应/慢连接拖住几十秒才轮到
-     * 后台 WebView 兜底。普通异常/超时返回 null；协程取消(CancellationException)原样上抛。
+     * 后台 WebView 兜底。返回 [HttpOutcome]——成功 value 非 null；失败 error 携带末因。
+     * 协程取消(CancellationException)与主页分享链接异常(DouyinHomepageLinkException)原样上抛。
      */
-    private suspend fun <T> fastHttpResolve(block: suspend () -> T): T? {
+    private suspend fun <T> fastHttpResolve(block: suspend () -> T): HttpOutcome<T> {
         return try {
-            withTimeout(HTTP_FAST_TIMEOUT_MS) { block() }
+            HttpOutcome(withTimeout(HTTP_FAST_TIMEOUT_MS) { block() }, null)
         } catch (e: TimeoutCancellationException) {
             Log.w(TAG, "HTTP 直解超时(${HTTP_FAST_TIMEOUT_MS}ms)，转后台 WebView")
-            null
+            HttpOutcome(null, "HTTP 直解超时(${HTTP_FAST_TIMEOUT_MS / 1000}s)")
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             // 主页分享短链（302 → share/user）不是单作品：不做降级，直接上抛给用户明确指引
             if (e is com.neoruaa.xhsdn.douyin.DouyinHomepageLinkException) throw e
             Log.w(TAG, "HTTP 直解失败: ${e.message}")
-            null
+            HttpOutcome(null, e.message ?: "HTTP 直解未知异常")
         }
     }
 
@@ -590,9 +650,9 @@ class DownloadService : Service() {
                     if (myJob?.isActive == false) return@forEachIndexed
                     updateNotification(getString(R.string.downloading_files),
                         "主页视频 解析+下载中(${index + 1}/${pageUrls.size})…", true)
-                    val info = resolveDouyinMediaInfo(pageUrl)
+                    val (info, hbReason) = resolveDouyinMediaInfo(pageUrl)
                     val ok = if (info == null) {
-                        DownloadLogger.logFailure(this@DownloadService, "douyin", pageUrl, "主页批量：单条解析失败")
+                        DownloadLogger.logFailure(this@DownloadService, "douyin", pageUrl, "主页批量：单条解析失败: ${hbReason.ifBlank { "未知" }}")
                         false
                     } else if (info.type == DouyinMediaType.IMAGE) {
                         // 图集帖：单条下载全部图片（文件名带序号前缀避免与其它帖撞名覆盖）
@@ -741,15 +801,21 @@ class DownloadService : Service() {
                 updateNotification(getString(R.string.downloading_files), "快手解析中…", true)
 
                 // 解析：HTTP GraphQL 直解（10s 快解）失败 → 后台不可见 WebView 真浏览器兜底
-                val info = resolveKuaishouMediaInfo(targetUrl)
+                val (info, kFailReason) = resolveKuaishouMediaInfo(targetUrl)
                 if (info == null) {
-                    DownloadLogger.logFailure(this@DownloadService, "kuaishou", targetUrl,
-                        "解析失败：HTTP 直解与后台 WebView 均未取到媒体")
-                    TaskManager.completeTask(myTaskId, false, "解析失败")
+                    val fullReason = kFailReason.ifBlank { "未知原因" }
+                    EventTracker.track(this@DownloadService, "parse_fail", mapOf("source" to "kuaishou", "reason" to fullReason))
+                    DownloadLogger.logFailure(this@DownloadService, "kuaishou", targetUrl, "解析失败: $fullReason")
+                    TaskManager.completeTask(myTaskId, false, "解析失败: ${fullReason.take(60)}")
                     updateNotification(getString(R.string.download_failed_notification_title),
                         "快手解析失败", false)
                     return@launch
                 }
+                EventTracker.track(this@DownloadService, "parse_success", mapOf(
+                    "source" to "kuaishou",
+                    "type" to (if (info.type == KuaishouMediaType.IMAGE) "image" else "video"),
+                    "n" to (if (info.type == KuaishouMediaType.IMAGE) info.imageUrls.size.toString() else "1")
+                ))
 
                 // 图集：更新任务类型为图片，文件总数为图片数量
                 if (info.type == KuaishouMediaType.IMAGE) {
@@ -779,6 +845,11 @@ class DownloadService : Service() {
                     }
                 }
 
+                EventTracker.track(this@DownloadService, "download_done", mapOf(
+                    "source" to "kuaishou",
+                    "ok" to success.toString(),
+                    "type" to (if (info.type == KuaishouMediaType.IMAGE) "image" else "video")
+                ))
                 if (success) {
                     DownloadLogger.logInfo(this@DownloadService, "kuaishou", targetUrl, "下载完成(成功): ${info.title}")
                 }
@@ -927,6 +998,12 @@ class DownloadService : Service() {
 
                 val c = completed.get()
                 val f = failed.get()
+                EventTracker.track(this@DownloadService, "download_done", mapOf(
+                    "source" to "xhs",
+                    "ok" to (success && f == 0 && c > 0).toString(),
+                    "files" to c.toString(),
+                    "failed" to f.toString()
+                ))
                 if (success && f == 0 && c > 0) {
                     DownloadLogger.logInfo(this@DownloadService, "xhs", targetUrl, "下载完成(成功): $c 个文件")
                 }

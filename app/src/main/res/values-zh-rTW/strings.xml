@@ -222,4 +222,12 @@
     <string name="homepage_start_download">開始下載主頁</string>
     <string name="homepage_supported">支援：抖音影片連結（自動反查作者主頁）、抖音主頁分享文案（「查看TA的更多作品」）、www.douyin.com/user/xxx。複製主頁分享文案到剪貼簿也可自動觸發下載。</string>
     <string name="homepage_parsing">開始批次解析 %1$d 個主頁影片…</string>
+
+    <!-- 功能埋碼日誌（v1.13.0）：記錄每個功能點操作，供匯出分析哪些用得少可移除 -->
+    <string name="menu_events_log">埋碼日誌</string>
+    <string name="events_log_title">功能埋碼日誌</string>
+    <string name="events_log_desc">記錄每個功能點的操作次數，便於分析哪些功能用得少可以移除。可複製或打包匯出，發送給開發者分析。</string>
+    <string name="events_log_empty">暫無埋碼記錄 — 操作 App 後會自動記錄。</string>
+    <string name="clear_events_log">清除埋碼</string>
+    <string name="events_log_cleared">埋碼日誌已清除</string>
 </resources>
