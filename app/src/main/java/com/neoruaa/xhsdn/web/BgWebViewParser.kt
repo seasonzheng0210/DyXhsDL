@@ -142,6 +142,69 @@ class BgWebViewParser(private val appContext: Context) {
         }
     }
 
+    /**
+     * Cookie 预热 + 快照（note 免登录 detail API 方案 P2）。
+     *
+     * 背景：抖音 Web detail API 需要"完整浏览器指纹 cookie"（ttwid/UIFID_TEMP/
+     * __ac_signature/s_v_web_id…），这些只能由真实浏览器 JS 执行后种下，纯 HTTP 拿不到
+     * （匿名直调 detail → 403 ArgusSecurityPlugin Uifid Not Found，沙箱实证）。
+     *
+     * 做法：复用本类同一后台 WebView（Mutex 串行，不弹窗），加载目标作品页让抖音风控壳
+     * JS 执行种 cookie（CookieManager 全局自动写入，与 WebViewActivity 共享 app_webview 目录），
+     * 等待 [WARMUP_SETTLE_MS] 水合窗口后快照 douyin.com 域 cookie 串返回。
+     *
+     * 调用方拿到 cookie 串后无需手工透传——CookieManager 已全局更新，OkHttp 侧
+     * DouyinParser.fetchWebDetail 重新快照即得新 cookie。
+     *
+     * @return douyin.com 域 cookie 串（name=value;…）；失败/超时返回 null。
+     */
+    suspend fun warmupAndSnapshot(url: String, settleMs: Long = WARMUP_SETTLE_MS): String? {
+        if (url.isBlank()) return null
+        return mutex.withLock {
+            suspendCancellableCoroutine { cont ->
+                mainHandler.post {
+                    var finished = false
+                    try {
+                        val wv = getOrCreateWebView()
+                        wv.stopLoading()
+                        wv.webViewClient = object : WebViewClient() {
+                            override fun onPageFinished(view: WebView?, u: String?) {
+                                if (finished) return
+                                finished = true
+                                Log.d(TAG, "warmup onPageFinished: ${u?.take(80)}")
+                                // 文档就绪后 JS 仍需时间种 cookie（React 水合 + 风控壳执行窗口）
+                                mainHandler.postDelayed({
+                                    if (!cont.isActive) return@postDelayed
+                                    val cookie = snapshotDouyinCookies()
+                                    val hasUifid = cookie?.contains("UIFID_TEMP") == true
+                                    Log.i(TAG, "warmup 完成 cookie=${cookie?.length ?: 0}字符${if (hasUifid) " 含UIFID_TEMP" else ""}")
+                                    cont.resume(cookie)
+                                }, settleMs)
+                            }
+                        }
+                        wv.loadUrl(url)
+                        // 总超时兜底：页面卡死/无 onPageFinished 时也尽量返回已有 cookie
+                        mainHandler.postDelayed({
+                            if (!finished) {
+                                finished = true
+                                Log.w(TAG, "warmup 超时(${WARMUP_TOTAL_TIMEOUT_MS}ms): ${url.take(80)}")
+                                if (cont.isActive) cont.resume(snapshotDouyinCookies())
+                            }
+                        }, WARMUP_TOTAL_TIMEOUT_MS)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "warmup 异常: ${url.take(80)}", e)
+                        if (cont.isActive) cont.resume(null)
+                    }
+                }
+            }
+        }
+    }
+
+    /** 快照 douyin.com 域 cookie（CookieManager 标准 "name=value;…" 串，detail API 直接可用）。 */
+    private fun snapshotDouyinCookies(): String? = runCatching {
+        cookieManager.getCookie("https://www.douyin.com/")
+    }.getOrNull()?.takeIf { it.isNotBlank() }
+
     /** 销毁 WebView（Service onDestroy 时调用；必须在主线程执行）。 */
     fun destroy() {
         mainHandler.post {
@@ -366,5 +429,9 @@ class BgWebViewParser(private val appContext: Context) {
         private const val POLL_INTERVAL_MS = 800L
         /** 单次解析总超时（含页面加载 + 轮询窗口）。 */
         private const val TOTAL_TIMEOUT_MS = 60_000L
+        /** warmup：onPageFinished 后等 JS 种 cookie 的窗口（React 水合 + 风控壳，实证 ~5s 够）。 */
+        private const val WARMUP_SETTLE_MS = 6_000L
+        /** warmup 总超时兜底（页面卡死/无 onPageFinished 时也返回已有 cookie）。 */
+        private const val WARMUP_TOTAL_TIMEOUT_MS = 20_000L
     }
 }

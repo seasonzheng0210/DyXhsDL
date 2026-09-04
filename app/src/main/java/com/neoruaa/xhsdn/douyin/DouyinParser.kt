@@ -1,6 +1,7 @@
 package com.neoruaa.xhsdn.douyin
 
 import android.util.Log
+import android.webkit.CookieManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -8,6 +9,13 @@ import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import com.neoruaa.xhsdn.douyin.abogus.DouyinAbogus
+
+/**
+ * Web detail API 被风控拦截（HTTP 403 / ArgusSecurityPlugin / 缺 UIFID 指纹 cookie）。
+ * 抛给上层：P1 捕获后记日志并继续后续兜底候选；P2 据此触发 Cookie 预热（懒预热 D3）后重试。
+ */
+class WebDetailBlockedException(message: String) : Exception(message)
 
 /**
  * 抖音媒体类型：视频 或 图集/图文（图片）。
@@ -134,32 +142,167 @@ object DouyinParser {
 
         // 候选顺序（从最稳到兜底）：
         //  1) 移动端 aweme/v1/feed 接口（aweme.snssdk.com）——不触发 Argus 风控、无需 a_bogus，
-        //     直接返回 play_addr（无水印）结构化 JSON，成功率最高；
-        //  2) 官方 iteminfo 接口（返回干净结构化 JSON，图集字段为 images[]）；
-        //  3/4) 分享页 _ROUTER_DATA（share/video、share/note）。
-        val candidates = listOf(
-            "https://aweme.snssdk.com/aweme/v1/feed/?type=7&aweme_id=$id&iid=0&device_id=0&version_code=27.0.0&version_name=27.0.0",
-            "https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids=$id",
-            "https://www.iesdouyin.com/share/video/$id",
-            "https://www.iesdouyin.com/share/note/$id",
-            "https://www.douyin.com/note/$id"
+        //     直接返回 play_addr（无水印）结构化 JSON，video 主路径、成功率最高；
+        //  2) Web detail API 直解（www.douyin.com/aweme/v1/web/aweme/detail/，v1.12.0 新增）——
+        //     note 免登录主路径：完整浏览器指纹 cookie(CookieManager 快照) + a_bogus 签名直调，
+        //     绕开页面渲染/登录墙，video/note 通吃；被风控拦截抛 WebDetailBlockedException 降级；
+        //  3) 官方 iteminfo 接口（返回干净结构化 JSON，图集字段为 images[]）；
+        //  4/5) 分享页 _ROUTER_DATA（share/video、share/note）；
+        //  6) note 页初始 HTML 抠图（React Flight pace 负载 biz_tag=aweme_images）。
+        val attempts: List<() -> DouyinMediaInfo?> = listOf(
+            {
+                parseFromMobileFeed(
+                    "https://aweme.snssdk.com/aweme/v1/feed/?type=7&aweme_id=$id&iid=0&device_id=0&version_code=27.0.0&version_name=27.0.0",
+                    ua, id
+                )
+            },
+            { fetchWebDetail(id) },
+            { parseFromItemInfo("https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids=$id", ua, id) },
+            { parseFromShare("https://www.iesdouyin.com/share/video/$id", ua, id) },
+            { parseFromShare("https://www.iesdouyin.com/share/note/$id", ua, id) },
+            { parseFromNoteHtml("https://www.douyin.com/note/$id", ua, id) },
         )
         var lastErr: String? = null
-        for (c in candidates) {
+        for (attempt in attempts) {
             try {
-                val info = when {
-                    c.contains("aweme/v1/feed") -> parseFromMobileFeed(c, ua, id)
-                    c.contains("iteminfo") -> parseFromItemInfo(c, ua, id)
-                    c.contains("douyin.com/note") -> parseFromNoteHtml(c, ua, id)
-                    else -> parseFromShare(c, ua, id)
-                }
-                if (info != null) return@withContext info
+                attempt()?.let { return@withContext it }
             } catch (e: Exception) {
                 lastErr = e.message
-                Log.w(TAG, "解析失败 candidate=$c err=${e.message}")
+                Log.w(TAG, "解析失败 err=${e.message}")
             }
         }
         throw Exception(lastErr ?: "抖音解析失败：未在接口或分享页找到视频/图片")
+    }
+
+    /**
+     * Web detail API（note 免登录主路径 ②，v1.12.0）。
+     * 实证基线：C:\tmp\dy_probe\probe_detail.py —— 数据中心 IP + 完整浏览器指纹 cookie
+     * （ttwid/UIFID_TEMP/__ac_signature/s_v_web_id…，只能由真实浏览器 JS 种下，App 内经
+     * WebView 预热获得）+ a_bogus 签名 → HTTP 200 / status_code=0 / images[0] 无水印直链。
+     * 注意：Cookie 头必须用 CookieManager 返回的标准 "name=value;…" 串；若逐 cookie 重映射
+     * domain 拼 jar 反而 403（httpx jar 实证教训），App 侧天然满足。
+     */
+    private const val DETAIL_API = "https://www.douyin.com/aweme/v1/web/aweme/detail/"
+
+    /**
+     * detail 参数模板（26 项，顺序敏感——a_bogus 签名输入 = 实际请求 query，二者必须一致；
+     * msToken 置空串对齐官方 crawler 现做法，实证 status_code=0）。
+     */
+    private fun detailParams(id: String): List<Pair<String, String>> = listOf(
+        "device_platform" to "webapp",
+        "aid" to "6383",
+        "channel" to "channel_pc_web",
+        "pc_client_type" to "1",
+        "version_code" to "290100",
+        "version_name" to "29.1.0",
+        "cookie_enabled" to "true",
+        "screen_width" to "1920",
+        "screen_height" to "1080",
+        "browser_language" to "zh-CN",
+        "browser_platform" to "Win32",
+        "browser_name" to "Chrome",
+        "browser_version" to "130.0.0.0",
+        "browser_online" to "true",
+        "engine_name" to "Blink",
+        "engine_version" to "130.0.0.0",
+        "os_name" to "Windows",
+        "os_version" to "10",
+        "cpu_core_num" to "12",
+        "device_memory" to "8",
+        "platform" to "PC",
+        "downlink" to "10",
+        "effective_type" to "4g",
+        "round_trip_time" to "0",
+        "aweme_id" to id,
+        "msToken" to "",
+    )
+
+    /** 快照全局 CookieManager 中 douyin.com 域的 cookie 串（WebView 种下的指纹 cookie）。 */
+    private fun snapshotDouyinCookies(): String? = runCatching {
+        CookieManager.getInstance().getCookie("https://www.douyin.com/")
+    }.getOrNull()?.takeIf { it.isNotBlank() }
+
+    /**
+     * ② 直调 Web detail API 解析作品（video/note 通吃）。
+     *  - 签名请求必须携带 [DouyinAbogus.SIGN_UA]（Chrome/90，与 ua_code 绑定，勿改）；
+     *  - Cookie 缺失/失效（403 Argus）抛 [WebDetailBlockedException]，上层预热后重试（P2）；
+     *  - 业务失败（帖子删除等 status_code!=0）或结构不符返回 null，降级后续候选。
+     */
+    private fun fetchWebDetail(id: String): DouyinMediaInfo? {
+        val params = detailParams(id)
+        val query = DouyinAbogus.buildQuery(params)
+        val aBogus = DouyinAbogus.getValue(query)
+        val apiUrl = "$DETAIL_API?$query&a_bogus=${DouyinAbogus.urlEncodeComponent(aBogus)}"
+
+        val cookie = snapshotDouyinCookies()
+        val builder = Request.Builder()
+            .url(apiUrl)
+            .header("User-Agent", DouyinAbogus.SIGN_UA)
+            .header("Referer", REFERER)
+            .header("Accept-Language", "zh-CN,zh;q=0.8")
+            .header("Accept", "application/json, text/plain, */*")
+        if (!cookie.isNullOrBlank()) builder.header("Cookie", cookie)
+
+        val body = client.newCall(builder.build()).execute().use { resp ->
+            // 403/461 为 Argus 风控（缺 UIFID 指纹或签名异常）——可预热后重试
+            if (resp.code == 403 || resp.code == 461) {
+                throw WebDetailBlockedException("detail 接口 HTTP ${resp.code}（Argus 风控/缺 UIFID 指纹）")
+            }
+            if (!resp.isSuccessful) throw Exception("detail 接口失败: HTTP ${resp.code}")
+            resp.body.string()
+        }
+        return parseDetailJson(body, id)
+    }
+
+    /**
+     * 解析 detail 接口响应 JSON → [DouyinMediaInfo]。
+     * internal 供 JVM 单测喂真实样例（app/src/test/resources/detail_sample_image.json）。
+     *  - 响应体含风控壳（ArgusSecurityPlugin / Uifid Not Found）→ 抛 [WebDetailBlockedException]；
+     *  - status_code != 0 / 无 aweme_detail / aweme_id 错位 → null（降级）；
+     *  - 图文帖 detail 的 video.play_addr 是 BGM 音频（mp3），图集必须 images 优先，严禁当视频下。
+     */
+    internal fun parseDetailJson(body: String, id: String): DouyinMediaInfo? {
+        if (body.isBlank()) return null
+        if (body.contains("ArgusSecurityPlugin") || body.contains("Uifid Not Found")) {
+            throw WebDetailBlockedException("detail 被 ArgusSecurityPlugin 拦截（缺 UIFID 指纹）")
+        }
+        val json = try {
+            JSONObject(body)
+        } catch (e: Exception) {
+            Log.w(TAG, "detail 响应非 JSON: ${e.message}")
+            return null
+        }
+        if (json.optInt("status_code", -1) != 0) {
+            Log.w(TAG, "detail 业务失败: code=${json.optInt("status_code")} msg=${json.optString("status_msg")}")
+            return null
+        }
+        val detail = json.optJSONObject("aweme_detail") ?: return null
+        // 校验返回项确为目标作品：detail 偶发错位时避免把别的作品当下载目标（feed 接口同款教训）
+        if (detail.optString("aweme_id", "") != id) return null
+        val title = safeTitleOf(detail.optString("desc", "").trim().ifEmpty { "douyin_$id" }, id)
+
+        // 图集优先：images[] → IMAGE（图文帖 video.play_addr 是 BGM，绝不能走 video 分支）
+        val imageUrls = extractDouyinImages(detail)
+        if (imageUrls.isNotEmpty()) {
+            val cover = detail.optJSONObject("video")
+                ?.optJSONObject("cover")?.optJSONArray("url_list")?.optString(0)
+            Log.d(TAG, "detail 解析成功: 图集=${imageUrls.size} title=$title")
+            return DouyinMediaInfo(
+                DouyinMediaType.IMAGE, title, null, imageUrls, cover, id, DouyinAbogus.SIGN_UA
+            )
+        }
+
+        // 视频：play_addr 直链；过滤音频(BGM)防误下
+        val video = detail.optJSONObject("video")
+        if (video != null) {
+            val vUrl = extractVideoUrl(video)
+                ?.takeIf { !it.substringBefore('?').endsWith(".mp3") && !it.substringBefore('?').endsWith(".m4a") }
+                ?: return null
+            val cover = video.optJSONObject("cover")?.optJSONArray("url_list")?.optString(0)
+            Log.d(TAG, "detail 解析成功: 视频 title=$title")
+            return DouyinMediaInfo(DouyinMediaType.VIDEO, title, vUrl, emptyList(), cover, id, DouyinAbogus.SIGN_UA)
+        }
+        return null
     }
 
     /**

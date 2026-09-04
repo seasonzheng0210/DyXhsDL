@@ -423,12 +423,22 @@ class DownloadService : Service() {
 
     /**
      * 抖音解析主入口：先 HTTP 快解（10s 上限；抖音已全站风控，多数场景秒失败返回空），
-     * 失败再转后台不可见 WebView 真浏览器兜底（复用登录态 Cookie、不弹 Activity）。
-     * 两条路都拿不到媒体返回 null。
+     * 失败先尝试 **Cookie 懒预热**（note 图文 HTTP 全失败多为 Argus 403 缺 UIFID 指纹 cookie；
+     * 预热让后台 WebView 种 cookie 进全局 CookieManager → HTTP 重试时 detail API ② 携新 cookie
+     * 直解图文，绕开页面渲染/登录墙），仍失败再转后台不可见 WebView 真浏览器兜底
+     * （复用登录态 Cookie、不弹 Activity）。三条路都拿不到媒体返回 null。
      */
     private suspend fun resolveDouyinMediaInfo(targetUrl: String): DouyinMediaInfo? {
         val httpInfo = fastHttpResolve { DouyinParser.parse(targetUrl) }
         if (httpInfo != null) return httpInfo
+
+        // Cookie 懒预热 + HTTP 重试（v1.12.0 note 免登录方案 P2）
+        if (warmupDouyinCookie(targetUrl)) {
+            DownloadLogger.logInfo(this@DownloadService, "douyin", targetUrl, "Cookie 预热完成，重试 HTTP 直解…")
+            val retry = fastHttpResolve { DouyinParser.parse(targetUrl) }
+            if (retry != null) return retry
+        }
+
         DownloadLogger.logInfo(this@DownloadService, "douyin", targetUrl, "HTTP 直解未取到媒体，转后台 WebView 解析…")
         val bg = bgParser.parse(targetUrl, "douyin") ?: return null
         val id = extractDouyinId(targetUrl)
@@ -440,6 +450,38 @@ class DownloadService : Service() {
             else -> bg.videoUrls.firstOrNull { it.startsWith("http") }?.let { v ->
                 DouyinMediaInfo(DouyinMediaType.VIDEO, safeTitle, v, emptyList(), null, id, DouyinParser.MOBILE_UA)
             }
+        }
+    }
+
+    /**
+     * Cookie 懒预热：用后台 WebView 加载目标作品页（video/note 与链接类型一致），
+     * 让抖音风控壳 JS 执行种下 UIFID_TEMP 等指纹 cookie。成功后返回 true——cookie 已进全局
+     * CookieManager，随后 DouyinParser.fetchWebDetail 重新快照即得；预热失败（WebView 崩/超时）
+     * 返回 false 不阻塞，直接降级后台 WebView 兜底。
+     */
+    private suspend fun warmupDouyinCookie(targetUrl: String): Boolean {
+        return try {
+            val id = extractDouyinId(targetUrl)
+            if (id.isBlank() || id == "dy") return false
+            val warmUrl = if (targetUrl.contains("note", ignoreCase = true)) {
+                "https://www.douyin.com/note/$id"
+            } else {
+                "https://www.douyin.com/video/$id"
+            }
+            DownloadLogger.logInfo(this@DownloadService, "douyin", targetUrl, "Cookie 预热(懒): $warmUrl …")
+            val cookie = bgParser.warmupAndSnapshot(warmUrl)
+            if (cookie.isNullOrBlank()) {
+                DownloadLogger.logInfo(this@DownloadService, "douyin", targetUrl, "Cookie 预热未取到 cookie，跳过重试")
+                false
+            } else {
+                DownloadLogger.logInfo(this@DownloadService, "douyin", targetUrl, "Cookie 预热成功(${cookie.length}字符)")
+                true
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Cookie 预热异常: ${e.message}")
+            false
         }
     }
 
