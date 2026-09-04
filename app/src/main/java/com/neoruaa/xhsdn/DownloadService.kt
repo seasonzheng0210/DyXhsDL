@@ -518,6 +518,8 @@ class DownloadService : Service() {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // 主页分享短链（302 → share/user）不是单作品：不做降级，直接上抛给用户明确指引
+            if (e is com.neoruaa.xhsdn.douyin.DouyinHomepageLinkException) throw e
             Log.w(TAG, "HTTP 直解失败: ${e.message}")
             null
         }

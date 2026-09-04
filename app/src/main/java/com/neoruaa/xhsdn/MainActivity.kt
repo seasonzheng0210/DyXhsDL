@@ -623,7 +623,9 @@ class MainActivity : ComponentActivity() {
                                     detectedPlatform = null
                                     return@homepageGuard
                                 }
-                                val platform = detectedPlatform ?: UrlUtils.detectPlatform(link)
+                                // 平台判定：以当前链接实时识别为准（域名/关键词双保险）；
+                                // detectedPlatform 仅作兜底——否则残留的小红书平台会把快手/抖音链接派错通道
+                                val platform = UrlUtils.detectPlatform(link) ?: detectedPlatform
                             ensureStoragePermission {
                                 // 识别到平台后自动跳到对应任务页签
                                 taskTab = platformTabIndex(platform)
@@ -1649,8 +1651,7 @@ private fun HistoryPage(
                     ) {
                         TextButton(
                             text = "清除已完成 ($completedInTab)",
-                            onClick = { showClearCompletedDialog = true },
-                            modifier = Modifier.height(28.dp)
+                            onClick = { showClearCompletedDialog = true }
                         )
                     }
                 }
@@ -1697,7 +1698,8 @@ private fun HistoryPage(
                         contentPadding = PaddingValues(
                             start = 16.dp,
                             end = 16.dp,
-                            bottom = navPadding + 140.dp + 56.dp
+                            // 底部右下 FAB 高度 + navPadding + 余量，避免最后一项被 FAB 遮挡
+                            bottom = navPadding + 96.dp
                         ),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = if (nestedScrollConnection != null) {
@@ -1747,11 +1749,11 @@ private fun HistoryPage(
         }
 
         // 悬停在页面底部的下载按钮
+        // 右下角紧凑 FAB：避免遮挡任务卡片列表（替代原先的底部宽栏）
         Card(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(start = 24.dp, end = 24.dp, bottom = navPadding + 16.dp + 56.dp)
-                .fillMaxWidth()
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = navPadding + 12.dp)
                 .clickable(enabled = !uiState.isDownloading) {
                     if (manualInputLinks) {
                         onShowInputDialogChange(true)
@@ -1759,15 +1761,13 @@ private fun HistoryPage(
                         onDownload()
                     }
                 },
-            cornerRadius = 18.dp,
+            cornerRadius = 22.dp,
             colors = CardDefaults.defaultColors(
                 color = if (uiState.isDownloading) MiuixTheme.colorScheme.disabledPrimaryButton else MiuixTheme.colorScheme.primary
             )
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(all = 16.dp),
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Row(

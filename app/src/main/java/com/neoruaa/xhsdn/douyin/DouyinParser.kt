@@ -38,6 +38,15 @@ data class DouyinMediaInfo(
 )
 
 /**
+ * 抖音「作者主页分享」短链异常：链接 302 解析后落在作者主页（share/user 或 /user/{sec_uid}），
+ * 不是单作品。单作品解析对此无意义——上层捕获后应给用户「请用主页下载功能」的明确指引，
+ * 而不是报模糊的「HTTP 直解与后台 WebView 均未取到媒体」。
+ */
+class DouyinHomepageLinkException(url: String) : Exception(
+    "检测到抖音作者主页分享链接（$url）——这是主页不是单个作品，请改用「主页下载」功能批量下载该作者作品"
+)
+
+/**
  * 抖音直链解析。逻辑完整照搬可独立工作的 DouyinDL 项目（com.noctiro.douyindl）：
  *  - 使用随机 iPhone UA（Safari/CriOS/EdgiOS/FxiOS），抖音对固定安卓 Chrome UA 更敏感；
  *  - 解析重定向时手动读取 Location 头（不自动跟随），与 DouyinDL 一致；
@@ -137,6 +146,11 @@ object DouyinParser {
     suspend fun parse(url: String): DouyinMediaInfo = withContext(Dispatchers.IO) {
         val ua = randomUserAgent()
         val finalUrl = resolveRedirects(url, ua)
+        // 主页分享短链（v.douyin 短链 302 → iesdouyin.com/share/user/{sec_uid} 或 /user/）：
+        // 这是作者主页不是单作品，单作品六候选全部无意义——直接抛专用异常给上层明确指引
+        if (Regex("""(?:iesdouyin|douyin)\.com/(?:share/)?user/""").containsMatchIn(finalUrl)) {
+            throw DouyinHomepageLinkException(finalUrl)
+        }
         val id = extractId(finalUrl)
         Log.d(TAG, "finalUrl=$finalUrl id=$id ua=$ua")
 
