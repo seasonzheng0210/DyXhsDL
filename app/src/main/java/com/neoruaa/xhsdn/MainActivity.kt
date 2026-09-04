@@ -782,7 +782,27 @@ class MainActivity : ComponentActivity() {
         // 整页 HTML 解析），失败转后台不可见 WebView 真浏览器兜底（复用登录态 Cookie）——
         // 成功即 createTask 跳任务卡片，与视频下载体验完全一致；全程不启动可见 WebViewActivity，
         // 无黑窗闪动。主页批量走 launchDouyinHomepageDownload，不受影响。
-        DownloadService.startDownload(this@MainActivity, cleanUrl, "douyin", taskId)
+        lifecycleScope.launch {
+            // 主页短链自动转（v1.14.0，用户 2026-09-05 裁定）：v.douyin.com/xxx 302 落地
+            // share/user/{sec_uid} 时是作者主页不是单作品——不再失败报错，直接转主页批量下载。
+            // 短链须先跟跳才知道是不是主页；已含 /video/|/note/ 数字 id 的直链跳过跟跳零开销。
+            val looksLikeWork = Regex("""/(?:video|note)/\d+|modal_id=\d+""").containsMatchIn(cleanUrl)
+            val finalUrl = if (looksLikeWork) cleanUrl else DouyinParser.resolveFinalUrl(cleanUrl)
+            val userMatch = Regex("""(?:iesdouyin|douyin)\.com/(?:share/)?user/([0-9A-Za-z_-]+)""").find(finalUrl)
+            if (userMatch != null) {
+                trackEvent("homepage_download", mapOf("trigger" to "shortlink_auto"))
+                DownloadLogger.logInfo(this@MainActivity, "douyin", cleanUrl, "主页短链自动转主页批量下载: $finalUrl")
+                // 重试场景（v1.13.0 遗留的 douyin 失败卡）：删旧卡避免僵尸，主页批次新建自己的卡
+                if (taskId != null && taskId > 0) {
+                    com.neoruaa.xhsdn.data.TaskManager.deleteTask(taskId)
+                }
+                // share/user/{sec_uid} → www.douyin.com/user/{sec_uid}（主页爬取标准形态）
+                val homeUrl = "https://www.douyin.com/user/${userMatch.groupValues[1]}"
+                startDouyinHomepageCrawl(homeUrl)
+            } else {
+                DownloadService.startDownload(this@MainActivity, cleanUrl, "douyin", taskId)
+            }
+        }
     }
 
     private fun startDouyinWebViewFallback(cleanUrl: String, taskId: Long? = null) {

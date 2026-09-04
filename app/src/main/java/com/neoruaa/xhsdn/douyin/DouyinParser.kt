@@ -729,4 +729,13 @@ object DouyinParser {
         }
         return current
     }
+
+    /**
+     * 解析分享短链（v.douyin.com/xxx）→ 最终落地 URL（手动跟跳，最多 5 跳）。
+     * 供 Cookie 预热等「进入页面/拼接口前必须先拿到真实作品 id」的场景使用；
+     * 解析失败（网络/风控）返回原 url 不阻塞主流程。
+     */
+    suspend fun resolveFinalUrl(url: String): String = withContext(Dispatchers.IO) {
+        runCatching { resolveRedirects(url, randomUserAgent()) }.getOrDefault(url)
+    }
 }

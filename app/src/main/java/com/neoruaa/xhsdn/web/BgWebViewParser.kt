@@ -119,6 +119,7 @@ class BgWebViewParser(private val appContext: Context) {
                             }
                         }
                         wv.loadUrl(pageUrl)
+                        Log.d(TAG, "loadUrl 已发起: $pageUrl")
 
                         // 总超时兜底：页面水合慢 / 无媒体时在预算内结束，绝不无限等待
                         mainHandler.postDelayed({
@@ -234,6 +235,11 @@ class BgWebViewParser(private val appContext: Context) {
             settings.allowUniversalAccessFromFileURLs = true
             settings.allowFileAccessFromFileURLs = true
             settings.mediaPlaybackRequiresUserGesture = true
+            // debug 构建开 WebView 远程调试（chrome://inspect / adb forward CDP），
+            // 供后台解析页面取证（落地 URL / XHR 网络 / window 全局）。release 不开。
+            if (com.neoruaa.xhsdn.BuildConfig.DEBUG) {
+                WebView.setWebContentsDebuggingEnabled(true)
+            }
             // 视频地址/图集图片回传桥：web_inject.js 捕获到后经此回调
             addJavascriptInterface(androidVideoBridge, "AndroidVideoBridge")
         }.also { webView = it }
@@ -257,20 +263,26 @@ class BgWebViewParser(private val appContext: Context) {
     ) {
         wv.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                Log.d(TAG, "onPageStarted: ${url?.takeLast(60)}")
                 // 新文档就绪前先注入 XHR/fetch 钩子与 a_bogus（幂等守卫，重复注入无副作用）
                 injectJs(view, "web_inject.js")
                 if (source == "douyin") injectJs(view, "abogus.js")
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
+                Log.d(TAG, "onPageFinished: ${url?.takeLast(60)}")
                 // 文档就绪后重新注入：SPA 页面跳转会清掉早先注入的钩子；
                 // 抖音/快手视频数据由页面 JS 在 onPageFinished 后才 XHR/fetch 拉取
                 injectJs(view, "web_inject.js")
                 if (source == "douyin") injectJs(view, "abogus.js")
                 // 稍候片刻等 SPA 水合发出首个数据请求，再开始轮询提取
-                view?.postDelayed({
+                // ⚠️ 必须 mainHandler.postDelayed 而非 view.postDelayed：本 WebView 是离屏
+                // 创建（从不 addView 到 window），未 attach 时 View.postDelayed 的消息进
+                // HandlerActionQueue 永不执行——pollExtract 从未运行，后台解析只能干等 60s
+                // 超时（真机/模拟器快手取证 2026-09-05 实锤）。
+                mainHandler.postDelayed({
                     if (!session.done) {
-                        pollExtract(view, session, pageUrl, source, onDone, PAGE_READY_DELAY_MS)
+                        pollExtract(wv, session, pageUrl, source, onDone, PAGE_READY_DELAY_MS)
                     }
                 }, PAGE_READY_DELAY_MS)
             }
@@ -299,11 +311,9 @@ class BgWebViewParser(private val appContext: Context) {
             @RequiresApi(android.os.Build.VERSION_CODES.O)
             override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
                 Log.w(TAG, "WebView 渲染进程 gone(crash=${detail?.didCrash()})，接管：结束解析并重建，不杀宿主")
-                if (!session.done) {
-                    session.done = true
-                    activeSession = null
-                    onDone(null)
-                }
+                // 与 pollExtract 同理：不预置 session.done，由 parse() 完成 lambda 统一置位，
+                // 否则 resume 永不执行 → parse() 永久挂起（完成态所有权问题，2026-09-05 实锤）
+                onDone(null)
                 runCatching { view?.stopLoading() }
                 runCatching { view?.destroy() }
                 if (webView === view) webView = null
@@ -313,9 +323,14 @@ class BgWebViewParser(private val appContext: Context) {
     }
 
     /**
-     * 轮询提取：每次 evaluate 对应平台的 extractor JS，解析 {urls, image_urls, content}，
-     * 与 bridge 捕获（web_inject.js 的 onVideoUrl/onImageUrl）合并；任一非空即结束。
-     * 无结果则每 [POLL_INTERVAL_MS] 重试，直到总超时（由 parse 的 postDelayed 兜底）。
+     * 轮询提取：每 [POLL_INTERVAL_MS] 主动 evaluate 对应平台的 extractor JS，
+     * 解析 {urls, image_urls, content}，与 bridge 捕获（web_inject.js 的 onVideoUrl/onImageUrl）
+     * 合并；任一非空即结束。
+     *
+     * **回调丢失免疫（真机 2026-09-05 快手取证修复）**：页面 SPA 跳转/水合竞态时
+     * evaluateJavascript 的回调可能既不抛异常也永不返回——旧实现「未命中才在回调里递归」
+     * 会就此断链干等总超时。现改为：回调只负责「命中即提前结束」，定时器无条件排下一次
+     * evaluate（session.done 守卫跳过），断链不再致命。
      */
     private fun pollExtract(
         wv: WebView,
@@ -325,6 +340,7 @@ class BgWebViewParser(private val appContext: Context) {
         onDone: (Result?) -> Unit,
         delayMs: Long
     ) {
+        Log.d(TAG, "pollExtract 进入, done=${session.done}")
         if (session.done) return
         mainHandler.postDelayed({
             if (session.done) return@postDelayed
@@ -345,19 +361,31 @@ class BgWebViewParser(private val appContext: Context) {
                     val images = (jsImages + session.imageUrls)
                         .filter { it.startsWith("http") && !it.endsWith(".m3u8") }
                         .distinct()
-                    if (videos.isNotEmpty() || images.isNotEmpty()) {
-                        Log.i(TAG, "提取成功 source=$source videos=${videos.size} images=${images.size} title=${title.take(40)}")
-                        onDone(Result(videos, images, contentText, title, pageUrl))
-                    } else {
-                        // 未命中：等 SPA 更多数据/页面水合完成后重试
-                        pollExtract(wv, session, pageUrl, source, onDone, POLL_INTERVAL_MS)
+                    // 快手滑动流（subBiz=BROWSE_SLIDE_PHOTO）落地页会自动连播跳到其它作品：
+                    // 直链 clientCacheKey={photoId}_b.mp4 含原作品 id，按 id 过滤锁定原作品，
+                    // 避免「点了 A 下了 B」。过滤后为空视为未命中继续轮询。
+                    val lockedVideos = if (source == "kuaishou") {
+                        val targetId = Regex("""/(?:short-video|photo|fw/photo)/([A-Za-z0-9_-]+)""")
+                            .find(pageUrl)?.groupValues?.getOrNull(1)
+                        if (targetId.isNullOrBlank()) videos else videos.filter { it.contains(targetId) }
+                    } else videos
+                    // ⚠️ 这里只调用 onDone，不预置 session.done：完成态（done/activeSession/
+                    // resume）统一由 parse() 传入的完成 lambda 置位。若在此先置 done=true，
+                    // lambda 的 if (!session.done) 恒假 → cont.resume 永不执行 → parse() 永久
+                    // 挂起且 Mutex 永久占用（真机/模拟器快手取证 2026-09-05 实锤：提取成功已
+                    // 打日志，但下游既无「解析成功」也无失败记录，任务卡 DOWNLOADING）。
+                    if (lockedVideos.isNotEmpty() || images.isNotEmpty()) {
+                        Log.i(TAG, "提取成功 source=$source videos=${lockedVideos.size} images=${images.size} title=${title.take(40)}")
+                        onDone(Result(lockedVideos, images, contentText, title, pageUrl))
                     }
+                    // 未命中：不在这里递归——定时器在下方无条件排下一次，回调丢失不再断链
                 }
             }.onFailure { e ->
-                // evaluateJavascript 偶发在页面导航窗口抛异常：稍后重试即可
+                // evaluateJavascript 偶发在页面导航窗口抛异常：下个 tick 重试即可
                 Log.d(TAG, "evaluate extractor 失败，稍后重试: ${e.message}")
-                pollExtract(wv, session, pageUrl, source, onDone, POLL_INTERVAL_MS)
             }
+            // 无条件排下一次轮询（命中时上方已置 session.done，下一次 tick 自动跳过）
+            pollExtract(wv, session, pageUrl, source, onDone, POLL_INTERVAL_MS)
         }, delayMs)
     }
 

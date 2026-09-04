@@ -216,7 +216,12 @@ public class FileDownloader {
      * Douyin download entry point: uses a Douyin referer/User-Agent and a "douyin_" filename prefix.
      */
     public boolean downloadFile(String url, String fileName, String referer, String userAgent) {
-        return downloadFileCore(url, fileName, getTimestampForFilename(), true, referer, userAgent, "douyin_");
+        return downloadFile(url, fileName, referer, userAgent, "douyin_");
+    }
+
+    /** 平台化入口：快手等非抖音来源须传 "kuaishou_" 前缀，避免文件名归错平台。 */
+    public boolean downloadFile(String url, String fileName, String referer, String userAgent, String prefix) {
+        return downloadFileCore(url, fileName, getTimestampForFilename(), true, referer, userAgent, prefix);
     }
 
     private boolean downloadFileCore(String url, String fileName, String timestamp, boolean notifyErrors,

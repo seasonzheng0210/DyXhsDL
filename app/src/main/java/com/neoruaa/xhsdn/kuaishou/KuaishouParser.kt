@@ -99,8 +99,11 @@ object KuaishouParser {
 
     /**
      * 从分享链接解析 photoId：先直接抠，失败再跟随重定向抠最终 URL。
+     * 公开给 DownloadService：转后台 WebView 兜底前先拿 photoId 拼桌面作品页
+     * （避开滑动流自动连播）+ 供 pollExtract 按直链 clientCacheKey 锁定原作品。
+     * 注意：内部做网络 I/O，调用方须在 IO 调度器/协程里调用。失败抛异常。
      */
-    private fun resolvePhotoId(rawUrl: String): String {
+    fun resolvePhotoId(rawUrl: String): String {
         extractPhotoIdFromUrl(rawUrl)?.let { return it }
 
         val request = Request.Builder()

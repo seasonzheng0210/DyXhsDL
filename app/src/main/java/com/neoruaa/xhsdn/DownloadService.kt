@@ -506,8 +506,16 @@ class DownloadService : Service() {
      */
     private suspend fun warmupDouyinCookie(targetUrl: String): Boolean {
         return try {
-            val id = extractDouyinId(targetUrl)
-            if (id.isBlank() || id == "dy") return false
+            // 短链（v.douyin.com/xxx）先跟跳拿真实作品页 URL：extractDouyinId 对短链只会返回
+            // 短链码本身，直接拼 warmUrl 会得到 douyin.com/video/{短链码} 无效页 → 预热必失败
+            //（真机 2026-09-05 日志实证："Cookie 预热未触发/失败" + "End of input at character 0"）。
+            var id = extractDouyinId(targetUrl)
+            if (!id.matches(Regex("\\d+"))) {
+                val resolved = DouyinParser.resolveFinalUrl(targetUrl)
+                DownloadLogger.logInfo(this@DownloadService, "douyin", targetUrl, "短链预热前跟跳: $resolved")
+                id = extractDouyinId(resolved)
+            }
+            if (id.isBlank() || !id.matches(Regex("\\d+"))) return false
             val warmUrl = if (targetUrl.contains("note", ignoreCase = true)) {
                 "https://www.douyin.com/note/$id"
             } else {
@@ -545,12 +553,23 @@ class DownloadService : Service() {
 
         reasons += "转后台 WebView 兜底"
         DownloadLogger.logInfo(this@DownloadService, "kuaishou", targetUrl, "HTTP 直解未取到媒体，转后台 WebView 解析…")
-        val bg = bgParser.parse(targetUrl, "kuaishou")
+        // 快手短链（v.kuaishou.com/xxx）先在 HTTP 侧跟跳抠真实 photoId：
+        // ① WebView 直接加载桌面作品页 short-video/{photoId}，避开 BROWSE_SLIDE_PHOTO
+        //    滑动流落地页自动连播跳到其它作品（连播会让 extractor 抓到别家视频的直链+标题）；
+        // ② pollExtract 按 pageUrl 里的 photoId 过滤直链（clientCacheKey={photoId}_b.mp4），
+        //    双保险防「点了 A 下了 B」。
+        val ksPhotoId = Regex("""/(?:short-video|photo|fw/photo)/([A-Za-z0-9_-]+)""")
+            .find(targetUrl)?.groupValues?.getOrNull(1)
+            ?: runCatching { KuaishouParser.resolvePhotoId(targetUrl) }.getOrNull()?.takeIf { it.isNotBlank() }
+        val webviewUrl = ksPhotoId?.let { "https://www.kuaishou.com/short-video/$it" } ?: targetUrl
+        val bg = bgParser.parse(webviewUrl, "kuaishou")
         if (bg == null) {
             reasons += "WebView 未取到媒体"
             return null to reasons.joinToString("; ")
         }
-        val id = targetUrl.substringAfterLast('/').substringBefore('?').takeIf { it.isNotBlank() } ?: "ks"
+        val id = ksPhotoId?.takeIf { it.isNotBlank() }
+            ?: targetUrl.substringAfterLast('/').substringBefore('?').takeIf { it.isNotBlank() }
+            ?: "ks"
         val safeTitle = safeFileName(bg.title.ifBlank { "kuaishou_$id" })
         val info = when {
             bg.imageUrls.isNotEmpty() -> KuaishouMediaInfo(
@@ -834,7 +853,7 @@ class DownloadService : Service() {
                 } else {
                     val fileName = "${info.title}.mp4"
                     runCatching {
-                        downloader.downloadFile(info.videoUrl, fileName, KUAISHOU_REFERER, info.userAgent)
+                        downloader.downloadFile(info.videoUrl, fileName, KUAISHOU_REFERER, info.userAgent, "kuaishou_")
                     }.getOrElse { e ->
                         DownloadLogger.logFailure(this@DownloadService, "kuaishou", info.videoUrl ?: targetUrl, "下载异常: ${e.message}")
                         false
@@ -903,7 +922,7 @@ class DownloadService : Service() {
         // 图集之外若拿到视频直链，一并下载
         if (!info.videoUrl.isNullOrBlank()) {
             val vOk = runCatching {
-                downloader.downloadFile(info.videoUrl, "${info.title}.mp4", KUAISHOU_REFERER, info.userAgent)
+                downloader.downloadFile(info.videoUrl, "${info.title}.mp4", KUAISHOU_REFERER, info.userAgent, "kuaishou_")
             }.getOrElse { e ->
                 DownloadLogger.logFailure(this@DownloadService, "kuaishou", info.videoUrl, "下载视频异常: ${e.message}")
                 false
