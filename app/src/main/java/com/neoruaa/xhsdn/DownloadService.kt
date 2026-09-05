@@ -93,61 +93,70 @@ class DownloadService : Service() {
         }
 
         val url = intent?.getStringExtra(EXTRA_URL)
-        if (url.isNullOrBlank()) {
+        val modeRaw = intent?.getStringExtra(EXTRA_MODE)
+        // 批量模式（主页批量/网页爬取/图集）以 EXTRA_URLS 列表为准，单链 EXTRA_URL 可空；
+        // 此前 url 为空直接 stopSelf 会把主页批量静默吞掉（列表到了也一个都不下）
+        val isBatchMode = modeRaw == MODE_DOUYIN_HOME || modeRaw == MODE_WEBCRAWL || modeRaw == MODE_DOUYIN_IMAGES
+        if (url.isNullOrBlank() && !isBatchMode) {
             // 没有任务可跑，安全地停掉自己
             stopSelf(startId)
             return START_NOT_STICKY
         }
+        val safeUrl = url.orEmpty()
 
-        val source = intent.getStringExtra(EXTRA_SOURCE) ?: UrlUtils.detectPlatform(url) ?: "xhs"
-        val mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_NORMAL
+        val source = intent.getStringExtra(EXTRA_SOURCE) ?: UrlUtils.detectPlatform(safeUrl) ?: "xhs"
+        val mode = modeRaw ?: MODE_NORMAL
         val taskIdExtra = intent.getLongExtra(EXTRA_TASK_ID, -1L).takeIf { it > 0 }
 
         // 中立的「视频直链」短路：任何视频直链（.mp4、aweme.snssdk.com 播放接口、
         // douyinvod.com 等）都不走平台解析器，直接下载跟随 302 的本体。
         // 这样用户粘贴的直链、WebView 提取出的第三方视频直链都能下，且不会误归属到抖音/其他平台。
-        if (isDirectVideoUrl(url)) {
-            downloadDirectVideo(url, taskIdExtra)
+        if (isDirectVideoUrl(safeUrl)) {
+            downloadDirectVideo(safeUrl, taskIdExtra)
             return START_NOT_STICKY
         }
 
         when (mode) {
             MODE_WEBCRAWL -> {
-                val urls = intent.getStringArrayListExtra(EXTRA_URLS) ?: emptyList()
+                val urls = intent.urlListExtra(EXTRA_URLS)
                 val content = intent.getStringExtra(EXTRA_WEB_CONTENT)
                 startWebCrawl(urls, content, taskIdExtra)
             }
             MODE_DOUYIN_IMAGES -> {
                 // 抖音图文/图集帖：WebView 兜底路径已提取出帖子图集图片，逐张下载
-                val urls = intent.getStringArrayListExtra(EXTRA_URLS) ?: emptyList()
+                val urls = intent.urlListExtra(EXTRA_URLS)
                 val pageUrl = intent.getStringExtra(EXTRA_URL)
                 startDownloadDouyinImagesInternal(urls, pageUrl, taskIdExtra)
             }
             MODE_DOUYIN_HOME -> {
                 // 抖音主页批量：WebView 主页爬取收集到全部 /video/{id} 页链接，
                 // 逐条后台解析（HTTP 快解 → 后台 WebView 兜底）后同任务卡批量下载
-                val urls = intent.getStringArrayListExtra(EXTRA_URLS) ?: emptyList()
+                val urls = intent.urlListExtra(EXTRA_URLS)
                 val pageUrl = intent.getStringExtra(EXTRA_URL)
                 startDouyinHomeBatch(urls, pageUrl, taskIdExtra)
             }
             else -> when (source) {
                 "douyin" -> {
                     EventTracker.track(this, "download_requested", mapOf("source" to "douyin", "mode" to mode))
-                    startDouyin(url, mode, taskIdExtra)
+                    startDouyin(safeUrl, mode, taskIdExtra)
                 }
                 "kuaishou" -> {
                     EventTracker.track(this, "download_requested", mapOf("source" to "kuaishou", "mode" to mode))
-                    startKuaishou(url, mode, taskIdExtra)
+                    startKuaishou(safeUrl, mode, taskIdExtra)
                 }
                 else -> {
                     EventTracker.track(this, "download_requested", mapOf("source" to "xhs", "mode" to mode))
-                    startXhs(url, taskIdExtra)
+                    startXhs(safeUrl, taskIdExtra)
                 }
             }
         }
 
         return START_NOT_STICKY
     }
+
+    /** 兼容两种 extra 形态：App 内 putStringArrayListExtra 与 am --esa 的 String[]。 */
+    private fun Intent.urlListExtra(key: String): List<String> =
+        getStringArrayListExtra(key) ?: getStringArrayExtra(key)?.toList() ?: emptyList()
 
     /** 视频直链判定：命中即走中立的 downloadDirectVideo，不进任何平台解析器。 */
     private fun isDirectVideoUrl(url: String): Boolean {

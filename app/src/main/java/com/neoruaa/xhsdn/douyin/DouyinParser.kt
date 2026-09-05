@@ -132,8 +132,16 @@ object DouyinParser {
             }
             val json = JSONObject(body)
             val list = json.optJSONArray("aweme_list") ?: json.optJSONArray("item_list") ?: return@withContext null
-            if (list.length() == 0) return@withContext null
-            val data = list.getJSONObject(0)
+            // ⚠️ 必须校验 aweme_id：匿名 feed 接口会忽略 aweme_id 参数返回泛推荐流
+            //（v1.10.6 在 parse() 实锤过同样问题），取第一条会把别人的视频反查成陌生作者
+            // 的主页 → 主页批量爬错人，用户看到「主页视频下载失败」。
+            val data = (0 until list.length())
+                .mapNotNull { list.optJSONObject(it) }
+                .firstOrNull { it.optString("aweme_id") == id }
+                ?: run {
+                    Log.w(TAG, "resolveAuthorHomepageUrl: feed 未返回目标 aweme_id=$id（泛推荐流），放弃反查")
+                    return@withContext null
+                }
             val author = data.optJSONObject("author") ?: return@withContext null
             val secUid = author.optString("sec_uid").takeIf { it.isNotBlank() } ?: return@withContext null
             return@withContext "https://www.douyin.com/user/$secUid"

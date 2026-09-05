@@ -363,11 +363,27 @@ class BgWebViewParser(private val appContext: Context) {
                         .distinct()
                     // 快手滑动流（subBiz=BROWSE_SLIDE_PHOTO）落地页会自动连播跳到其它作品：
                     // 直链 clientCacheKey={photoId}_b.mp4 含原作品 id，按 id 过滤锁定原作品，
-                    // 避免「点了 A 下了 B」。过滤后为空视为未命中继续轮询。
+                    // 避免「点了 A 下了 B」。弹性回退：若 WebView 仍停在目标作品页（未跳走），
+                    // 说明直链池就是目标页产出的（部分 CDN 直链不含 clientCacheKey），
+                    // 整池可信直接用；仅当页面已跳走且池里没有目标 id 时才继续等，宁缺毋滥。
                     val lockedVideos = if (source == "kuaishou") {
                         val targetId = Regex("""/(?:short-video|photo|fw/photo)/([A-Za-z0-9_-]+)""")
                             .find(pageUrl)?.groupValues?.getOrNull(1)
-                        if (targetId.isNullOrBlank()) videos else videos.filter { it.contains(targetId) }
+                        when {
+                            targetId.isNullOrBlank() -> videos
+                            else -> {
+                                val hit = videos.filter { it.contains(targetId) }
+                                val onPage = runCatching { wv.url?.contains(targetId) == true }.getOrDefault(false)
+                                when {
+                                    hit.isNotEmpty() -> hit
+                                    onPage && videos.isNotEmpty() -> {
+                                        Log.i(TAG, "photoId=$targetId 未在直链中出现，但页面未跳走，采用整池(${videos.size})")
+                                        videos
+                                    }
+                                    else -> emptyList()
+                                }
+                            }
+                        }
                     } else videos
                     // ⚠️ 这里只调用 onDone，不预置 session.done：完成态（done/activeSession/
                     // resume）统一由 parse() 传入的完成 lambda 置位。若在此先置 done=true，
