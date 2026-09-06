@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="4awDagAYLPj9HspzNfOohz">
+<head data-page-node-id="dhaUWnvcE7OuJZXkzvb3mh">
+<meta charset="UTF-8" data-page-node-id="TO7xxXgEFxlscFRXp7oCGz">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="rnNSHT7tfw75btu9inz0Tx">
+<title>DyXhsDL UI v2 · 软光玻璃定稿总览</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,"MiSans","PingFang SC","HarmonyOS Sans SC","Microsoft YaHei",sans-serif;background:#2a211a;color:#F5F2EC;padding:28px 20px 60px}
+  .page{max-width:1280px;margin:0 auto}
+  h1{font-size:22px;font-weight:600;letter-spacing:.5px}
+  .sub{font-size:12.5px;color:#b7a894;margin-top:6px;line-height:1.7}
+  .tokens{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 6px;align-items:center}
+  .tk{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:5px 12px;font-size:11.5px;color:#e6dccb}
+  .tk b{font-weight:600}
+  .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px;border:1px solid rgba(255,255,255,.25)}
+  .sec{font-size:13px;font-weight:600;color:#cfa36b;margin:34px 0 14px;letter-spacing:2px;display:flex;align-items:center;gap:10px}
+  .sec::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.12)}
+  .wall{display:flex;flex-wrap:wrap;gap:18px;justify-content:flex-start}
+  .cell{width:238px}
+  .phone{border-radius:46px;background:#0b0c0e;padding:9px;box-shadow:0 26px 50px -18px rgba(0,0,0,.75),0 0 0 1px rgba(255,255,255,.06)}
+  .screen{border-radius:38px;overflow:hidden;position:relative;height:516px;background:
+    radial-gradient(90% 60% at 85% -5%,rgba(255,243,214,.95),rgba(255,243,214,0) 60%),
+    radial-gradient(80% 55% at -5% 105%,rgba(255,205,170,.8),rgba(255,205,170,0) 55%),
+    radial-gradient(70% 45% at 15% 30%,rgba(208,228,216,.95),rgba(208,228,216,0) 60%),
+    radial-gradient(100% 70% at 100% 90%,rgba(178,204,220,.6),rgba(178,204,220,0) 60%),
+    linear-gradient(165deg,#F4E7D6 0%,#EADCC8 55%,#DFCEB8 100%)}
+  .cap{text-align:center;font-size:11.5px;color:#8d7d67;margin-top:9px;line-height:1.5}
+  .cap b{color:#c9b694;font-weight:600}
+  .gl{background:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.62);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 -1px 0 rgba(255,255,255,.18);backdrop-filter:blur(22px) saturate(1.7);-webkit-backdrop-filter:blur(22px) saturate(1.7)}
+  .ink{color:#241F18}
+  .sb{position:absolute;left:0;right:0;top:0;height:46px;padding:0 18px;display:flex;align-items:center;justify-content:space-between;z-index:3}
+  .tm{font-size:12px;font-weight:600;color:rgba(36,31,24,.8);letter-spacing:.3px}
+  .island{position:absolute;left:50%;transform:translateX(-50%);top:12px;width:84px;height:23px;border-radius:12px;background:#0b0b0d;box-shadow:inset 0 1px 0 rgba(255,255,255,.08);z-index:4}
+  .batt{width:19px;height:10px;border:1px solid rgba(36,31,24,.6);border-radius:3px;position:relative;padding:1.5px}
+  .batt::before{content:"";position:absolute;inset:1.5px 4px 1.5px 1.5px;background:rgba(36,31,24,.75);border-radius:1px}
+  .batt::after{content:"";position:absolute;right:-3.5px;top:2.5px;width:2px;height:4px;background:rgba(36,31,24,.6);border-radius:0 1px 1px 0}
+  .bdy{position:relative;height:100%;padding:52px 14px 12px;display:flex;flex-direction:column;gap:9px}
+  .t1{font-size:19px;font-weight:600;color:#241F18}
+  .t2{font-size:16px;font-weight:600;color:#241F18}
+  .t3{font-size:13px;font-weight:600;color:#241F18}
+  .s1{font-size:11px;color:rgba(36,31,24,.55)}
+  .s2{font-size:11px;color:rgba(36,31,24,.35)}
+  .row{display:flex;align-items:center;gap:8px}
+  .btn-o{height:44px;border-radius:22px;background:#FF6900;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:0 10px 20px rgba(255,105,0,.28);font-size:13px;font-weight:600;color:#fff;flex:none}
+  .btn-g{height:42px;border-radius:21px;background:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.62);box-shadow:inset 0 1px 0 rgba(255,255,255,.9);backdrop-filter:blur(22px) saturate(1.7);-webkit-backdrop-filter:blur(22px) saturate(1.7);display:flex;align-items:center;justify-content:center;gap:6px;font-size:12.5px;font-weight:600;color:#241F18}
+  .pill{display:inline-block;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:600}
+  .pill-g{background:rgba(30,150,90,.16);color:#0E8A56}
+  .pill-r{background:rgba(226,75,74,.13);color:#C23B3A}
+  .pill-o{background:rgba(255,105,0,.14);color:#D95A00}
+  .sw2{width:36px;height:20px;border-radius:10px;background:#FF6900;position:relative;flex:none}
+  .sw2::after{content:"";position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:#fff}
+  .prog{height:4px;border-radius:2px;background:rgba(36,31,24,.13);overflow:hidden}
+  .prog>i{display:block;height:100%;background:#FF6900;border-radius:2px}
+  .tag{position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,.5);border-radius:999px;padding:2px 7px;font-size:11px;color:#fff}
+  .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  .thumb{border-radius:10px;overflow:hidden;position:relative;flex:none;background-size:cover}
+  .ln{border-top:1px solid rgba(255,255,255,.6)}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none}
+</style>
+</head>
+<body data-page-node-id="fTY8uMWVDb98E2L9Rcf9iy">
+<div class="page" data-page-node-id="cwAu4czg4rZwU5g9nBsEfF">
+  <h1 data-page-node-id="EhG3xwURErm7ICIa0s2qb5">DyXhsDL · UI v2 软光玻璃定稿总览</h1>
+  <div class="sub" data-page-node-id="0vVA1QUg3ELVfzqI2MFxaj">基调：中间平衡玻璃（白50% / blur22 / sat1.7 / 顶高光 inset 1px 90%）× 徕卡暖调壁纸 × 玻璃态小米橙点缀——橙色不再实色平涂，改为半透明着色玻璃（rgba 0.82 + 顶内高光），壁纸光色透出，与玻璃卡片同语言。画布总览 13 屏，含修正后的主页下载范围单选。</div>
+  <div class="tokens" data-page-node-id="XHnRhAAnHiV63KTTzn2saO">
+    <span class="tk" data-page-node-id="KCGHelagYQMYysmKqTbP2p"><span class="sw" style="background:#FF6900" data-page-node-id="mwspu2HgcmatyZuy5itSRt"></span>点缀橙 <b data-page-node-id="NMzC9Vu2mGUDlkOzBndIFx">#FF6900</b></span>
+    <span class="tk" data-page-node-id="R6utBG5iAB1rkWprtJiDPD"><span class="sw" style="background:#E05A00" data-page-node-id="YsZg9u3dAQ2rjRIKbAcBVt"></span>文字级橙 <b data-page-node-id="22doyrxKmn5DYNxKbH5VhI">#E05A00</b></span>
+    <span class="tk" data-page-node-id="P6sOoEGKZoZ5TRIbsDVmDj"><span class="sw" style="background:#0E8A56" data-page-node-id="2lTjQW8zHMKC133KcsTFLL"></span>完成绿 <b data-page-node-id="SfQhUeyB2DTZeMszRclMF2">#0E8A56</b></span>
+    <span class="tk" data-page-node-id="yxm0v21xy1ZBXitREZ95PE"><span class="sw" style="background:#F4E7D6" data-page-node-id="EIhCHa74KMAdpQ1gH0nozd"></span>米白</span>
+    <span class="tk" data-page-node-id="SWc7iHEXVEvWS9216fgduh"><span class="sw" style="background:#E0A06B" data-page-node-id="COnER3jSCS8q0aaJRxKudq"></span>焦糖</span>
+    <span class="tk" data-page-node-id="xcFlAVcazqvDObytPo6nXI"><span class="sw" style="background:#BFD0C6" data-page-node-id="ZL4XWe5mhnt2YmasWckN7w"></span>鼠尾草</span>
+    <span class="tk" data-page-node-id="RgepHGNSx31xH8Xzbdqerw"><span class="sw" style="background:#B2CCDC" data-page-node-id="dypgLhqIW2RQ848lN01Sb5"></span>雾蓝</span>
+    <span class="tk" data-page-node-id="kFjAJM8cX2sHeD4QKWdKDW">玻璃卡圆角 <b data-page-node-id="a35VECme5B56Fh0wV7Oofj">22</b> · 分段 <b data-page-node-id="1CuUc7ZCj4IhYDTCGVB9Nh">20</b> · 胶囊 <b data-page-node-id="P8S3u6UotqE8JsAzZpxadD">999</b></span>
+    <span class="tk" data-page-node-id="0bDAZ76Y0tNGx8zJWdGFps">大标题 <b data-page-node-id="ku1L7DBZ9P5lItVPfazPhQ">19</b> · 正文 <b data-page-node-id="K2tcAMTQiZiB3D7w1EfpIs">12.5</b> · 辅助 <b data-page-node-id="L5gTsIx5Vr4xPHR4ldWStz">11</b></span>
+  </div>
+
+  <div class="sec" data-page-node-id="1WtjIQvBmOubUxGbKDBv9r">S1 · 任务列表（定稿基线样张）</div>
+  <div class="wall" data-page-node-id="HydFFUQ3gXPYT3XgcCJcpK">
+    <div class="cell" data-page-node-id="ixz48loIXGyTBAH9JqhvyC">
+      <div class="phone" data-page-node-id="W45PBxIMFSUpKbrU3tZcVF"><div class="screen" data-page-node-id="XHZkLCwJNcqFbHoakSl2P2">
+        <div class="island" data-page-node-id="Wcs4YW59whzaddsbCYVyv0"></div>
+        <div class="sb" data-page-node-id="1gqoDClpS5dWSabbXodWUJ"><span class="tm" data-page-node-id="V2d4nlL0YxHBs6qeyfH4du">9:41</span><span class="batt" data-page-node-id="g4OdD7dkAPGjlqMMDBO1Fx"></span></div>
+        <div class="bdy" data-page-node-id="FmNQ6cljaQWGvDrmGa3UOH">
+          <div class="row" style="align-items:baseline;gap:9px" data-page-node-id="pbWNST0DxPKsx6HIFyFGMD">
+            <span class="t1" data-page-node-id="sGRh6KEMiO4CZrzeq5INoj">我的下载</span><span class="s2" data-page-node-id="oWfGhFbDIHqY71NhAyg6G2">3 个任务 · 1.2 GB</span>
+          </div>
+          <div class="gl" style="height:40px;border-radius:21px;display:flex;align-items:center;gap:8px;padding:0 13px" data-page-node-id="AIowDmYQe3bhfFqyTl624D">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.55)" stroke-width="2" data-page-node-id="gGQO525dLZktOKRfBdibGt"><circle cx="11" cy="11" r="7" data-page-node-id="Xu6YjHWbMHrFAjEUMDxkrT"/><path d="m20 20-3.5-3.5" data-page-node-id="Dl64faJKibG9G5hPnuOJe4"/></svg>
+            <span style="font-size:12px;color:rgba(36,31,24,.55)" data-page-node-id="JiKADuTqi7gRWsrAR4WJVW">粘贴链接或分享口令，立即解析</span>
+          </div>
+          <div class="gl" style="border-radius:20px;padding:3px;display:flex" data-page-node-id="udP0nHY2cVGMjZQqCtb2Aa">
+            <span style="flex:1;text-align:center;padding:6px 0;border-radius:17px;background:rgba(255,255,255,.8);font-size:12px;font-weight:600;color:#241F18" data-page-node-id="EcuaHJiPBXmL7svr9K8SvD">全部</span>
+            <span style="flex:1;text-align:center;padding:6px 0;font-size:12px;color:rgba(36,31,24,.55)" data-page-node-id="rXpcVpRJaXeE8EjGaUxYBI">视频</span>
+            <span style="flex:1;text-align:center;padding:6px 0;font-size:12px;color:rgba(36,31,24,.55)" data-page-node-id="mnnbkHDKtrdmLhVqWDEgmQ">图文</span>
+          </div>
+          <div class="gl" style="border-radius:22px;padding:9px 11px" data-page-node-id="TAp1b4k3t3rqZEPUJ3vse7">
+            <div class="row" style="gap:10px" data-page-node-id="HOOdjESpwBICa1O0S7dJLa">
+              <div class="thumb" style="width:44px;height:58px;background:linear-gradient(155deg,#6FA08F,#2C5B4E)" data-page-node-id="Dznsb7zAwb7GqEf45OoJEK"><div class="play" data-page-node-id="dLLnLq0RNzFCQeJ84AZAlB"><svg width="14" height="16" viewBox="0 0 15 17" data-page-node-id="Ep3DGoXxAJfVGbrSWXHc6s"><path d="M1 1.5 14 8.5 1 15.5Z" fill="rgba(255,255,255,.9)" data-page-node-id="5OwrOEd9Z73R0LSOCUB6CK"/></svg></div></div>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px" data-page-node-id="g02KRqmXqc02ShviXjT4eu">
+                <div style="font-size:12px;font-weight:600;color:#241F18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" data-page-node-id="KxgB6zLtE6DRyoGhZJ59JO">城市漫游｜街头摄影 8 个构图技巧</div>
+                <div class="s1" data-page-node-id="GCgxFntcphN6jJpXBbHDVH">抖音 · 1080P · 04:32</div>
+                <div class="row" style="gap:8px" data-page-node-id="DEDAQnF8uKBYddUCkbarwb">
+                  <div class="prog" style="flex:1" data-page-node-id="uzY5Jlh0kID20F4Jk2gn4d"><i style="width:64%" data-page-node-id="C02sZHuGbCO42xzfZjaJkC"></i></div>
+                  <span style="font-size:11px;font-weight:600;color:#E05A00" data-page-node-id="6xVevXkmcc7uuDonoQrZqM">64%</span>
+                </div>
+              </div>
+              <div style="width:28px;height:28px;border-radius:50%;border:1px solid rgba(255,105,0,.55);display:flex;align-items:center;justify-content:center;flex:none" data-page-node-id="VpdieGpeDJOPyf1YUfo32M"><svg width="8" height="10" viewBox="0 0 9 11" data-page-node-id="soqqAGHSEch2DjsvyEBFef"><rect x="0.5" y="0.5" width="2.4" height="10" rx="1.1" fill="#E05A00" data-page-node-id="BOypnar3CNQz7NwBYoCLwh"/><rect x="5.7" y="0.5" width="2.4" height="10" rx="1.1" fill="#E05A00" data-page-node-id="H2zNy8etqeSfAEL3ngA2Ii"/></svg></div>
+            </div>
+          </div>
+          <div class="gl" style="border-radius:22px;padding:9px 11px" data-page-node-id="1FxlwAV5RujdoMJTDoBf2l">
+            <div class="row" style="gap:10px" data-page-node-id="Cry7Ddp7GFM7z8mb51YahC">
+              <div class="thumb" style="width:44px;height:58px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:1px;background:#000" data-page-node-id="W5GWa9zZydlGwljXJ8OELI"><i style="background:#E0A06B" data-page-node-id="SlHtjOGaF05J3tpRNFA1ax"></i><i style="background:#F2D3A0" data-page-node-id="zkNACSt4poSJZQDAAvFSYP"></i><i style="background:#7FA6C9" data-page-node-id="1aqAf5bWC0o92H9113zcdy"></i><i style="background:#D9C2A0" data-page-node-id="pY9uJ9RAn5uFPwgvlLGcZZ"></i></div>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px" data-page-node-id="zHOqEL3ZZdYIOArp5OZkU3">
+                <div style="font-size:12px;font-weight:600;color:#241F18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" data-page-node-id="WOUFEnHVWvaGp1RhYxaGhz">秋冬胶囊衣橱｜一衣多穿公式</div>
+                <div class="s1" data-page-node-id="kLcZGrqFJ6avZZhAUV64qH">小红书 · 12 张图</div>
+                <div class="row" data-page-node-id="6UZrBfWixQxFWbfwtDYUAF"><span class="pill pill-g" data-page-node-id="uKM22ELsG1y1EGLvfTBC1L">已完成</span><span style="flex:1" data-page-node-id="1r0QaMykTGinN3qqId8lOL"></span><span class="s1" data-page-node-id="hNKvTfAe15pBhoof5uOodg">8.4 MB</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="gl" style="border-radius:26px;margin-top:auto;padding:8px 4px 6px;display:flex" data-page-node-id="ESOVSSdZG1R9WX2EeEoC59">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px" data-page-node-id="ZWBhy995Juc1Pdi4KRA6hR"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.55)" stroke-width="1.8" data-page-node-id="8tEaNvBrjCygC2VZMIZkga"><path d="M3 10.8 12 3.5l9 7.3" data-page-node-id="9Hte8BdICYWg97Ae6Sr5FO"/><path d="M5.5 9.5V21h13V9.5" data-page-node-id="xkGhHNaLD0G3uwtEtdfCkp"/></svg><span style="font-size:10.5px;color:rgba(36,31,24,.55)" data-page-node-id="LhlqNSwnJr3HS8HWAJKYoB">首页</span></div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px" data-page-node-id="C7A9alRh1ZlnSas7Q1pULQ"><span style="width:32px;height:24px;border-radius:12px;background:rgba(255,105,0,.18);display:flex;align-items:center;justify-content:center" data-page-node-id="G0Hj9JyuZixLVXT0DNo4i3"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#E05A00" stroke-width="1.8" data-page-node-id="EfXYLF0wgQgxeQCsCDDpjQ"><circle cx="12" cy="12" r="8.6" data-page-node-id="FrFNp5eo2NF87Cd0UX0n2x"/><path d="M12 8.2v6.4m0 0 2.6-2.6M12 14.6 9.4 12" data-page-node-id="UTHUh8AUtE0qu59ijrAE75"/></svg></span><span style="font-size:10.5px;font-weight:600;color:#E05A00" data-page-node-id="1SPHwG891JZ2FFuRBLrTs9">任务</span></div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px" data-page-node-id="ngFEZnrx3sg2lgYBiZIUVZ"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.55)" stroke-width="1.8" data-page-node-id="oLdEmeTFdFsjrSHHhLEo3G"><circle cx="12" cy="8" r="3.6" data-page-node-id="YyEr77JTDcxSreDRNWHR9e"/><path d="M4.8 20c.6-3.6 3.6-5.6 7.2-5.6s6.6 2 7.2 5.6" data-page-node-id="kbhDSoFLLOmgUndWCwovDC"/></svg><span style="font-size:10.5px;color:rgba(36,31,24,.55)" data-page-node-id="cKhPSDGazo2iJJ0cXFib8i">我的</span></div>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="1qlSNpF5TjBYzqgCeEW7ob"><b data-page-node-id="zzeqYjJCiDGioIGezQ4uiT">任务列表</b>（基线样张）<br data-page-node-id="5qRHGlBHoUQAHDc0Ns4ADg">搜索胶囊 / 分段 / 进度卡 / 悬浮玻璃底栏</div>
+    </div>
+  </div>
+
+  <div class="sec" data-page-node-id="zpCSfKj4a4Uc64KhDzIsMq">S2 · 任务详情三态</div>
+  <div class="wall" data-page-node-id="mKLG7KZjaDqdkixri9Zf9a">
+    <div class="cell" data-page-node-id="UaLCjlSSFexh0Onxjpl32Y">
+      <div class="phone" data-page-node-id="VDWJkq9eHFGNB85YceIqSZ"><div class="screen" data-page-node-id="A9Mpysh86EZXxIGDcJlqo0">
+        <div class="island" data-page-node-id="FA2YQ7yTBjHPt2U8PZq2ks"></div>
+        <div class="sb" data-page-node-id="tS4AbkKS5VLAHI0cCBp5E0"><span class="tm" data-page-node-id="zQwiw0HKCWCjDw3CUXUYQq">9:41</span><span class="batt" data-page-node-id="peXDHQBPt64LAvBA4t5s46"></span></div>
+        <div class="bdy" style="padding-top:48px" data-page-node-id="SFPeOAlUARUb3ctmKFkwP0">
+          <div class="row" data-page-node-id="EwAZMyW15rRCAer3romqMp"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#241F18" stroke-width="2" data-page-node-id="QwZSj3tzR8QE52B6RPK2Pg"><path d="M15 5l-7 7 7 7" data-page-node-id="SrYtP7pwfFpftteSbTzqFI"/></svg><span class="t2" style="flex:1" data-page-node-id="XsAQpPGskU7AaMjcMX6rSw">任务详情</span></div>
+          <div class="thumb" style="height:128px;width:100%;border-radius:18px;background:linear-gradient(155deg,#6FA08F,#2C5B4E)" data-page-node-id="Cg4DUuebgShQNsQYpvDiNO"><div class="play" data-page-node-id="GBDlqJFrm4lFb665D8LCEA"><svg width="20" height="23" viewBox="0 0 15 17" data-page-node-id="FQIQsTsVzo5SwTdPoCacO5"><path d="M1 1.5 14 8.5 1 15.5Z" fill="rgba(255,255,255,.95)" data-page-node-id="y69SL90lgGC5U3CXHhWmzE"/></svg></div><span class="tag" data-page-node-id="bhXar7bk9HldRaTdBpjuis">04:32</span></div>
+          <div style="display:flex;flex-direction:column;gap:2px" data-page-node-id="GjZKNMRzgjfYiqiODNzdGk"><div class="t3" data-page-node-id="FrhrxmnLo22ok4Lg7Ri0lH">城市漫游｜街头摄影 8 个构图技巧</div><div class="s1" data-page-node-id="zmcPKuuxjEZ5pPDNRNY7jh">@sxz_photography · 抖音 · 1080P</div></div>
+          <div class="gl" style="border-radius:20px;padding:10px 12px;display:flex;flex-direction:column;gap:8px" data-page-node-id="UzhBlTlQNu6i81OIAmaTeV">
+            <div class="row" style="align-items:baseline" data-page-node-id="TG0z5tfTmacjj6zpGKyrTQ"><span class="s1" style="flex:1" data-page-node-id="ksMilSpnGnz9RT8YT4rlhm">下载进度</span><span style="font-size:15px;font-weight:600;color:#D95A00" data-page-node-id="NdWdWg230PocDnrOGi3LSI">64%</span></div>
+            <div class="prog" data-page-node-id="8CJ0bVhctR2zoMO32Sxb7m"><i style="width:64%" data-page-node-id="lYqIFvvAgfzGxPbrMqP82J"></i></div>
+            <div class="row" data-page-node-id="IwB5Ye9X0weGnavckitj9W"><span class="s1" style="flex:1" data-page-node-id="t2PVWkWJ0WxHyRxcR2xvNm">3.2 / 5.0 MB</span><span class="s1" data-page-node-id="3yTxy4EhoKsycy4D7ISWqX">2.1 MB/s</span></div>
+          </div>
+          <div class="gl" style="border-radius:16px;padding:8px 10px" class="row" data-page-node-id="Ef5KKSfWJJpkTBoB7uy9ed">
+            <span class="s2" data-page-node-id="VXPYCwVXyAunkt8TnFtdFf">剩余约 40 秒 · 自动暂停仅关屏时</span>
+          </div>
+          <div style="flex:1" data-page-node-id="Q4e7Yez5fOK5GJXwCEdKtw"></div>
+          <div class="row" style="gap:8px" data-page-node-id="lWAU16osVwBQAWF0DMwHFG">
+            <div class="btn-g" style="width:46px;height:44px;flex:none" data-page-node-id="KpEWF6S2BZjPmiRIHNPrFA"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#241F18" stroke-width="2" data-page-node-id="KwAwEoiP0V985Ypm12CjWO"><path d="M6 4v16M18 4v16" data-page-node-id="dzsF3ucg0aUpTO9bsmLEem"/></svg></div>
+            <div class="btn-o" style="flex:1" data-page-node-id="sVZ3pUPVvyDhXQ9z8XH3h1">暂停下载</div>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="ozGBpV5cDiYNL4MgoYYzrM"><b data-page-node-id="oaSFkkBYnwGmHotF2Fsqib">下载中</b><br data-page-node-id="tNvUsbGEHRULaDcgnKgj0A">进度/速度/暂停为主操作</div>
+    </div>
+
+    <div class="cell" data-page-node-id="E3LSItayQthxpbqLEYM613">
+      <div class="phone" data-page-node-id="kVEsJniaMxonGG6uNAc3hw"><div class="screen" data-page-node-id="EctIPGm29mVHV44uVUBKXf">
+        <div class="island" data-page-node-id="enOAQH4FufPoq4q9JuldaT"></div>
+        <div class="sb" data-page-node-id="BB3ltHq07OXBAQzA8jziSg"><span class="tm" data-page-node-id="2dxwdnPH82EgbkyjuDr9kp">9:41</span><span class="batt" data-page-node-id="FqhELPQUFeBjXt6pb2PU6S"></span></div>
+        <div class="bdy" style="padding-top:48px" data-page-node-id="R72KEGaYEaxRhfau4hYUpq">
+          <div class="row" data-page-node-id="vaUAyuFVRnM51GDMTwK2ux"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#241F18" stroke-width="2" data-page-node-id="2QDeCt3REtSWAVgyn4DMx2"><path d="M15 5l-7 7 7 7" data-page-node-id="GpwDuKHKa2Br4LqqTVBE7M"/></svg><span class="t2" style="flex:1" data-page-node-id="GExOAxQmmJsc9KG0MpNwkL">任务详情</span></div>
+          <div class="thumb" style="height:128px;width:100%;border-radius:18px;background:linear-gradient(155deg,#8A7BA8,#4E4470)" data-page-node-id="5OsCbtafAUBq6oapdFGU6H"><div class="play" data-page-node-id="rBvVtHU0a7Hh0a5QAboPWn"><svg width="20" height="23" viewBox="0 0 15 17" data-page-node-id="0j3uyVTDCv7USThNcgGFF6"><path d="M1 1.5 14 8.5 1 15.5Z" fill="rgba(255,255,255,.95)" data-page-node-id="tKZKyCKAPkfd3EDnUlWoDC"/></svg></div><span class="tag" data-page-node-id="HKUdrroCEcTb6ZUA8K4Vlw">03:24</span></div>
+          <div style="display:flex;flex-direction:column;gap:2px" data-page-node-id="Cnh0FIOfKHuWNJyAQHrkQD"><div class="t3" data-page-node-id="V5KETHUdbpxiJSZs34GBl2">解压向｜治愈系手工全记录</div><div class="s1" data-page-node-id="a3jowsYCCkDFQ4kD2dTEBu">@handmade · 快手 · 720P</div></div>
+          <div class="gl" style="border-radius:20px;padding:9px 12px;display:flex;flex-direction:column;gap:7px" data-page-node-id="MPFtDWqQ4l4CO7RNG6e52B">
+            <div class="row" data-page-node-id="8ttWic5ZepKCk9MsAfgDum"><span class="dot" style="background:#1E9E4F" data-page-node-id="1N1WfP4sFOeUPoAQLuk17n"></span><span style="font-size:12px;font-weight:600;color:#1E9E4F" data-page-node-id="AMW0cJJbreScdRGQ3Pn9Mt">已完成</span><span style="flex:1" data-page-node-id="yOe3sBMSCLHjiPXQG7dh0l"></span><span class="s2" data-page-node-id="3jgN6Me3TSX1CIS82URQ67">今天 08:12</span></div>
+            <div class="row" data-page-node-id="oYjXW9sTkOjQfRHD6NAweY"><span class="s1" style="flex:1" data-page-node-id="KnfREjQ9RTttpooU2zlj6o">12.1 MB · 视频</span><span class="s1" data-page-node-id="0BtuSmVlBHLgTJfCDckgtU">Movies/xhsdn</span></div>
+          </div>
+          <div class="gl" style="border-radius:18px;padding:2px 12px;display:flex;flex-direction:column" data-page-node-id="6Dw2jSC0C1206toUafxxYA">
+            <div style="display:flex;align-items:center;height:36px" data-page-node-id="wCeQlR8kfElR9vkisRHfQS"><span style="flex:1;font-size:12px;color:#241F18" data-page-node-id="tky3fU8xkv6LFQUENObiGv">下载画质</span><span class="s1" data-page-node-id="3mZ0H9YGNQMmTctnpKQupG">720P 已存</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.35)" stroke-width="2" data-page-node-id="t7yPpAwRElIKjtBdUL7ZKm"><path d="m9 6 6 6-6 6" data-page-node-id="rXalKDad6k3LsXlpk6dIzt"/></svg></div>
+            <div class="ln" style="display:flex;align-items:center;height:36px" data-page-node-id="GXUJHG7xUPX1BtJLIbGAhg"><span style="flex:1;font-size:12px;color:#241F18" data-page-node-id="KpyJQSBAIeT2UyigUmFoLg">复制链接</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.35)" stroke-width="2" data-page-node-id="FCQUqnx2hdNreuSa6BwKn8"><path d="m9 6 6 6-6 6" data-page-node-id="rSfenPeAZGPsJ2roITSd3T"/></svg></div>
+          </div>
+          <div style="flex:1" data-page-node-id="F3sPTrEUGSHyzXFby2OUaQ"></div>
+          <div class="row" style="gap:8px" data-page-node-id="P9tIhyYOMZ02J926r2vVnS">
+            <div class="btn-g" style="flex:1" data-page-node-id="gpF7TgXzp0F38FjfdZiHPS">打开</div>
+            <div class="btn-g" style="width:46px;height:44px;flex:none" data-page-node-id="JBu6snYo93CXNzz9IqpXzg"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#241F18" stroke-width="2" data-page-node-id="SiBVLx3cxp6Rh2rXriO9t7"><path d="M3 6h18M8 6V4h8v2M6 6l1.2 14h9.6L18 6M10 11v6M14 11v6" data-page-node-id="vn4T5yliT6Y1DNnsFJBiIE"/></svg></div>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="lAtDCLKKeyOGhp4wrbmYfm"><b data-page-node-id="RVK9pkiQrPLOFMhYw1bVVE">已完成</b><br data-page-node-id="kEjzdJElw5iLQMt21WpMEY">画质入口/打开/删除</div>
+    </div>
+
+    <div class="cell" data-page-node-id="FyWgfqZHo5ZT9Xs3TvEPOF">
+      <div class="phone" data-page-node-id="rmR79fNWcPGayCobdB8ZxC"><div class="screen" data-page-node-id="CFlWkGlBGZtexRs9ABJ71E">
+        <div class="island" data-page-node-id="jSSszk5hRJHFf0wfTfc33W"></div>
+        <div class="sb" data-page-node-id="jjyg68i2oVJDeoiFYEm4Hu"><span class="tm" data-page-node-id="s7tZNPQT9OAvoM7GRJuH2P">9:41</span><span class="batt" data-page-node-id="BCWoN4AeMIEz5IcMFxdUbC"></span></div>
+        <div class="bdy" style="padding-top:48px" data-page-node-id="D4EXvhJ6x6qTnP1qBPYEiN">
+          <div class="row" data-page-node-id="GVQd9uhrv6N75El7nAytwp"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#241F18" stroke-width="2" data-page-node-id="7BIv3tBMSXwG8OsqAXTwzk"><path d="M15 5l-7 7 7 7" data-page-node-id="AJ1iY5FXB0B2EHdMM5zs84"/></svg><span class="t2" style="flex:1" data-page-node-id="dYeDHfcU2zT6SraxXUba5F">任务详情</span></div>
+          <div class="thumb" style="height:128px;width:100%;border-radius:18px;background:linear-gradient(155deg,#C9A66B,#6E4A26);opacity:.85" data-page-node-id="CEPsBeNO1hCIptt4dcFXgy"><div class="play" data-page-node-id="pHvkElt2mHi0V04VkU4MZc"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="1.8" data-page-node-id="wr3Max5SlAEVlIw9zfkSjf"><circle cx="12" cy="12" r="9" data-page-node-id="550tpUw8Nnv3vqr46hU08W"/><path d="M12 7v5M12 16.5v.1" data-page-node-id="txcS4iLvJF5Q7jFBHhUxuX"/></svg></div><span class="tag" data-page-node-id="FRSSWIs7mPevJa1h17NeEr">失败</span></div>
+          <div style="display:flex;flex-direction:column;gap:2px" data-page-node-id="5YIgcgYuerFXISfzBiN0Jg"><div class="t3" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" data-page-node-id="xJnOY9vj1ytEFaHmtC9ESp">城市漫游｜街头摄影 8 个构图技巧</div><div class="s1" data-page-node-id="TYQXcySDsDKBKTBwwxuR8e">@sxz_photography · 抖音</div></div>
+          <div class="gl" style="border-radius:20px;padding:10px 12px;display:flex;flex-direction:column;gap:7px" data-page-node-id="Bbo1A1dXd16jGpPJjQyAXR">
+            <div class="row" data-page-node-id="yg4GglBvP1OGGZrktyVF0Y"><span class="dot" style="background:#E24B4A" data-page-node-id="U8aL8T0cDl07LPcmBoiOem"></span><span style="font-size:12px;font-weight:600;color:#C23B3A" data-page-node-id="e9IRvq9BOsTuAZ46f90uGV">下载失败</span><span style="flex:1" data-page-node-id="iPvBS5ULnZ7LH97dUGylcZ"></span><span class="s2" data-page-node-id="T7P1E96fERFCBQLlW559s5">今天 08:02</span></div>
+            <div class="s1" style="line-height:1.5" data-page-node-id="48RXpPSWXubsKbMy7cMD12">解析失败：HTTP 快解超时，后台 WebView 亦未取到媒体</div>
+          </div>
+          <div class="gl" style="border-radius:18px;padding:2px 12px;display:flex;flex-direction:column" data-page-node-id="YNnBfzXWEmkJAlscOl0q7K">
+            <div style="display:flex;align-items:center;height:36px" data-page-node-id="MNAo3ddPPhlrXQiF3Mf7sc"><span style="flex:1;font-size:12px;color:#241F18" data-page-node-id="FMcx0QBuLUXKCyHFvbqxaJ">复制链接</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.35)" stroke-width="2" data-page-node-id="GMfoCO28fNqm0rDFh3k6zw"><path d="m9 6 6 6-6 6" data-page-node-id="QMg5ExOV3AdzgIgcxcYYgd"/></svg></div>
+            <div class="ln" style="display:flex;align-items:center;height:36px" data-page-node-id="Lw9Hr88X1Kqyp6PmQpyFQa"><span style="flex:1;font-size:12px;color:#241F18" data-page-node-id="DDM5DXpdVe2MJEBJ1Au6Ls">查看失败日志</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.35)" stroke-width="2" data-page-node-id="6NZQkTp2zQGqCmawBkf9wM"><path d="m9 6 6 6-6 6" data-page-node-id="TfJ3tDXd8NxOAe9PkZlSNp"/></svg></div>
+          </div>
+          <div style="flex:1" data-page-node-id="8Gw06LpZOJo61GAUkttBa3"></div>
+          <div class="row" style="gap:8px" data-page-node-id="6Z2xHBfvPjtgxPmGiBMbxk">
+            <div class="btn-o" style="flex:1" data-page-node-id="0wgtHk58db0EPYXMpglTaj">重试</div>
+            <div class="btn-g" style="width:46px;height:44px;flex:none" data-page-node-id="IKmfGmIH9ggcpc2f4Wcipt"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#241F18" stroke-width="2" data-page-node-id="xiDcueRrufSxhVUkQUq5kK"><path d="M3 6h18M8 6V4h8v2M6 6l1.2 14h9.6L18 6M10 11v6M14 11v6" data-page-node-id="It7iK4cWr5abiYUg4N1hlW"/></svg></div>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="LvnA5wgUCodepHXvaLpN4r"><b data-page-node-id="f2t1JkHJ0jBQpS9LQh7PJJ">失败</b><br data-page-node-id="uDmpsrKczD8u1ppoMnxLus">末因直显 / 重试 / 看日志</div>
+    </div>
+  </div>
+
+  <div class="sec" data-page-node-id="q18K3oQH3o71tq2pEfIAH6">S3 · 设置页（分组玻璃卡）</div>
+  <div class="wall" data-page-node-id="HoMtqQOiY53JrGGdtbCIpI">
+    <div class="cell" data-page-node-id="SanZjhKnXq1HT3sSGVFfGb">
+      <div class="phone" data-page-node-id="0spJ1u4rJLWwocUkbf4iok"><div class="screen" data-page-node-id="DfmmHZtMyrHGgXrAJFhRql">
+        <div class="island" data-page-node-id="SoV4iyJ4MwHPueBsdFokhQ"></div>
+        <div class="sb" data-page-node-id="yf8XsG6VYjtI5HF1BQwBtF"><span class="tm" data-page-node-id="duA5cvR9ltB2PJXHzK7qbY">9:41</span><span class="batt" data-page-node-id="CQeDIjqD7iKSPdWELO7l1W"></span></div>
+        <div class="bdy" style="padding-top:46px" data-page-node-id="N2UlUDyegft0xHICFVDLGQ">
+          <div class="row" style="align-items:baseline" data-page-node-id="InsRFARRPW6brhki9c6DIY"><span class="t1" data-page-node-id="gvjZ1huje8C8WMKCFws95Y">设置</span><span class="s2" data-page-node-id="7YLO0jM9JAb1s9Yd1zoN3W">v1.15.0</span></div>
+          <div style="font-size:11px;color:rgba(36,31,24,.45);padding:0 4px" data-page-node-id="JA3AE91D0Fuk4fCSWXmAZH">下载</div>
+          <div class="gl" style="border-radius:20px;padding:2px 12px;display:flex;flex-direction:column" data-page-node-id="6NNJA6P9CQxwHNrf465UAN">
+            <div style="display:flex;align-items:center;height:38px" data-page-node-id="kPDcYEPEdi2CY3pog6DuhZ"><span style="flex:1;font-size:12.5px;color:#241F18" data-page-node-id="N07oqeMaBBeObQPsacwJYm">默认画质</span><span class="s1" data-page-node-id="17M5Bi1IuZ3DR5pEAi7cTw">1080P</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.35)" stroke-width="2" style="margin-left:5px" data-page-node-id="rk4OTiRnlSreQun6oiu0IE"><path d="m9 6 6 6-6 6" data-page-node-id="D7G0z0YnqkkwSxiXGy2aQh"/></svg></div>
+            <div class="ln" style="display:flex;align-items:center;height:38px" data-page-node-id="SRn5rF3TpHs1DCp4UfwD4A"><span style="flex:1;font-size:12.5px;color:#241F18" data-page-node-id="NxtNvBXgmMr3AdQCbTzhWZ">同时下载数</span><span class="row" data-page-node-id="bEesw2irJZzEUEDjSgRvAO"><span style="width:19px;height:19px;border-radius:50%;border:1px solid rgba(36,31,24,.3);display:flex;align-items:center;justify-content:center;font-size:12px;color:rgba(36,31,24,.6)" data-page-node-id="HHRZLB2ixEFD3dneGF6x05">−</span><span style="font-size:12px;font-weight:600;color:#241F18;min-width:20px;text-align:center" data-page-node-id="ZS69GGPRPJQxHsTm9b0mWn">3</span><span style="width:19px;height:19px;border-radius:50%;background:rgba(255,105,0,.18);border:1px solid rgba(255,105,0,.45);display:flex;align-items:center;justify-content:center;font-size:12px;color:#D95A00" data-page-node-id="M4yb4hm8YFCLi4K5zJPXdQ">+</span></span></div>
+            <div class="ln" style="display:flex;align-items:center;height:38px" data-page-node-id="9d4qykO4aXpvGsk8IoGDx2"><span style="flex:1;font-size:12.5px;color:#241F18" data-page-node-id="6JcVLmCtLSyiAb40ibqQbd">自动读剪贴板</span><span class="sw2" data-page-node-id="hm0JoNbCgBybhkTGuh5qfC"></span></div>
+          </div>
+          <div style="font-size:11px;color:rgba(36,31,24,.45);padding:0 4px" data-page-node-id="RU4D6Bh32vHz4fld2LFeBp">通知</div>
+          <div class="gl" style="border-radius:20px;padding:2px 12px;display:flex;flex-direction:column" data-page-node-id="ooNTDUz9cNAUjNWNkkCqyM">
+            <div style="display:flex;align-items:center;height:38px" data-page-node-id="7s1vb3Nr3cJmtEJaUUlYFJ"><span style="flex:1;font-size:12.5px;color:#241F18" data-page-node-id="Vex2xHclWN2FmTezjDPVVh">下载完成通知</span><span class="sw2" data-page-node-id="obT7Z24IWDMMwc4OCFoS8x"></span></div>
+          </div>
+          <div style="font-size:11px;color:rgba(36,31,24,.45);padding:0 4px" data-page-node-id="nKsnSCaQedKrEV4BDL23s1">日志与诊断</div>
+          <div class="gl" style="border-radius:20px;padding:2px 12px;display:flex;flex-direction:column" data-page-node-id="yYnfolnDbyNiu0gND0dDud">
+            <div style="display:flex;align-items:center;height:38px" data-page-node-id="4gtGQScWXXinFPGWKySCFF"><span style="flex:1;font-size:12.5px;color:#241F18" data-page-node-id="IIWn5lskADRRPgYKwuimKS">失败日志</span><span class="pill pill-r" data-page-node-id="DbZu4DdzaoRWVCE9iyN9cK">2</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.35)" stroke-width="2" style="margin-left:5px" data-page-node-id="D1c0ocWMiP3szYiD9pPbEh"><path d="m9 6 6 6-6 6" data-page-node-id="33XcRVzMFzDDc6CuqjTYtW"/></svg></div>
+            <div class="ln" style="display:flex;align-items:center;height:38px" data-page-node-id="5ryQW0dLjgnyA2tEwBlE5v"><span style="flex:1;font-size:12.5px;color:#241F18" data-page-node-id="cZqz9oAPlaZU4H8rRndfJC">正常日志</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.35)" stroke-width="2" style="margin-left:5px" data-page-node-id="BllfxTH2O7u6PkMaib1E0b"><path d="m9 6 6 6-6 6" data-page-node-id="kXPkU2KHhE0iIEtCtGxHiq"/></svg></div>
+            <div class="ln" style="display:flex;align-items:center;height:38px" data-page-node-id="mRX1WsjWiqvkLlYonWWy5D"><span style="flex:1;font-size:12.5px;color:#241F18" data-page-node-id="AszKRBrtzKE5m6VkTyXY2B">功能使用统计</span><span class="s2" data-page-node-id="T9cJQ1OPYvNbtKghUfXX34">埋码事件</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.35)" stroke-width="2" style="margin-left:5px" data-page-node-id="5VP8VFbg7CFDKXBangvxNO"><path d="m9 6 6 6-6 6" data-page-node-id="7kWUsyRRM0Au8g7HorA3WV"/></svg></div>
+          </div>
+          <div style="font-size:11px;color:rgba(36,31,24,.45);padding:0 4px" data-page-node-id="BAapFOqX83JcIYlcCKrL9F">关于</div>
+          <div class="gl" style="border-radius:20px;padding:2px 12px;display:flex;flex-direction:column" data-page-node-id="vulMHAVYnWoGQFN6iEppF1">
+            <div style="display:flex;align-items:center;height:38px" data-page-node-id="fEb4XmNtTnsvPJD2Ppb5QM"><span style="flex:1;font-size:12.5px;color:#241F18" data-page-node-id="YLEXRKRbWtxxeVDtx4U6eP">项目主页</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.35)" stroke-width="2" style="margin-left:5px" data-page-node-id="gtGD8dKQ6YK9A2C6u6XSXC"><path d="m9 6 6 6-6 6" data-page-node-id="EHy9aegEoosRqMhXWC08AM"/></svg></div>
+            <div class="ln" style="display:flex;align-items:center;height:38px" data-page-node-id="1EPQaNmSGAui29zoFfPetx"><span style="flex:1;font-size:12.5px;color:#241F18" data-page-node-id="7wpBx1Bkef9EpZcjlZGYY7">检查更新</span><span class="s1" data-page-node-id="DX5DrYNSGDlezcnzV0kHy8">最新</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.35)" stroke-width="2" style="margin-left:5px" data-page-node-id="zcS7MpBzCpsRF4I0JeiB6O"><path d="m9 6 6 6-6 6" data-page-node-id="1Lp07brHugjHWTHm7F60bD"/></svg></div>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="HURmIKgBQdHcmb4djAtZB9"><b data-page-node-id="o3ucMLV07yV17BHD429FnR">设置页</b><br data-page-node-id="G0B1VC7tIvZlqCEJnA1Fpn">分组玻璃卡 + 失败红角标 + 埋码入口</div>
+    </div>
+  </div>
+
+  <div class="sec" data-page-node-id="3dgKJ7agnfVoGsxxeZ91NT">S4 · 主页下载三步流程</div>
+  <div class="wall" data-page-node-id="RwTXH3Z6Dm06byJKoqCDNW">
+    <div class="cell" data-page-node-id="LbIurBq695dT87dM2pIeGH">
+      <div class="phone" data-page-node-id="bdPA352nAVbxbxQZNVzGoa"><div class="screen" data-page-node-id="kiiACD0TAI3OcBQOslcEJM">
+        <div class="island" data-page-node-id="XiDXd77mCMsiP2s9dxLLyA"></div>
+        <div class="sb" data-page-node-id="3f3lH0zfBbi2rQqSGgr2nA"><span class="tm" data-page-node-id="V3uBqOEhkPpPMsH3uEQxc5">9:41</span><span class="batt" data-page-node-id="EroTSiEsH6Hu01djwKwhyr"></span></div>
+        <div class="bdy" style="padding-top:48px" data-page-node-id="tG7TADJojvxfonmgLmW2cE">
+          <div class="row" data-page-node-id="wCatt7NAA3OxNtQby1YzJH"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#241F18" stroke-width="2" data-page-node-id="Ea8IBJxBTDIN3oqFDbtdpW"><path d="M15 5l-7 7 7 7" data-page-node-id="lwcIgFNYR9XIi2iqkg5rqe"/></svg><span class="t2" style="flex:1" data-page-node-id="HJcWvVCLT4u6od4Bl2OWVh">主页下载</span><span class="s2" data-page-node-id="8jHrHGhhGNEtNGclOwuvjD">1/3</span></div>
+          <div class="s1" data-page-node-id="kg5KNwzoSOxFuHdOjMIMfz">粘贴博主主页链接，批量抓取全部作品</div>
+          <div class="gl" style="border-radius:20px;padding:9px 11px;display:flex;flex-direction:column;gap:7px" data-page-node-id="qxsAow3XjVRmo3vkz6eJvv">
+            <div class="s1" data-page-node-id="COwqpH408jFLyF2LoADI92">主页链接</div>
+            <div class="row" data-page-node-id="pme6kCOyFeMA23wBAstFDA">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.5)" stroke-width="2" data-page-node-id="BhRXrTm2tPNoEFfnEcOjwk"><path d="M10 14a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" data-page-node-id="bLcEbwpk6bKTD9pqFjiEMh"/><path d="M14 10a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" data-page-node-id="k1XEyKoV5omzx0j6JMCHkQ"/></svg>
+              <span style="flex:1;font-size:11.5px;color:rgba(36,31,24,.35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" data-page-node-id="AWkyGE9eQUqImLJhRwGk6c">https://v.douyin.com/…</span>
+              <span style="background:#FF6900;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:600;color:#fff" data-page-node-id="sfoseBhEHrasi8z58b0gOw">粘贴</span>
+            </div>
+          </div>
+          <div class="gl" style="border-radius:18px;padding:9px 11px;display:flex;flex-direction:column;gap:6px" data-page-node-id="FGFzIHKAWUqi1vSAMnufQ7">
+            <div class="s1" data-page-node-id="u8xtqaYBe2k8eRp4Iyazfw">支持平台</div>
+            <div class="row" data-page-node-id="VVCLY0AQrJqUSf7NKB0rON">
+              <span style="border-radius:999px;background:rgba(255,255,255,.7);padding:3px 9px;font-size:11px;font-weight:600;color:#241F18" data-page-node-id="OT7VYj8yBGcJQRrM2jXdTq">抖音主页</span>
+              <span style="border-radius:999px;background:rgba(255,255,255,.7);padding:3px 9px;font-size:11px;font-weight:600;color:#241F18" data-page-node-id="WslmOSs6RJjITKa0q6Hn0v">快手主页</span>
+              <span style="border-radius:999px;background:rgba(255,255,255,.5);padding:3px 9px;font-size:11px;color:rgba(36,31,24,.4)" data-page-node-id="ZmiFxXAoHxN60s7PK7ndUL">小红书</span>
+            </div>
+            <div class="s2" data-page-node-id="CGsdjF4lGhfrbfbS0vqVSG">小红书主页批量暂未开放</div>
+          </div>
+          <div style="flex:1" data-page-node-id="UBbDP81tNlfWK3GKm726bP"></div>
+          <div class="gl" style="border-radius:18px;padding:8px 11px" class="row" data-page-node-id="5hpezRs8rKP6HDoP3ex4CP">
+            <div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(150deg,#E0A06B,#C98A4E);flex:none" data-page-node-id="GyqShNF6o9AOVDBAMqhS71"></div>
+            <div style="flex:1;min-width:0" data-page-node-id="gTfrJcUtVDDgMd15vlifFh"><div style="font-size:11px;font-weight:600;color:#241F18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" data-page-node-id="NCj3neX1gzGDWGxEqWrbAn">上次解析 · 摄影师小郑</div><div class="s2" data-page-node-id="wqPbqkoJNceqIwMt4U2hK9">283 个作品 · 已完成</div></div>
+          </div>
+          <div class="btn-o" style="height:42px" data-page-node-id="lXB7auHCakbH96GYpJB1sj">解析主页</div>
+          <div class="s2" style="text-align:center" data-page-node-id="HoPk9tsAWkoEandZYj9k1K">识别成功后进入作品预览</div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="4QR6nWAHxn766bTp5BnTpF"><b data-page-node-id="wgqEqtZakbmYW2Ga1JGsZF">① 粘贴链接</b><br data-page-node-id="ekBmA6xHTVqsR8DD0Vn3AA">平台 chips + 上次解析快捷</div>
+    </div>
+
+    <div class="cell" data-page-node-id="k8JapJiQAIjvtIqnl6MqU6">
+      <div class="phone" data-page-node-id="2MerGg8oYObVWgwoCUociU"><div class="screen" data-page-node-id="ZCAyPH8iCkq8at172Apw53">
+        <div class="island" data-page-node-id="IyAO3ZeC8s5fbND8al53sq"></div>
+        <div class="sb" data-page-node-id="iGKkJXQO6IhlYOTES9J1Ls"><span class="tm" data-page-node-id="1n63EqXRREyD8tv9e0JnPh">9:41</span><span class="batt" data-page-node-id="PYxU7m0uMHSB8HjRncggUB"></span></div>
+        <div class="bdy" style="padding-top:48px" data-page-node-id="cfZxLo6WtZ7MlxaOJWalQf">
+          <div class="row" data-page-node-id="W7ou9fQ5DP77GnHoJ8YFl1"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#241F18" stroke-width="2" data-page-node-id="hPRZiUOzA4XnnVvPrCaYbm"><path d="M15 5l-7 7 7 7" data-page-node-id="ufLFScmjs0egJXvLurQwGu"/></svg><span class="t2" style="flex:1" data-page-node-id="qLhvHT28E9EpPwej82BwKm">解析结果</span><span class="s2" data-page-node-id="nlOwaRPCSpICOEmhEin9iI">2/3</span></div>
+          <div class="gl" style="border-radius:20px;padding:9px 11px" class="row" data-page-node-id="G7w1yuRVZicDxTdbUNcw4e">
+            <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(150deg,#E0A06B,#C98A4E);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#fff;flex:none" data-page-node-id="0x3JTXGclQDjcOsMppBzZW">郑</div>
+            <div style="flex:1;min-width:0" data-page-node-id="IDrCn04mLhv88ZkR53HVze"><div class="t3" data-page-node-id="KDUAsjQxpb9xtQ5iJwnbWv">摄影师小郑</div><div class="s1" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" data-page-node-id="SqpDQdqJp0aJsWkSuk1QYJ">sxz_photography · 12.3 万粉丝</div></div>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.4)" stroke-width="2" data-page-node-id="e4Yh9UULVqOeQ5fv0EVFZa"><path d="m9 6 6 6-6 6" data-page-node-id="hWjgscImeNfriBCZqEhHU4"/></svg>
+          </div>
+          <div class="row" style="gap:6px" data-page-node-id="uH6MqegoLpts8RF6SG0vFH">
+            <div class="gl" style="flex:1;border-radius:16px;padding:7px 0;display:flex;flex-direction:column;align-items:center" data-page-node-id="UvczpqEDKv0FCQ5rVaUMRT"><span style="font-size:15px;font-weight:600;color:#D95A00" data-page-node-id="IoC3MRFnA83ZDgLUNX1o52">45</span><span class="s2" data-page-node-id="pUkfF2msBDYBPfjAQMlc5f">本次新增</span></div>
+            <div class="gl" style="flex:1;border-radius:16px;padding:7px 0;display:flex;flex-direction:column;align-items:center" data-page-node-id="fKhVXhXmkzXoAy8EYBEWHq"><span style="font-size:15px;font-weight:600;color:#241F18" data-page-node-id="doOFsA7z9quSR1w2Fc4utR">238</span><span class="s2" data-page-node-id="7HLb2TluGlKdXTewQtA76U">已下载</span></div>
+            <div class="gl" style="flex:1;border-radius:16px;padding:7px 0;display:flex;flex-direction:column;align-items:center" data-page-node-id="vnuozjiqrTEKuHl0HAH6Tm"><span style="font-size:15px;font-weight:600;color:#241F18" data-page-node-id="7fiCCUp2INn9vfLbIzzyRu">283</span><span class="s2" data-page-node-id="kvZahYAWSzP5sG9fsiIzaz">全部作品</span></div>
+          </div>
+          <div class="s1" data-page-node-id="GF4qAb87IEG7U3EVciRrxF">作品预览 · 已按发布时间排序</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px" data-page-node-id="zeGlAvbTlmzeHVaz3ROjZJ">
+            <div class="thumb" style="aspect-ratio:3/4;background:linear-gradient(155deg,#6FA08F,#2C5B4E)" data-page-node-id="1BFH0HN7i0NgG56VTkHM1M"><div class="play" data-page-node-id="Zt2w21pkEHWx3WVrn3NpkT"><svg width="10" height="12" viewBox="0 0 15 17" data-page-node-id="eifWFeHaaNDDFtEgWqaTIk"><path d="M1 1.5 14 8.5 1 15.5Z" fill="rgba(255,255,255,.9)" data-page-node-id="xHxTTIeQDlfvAw4bGE8wJX"/></svg></div></div>
+            <div class="thumb" style="aspect-ratio:3/4;background:linear-gradient(155deg,#E0A06B,#B97A40)" data-page-node-id="IR9lhGmjEC8XkZ2qrpsgac"><div class="play" data-page-node-id="jSv2sykKhMrsFv9czrmHoM"><svg width="10" height="12" viewBox="0 0 15 17" data-page-node-id="sdq58DCsTsDtm2OCCUOzez"><path d="M1 1.5 14 8.5 1 15.5Z" fill="rgba(255,255,255,.9)" data-page-node-id="mJeaYqWxFc1fneDiiJL1nx"/></svg></div></div>
+            <div class="thumb" style="aspect-ratio:3/4;background:linear-gradient(155deg,#B2CCDC,#6E94B2);display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:1px" data-page-node-id="s49CfMWzUv5hUQGE8xYYKR"><i style="background:rgba(255,255,255,.4)" data-page-node-id="9Xfm0I88h3O3mYSIXOHG82"></i><i style="background:rgba(255,255,255,.22)" data-page-node-id="H59HH8md3JA1btEv2fDh3b"></i><i style="background:rgba(255,255,255,.22)" data-page-node-id="0KEP32cCKEJdaesFmIF2BN"></i><i style="background:rgba(255,255,255,.45)" data-page-node-id="R4TRe1hP3LnNknPOYtw02q"></i></div>
+            <div class="thumb" style="aspect-ratio:3/4;background:linear-gradient(155deg,#8A7BA8,#4E4470)" data-page-node-id="xV4NNzwzxO1VJznvKaxUNo"><div class="play" data-page-node-id="TTNBZWFi6mO7DmmAMlkURn"><svg width="10" height="12" viewBox="0 0 15 17" data-page-node-id="qpL5Mk4zoyPqv9UZERwyxw"><path d="M1 1.5 14 8.5 1 15.5Z" fill="rgba(255,255,255,.9)" data-page-node-id="RFRqSyypPEL7CE4EBhfbid"/></svg></div></div>
+            <div class="thumb" style="aspect-ratio:3/4;background:linear-gradient(155deg,#F2D3A0,#D9A44E);display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:1px" data-page-node-id="7A2ja2u0gtHPis4jBX9guM"><i style="background:rgba(255,255,255,.4)" data-page-node-id="M2Uix0iFBGdsn3C2qDL6pP"></i><i style="background:rgba(255,255,255,.22)" data-page-node-id="rB8kPjuuAyoF37NzJiUwKP"></i><i style="background:rgba(255,255,255,.22)" data-page-node-id="kagtfGd4CzsUgSsEZWokDk"></i><i style="background:rgba(255,255,255,.45)" data-page-node-id="FdkEGsRe5bJDGbpOUKz7Tr"></i></div>
+            <div class="thumb" style="aspect-ratio:3/4;background:linear-gradient(155deg,#C9A66B,#8F6E3C)" data-page-node-id="Etuia7WN2wuVubk5C8phiX"><div class="play" data-page-node-id="Z1B4BSA03xF3CrvW7cXbLu"><svg width="10" height="12" viewBox="0 0 15 17" data-page-node-id="r4yS9KkRf5c7zHkQHtt8eb"><path d="M1 1.5 14 8.5 1 15.5Z" fill="rgba(255,255,255,.9)" data-page-node-id="b0aeyV56FqcfEtNTaamqRR"/></svg></div></div>
+          </div>
+          <div style="flex:1" data-page-node-id="pDA8LL1eerkfNzUIq2JvCx"></div>
+          <div class="btn-o" style="height:42px" data-page-node-id="1sG9GtyCe5TcIwvjGx15oC">选择下载范围 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" data-page-node-id="ZHLfkv8Xv6zoEWIfFbcOdt"><path d="M5 12h14m-6-6 6 6-6 6" data-page-node-id="SygyjufIihyLKnUke73R7u"/></svg></div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="HDjfadx0PcLGO96QPTRqKu"><b data-page-node-id="ain4l3E7Trw0oZSpPEdyu5">② 解析预览</b><br data-page-node-id="l5Brlg1ZX9DePKMvGoqu83">新增/已下载对比 + 类型缩略</div>
+    </div>
+
+    <div class="cell" data-page-node-id="UV0BTCJWd8pH8nGrkNSojG">
+      <div class="phone" data-page-node-id="DFcwHmHLXIR1V0tWfHaCfm"><div class="screen" data-page-node-id="TaTNJYRCDADGz70OKjWHQf">
+        <div class="island" data-page-node-id="qYHOXwU9DLP6WQX5kAkJUM"></div>
+        <div class="sb" data-page-node-id="g3IIHxsOIXtC2ZtuNHdcma"><span class="tm" data-page-node-id="pyR1y1R6mjfCgfVAJwPVyK">9:41</span><span class="batt" data-page-node-id="ieYNlISReDXIkPh8Sjygxj"></span></div>
+        <div class="bdy" style="padding-top:48px" data-page-node-id="ytALEEYtWliGkr044tqb54">
+          <div class="row" data-page-node-id="mhURpygkeVx7O0HjzsNNkP"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#241F18" stroke-width="2" data-page-node-id="KAF5C1CyYDdCiXP9kR0m9G"><path d="M15 5l-7 7 7 7" data-page-node-id="GquYRkdiL7qdiEU9aSbzJR"/></svg><span class="t2" style="flex:1" data-page-node-id="TlzoZecjLpBYE5TtFr6WhX">选择范围</span><span class="s2" data-page-node-id="czgYeUDlbzVtwF5H5tjG6I">3/3</span></div>
+          <div class="gl" style="border-radius:20px;padding:4px 11px;display:flex;flex-direction:column" data-page-node-id="qjB320B1BBBNGP76YJCoN3">
+            <div style="display:flex;align-items:center;height:37px" data-page-node-id="tl6UEzdbwka1YZP4uaHsB0">
+              <span style="width:16px;height:16px;border-radius:50%;border:1.5px solid rgba(36,31,24,.25);flex:none;margin-right:8px" data-page-node-id="5boCWENZM44U96DmvYL2J3"></span>
+              <span style="flex:1;font-size:12px;color:#241F18" data-page-node-id="lpBHZgFSRG6844CtbltyN5">全部作品</span><span class="s2" data-page-node-id="RqQA1Vpr0jd1Rh7HZ41eXz">283</span>
+            </div>
+            <div class="ln" style="display:flex;align-items:center;height:37px" data-page-node-id="v1lWpWjHf0Y3ZvQQQZPjIc">
+              <span style="width:16px;height:16px;border-radius:50%;border:1.5px solid rgba(255,105,0,.6);display:inline-flex;align-items:center;justify-content:center;flex:none;margin-right:8px" data-page-node-id="bb5qlaAjPNAIysrvkb7kXP"><span style="width:8px;height:8px;border-radius:50%;background:#FF6900" data-page-node-id="INaEhWRiM1nSvs0fm5zATF"></span></span>
+              <span style="flex:1;font-size:12px;font-weight:600;color:#241F18" data-page-node-id="PBqUhua5DHfEI5uNMpD4DC">仅新增</span>
+              <span class="pill pill-o" data-page-node-id="VEae5cvoZlSfpO49wDJjfR">推荐</span><span class="s2" style="margin-left:6px" data-page-node-id="DD5F4NF1U5NFeC8k1ehKHe">45</span>
+            </div>
+            <div class="ln" style="display:flex;align-items:center;height:37px" data-page-node-id="IFzUAe4xeMrD0p6zgVGE4o">
+              <span style="width:16px;height:16px;border-radius:50%;border:1.5px solid rgba(36,31,24,.25);flex:none;margin-right:8px" data-page-node-id="APLxwWhswomN85B8Wlyzux"></span>
+              <span style="flex:1;font-size:12px;color:#241F18" data-page-node-id="X9GxplrvUKyb69VaIT2Vsx">指定数量</span>
+              <span class="row" data-page-node-id="QHH39cyR4FJYCgP6AgQl38"><span style="width:20px;height:20px;border-radius:50%;border:1px solid rgba(36,31,24,.3);display:flex;align-items:center;justify-content:center;font-size:12px;color:rgba(36,31,24,.6)" data-page-node-id="GlFAyHlNcetp5Eb0AY9PjM">−</span><span style="font-size:12px;font-weight:600;color:#241F18;min-width:24px;text-align:center" data-page-node-id="2SuELPfwNX9rsm63MqZJHq">100</span><span style="width:20px;height:20px;border-radius:50%;background:rgba(255,105,0,.18);border:1px solid rgba(255,105,0,.45);display:flex;align-items:center;justify-content:center;font-size:12px;color:#D95A00" data-page-node-id="QPpGhHMlvyQURu03aazKNL">+</span></span>
+            </div>
+          </div>
+          <div class="gl" style="border-radius:18px;padding:2px 12px;display:flex;flex-direction:column" data-page-node-id="AbHS5ZT3FsCzbxPjFsGFLT">
+            <div style="display:flex;align-items:center;height:36px" data-page-node-id="FdZsILHfaVQq2tVy3JWtKW"><span style="flex:1;font-size:12px;color:#241F18" data-page-node-id="ttfo8tAG1qGYEq9sakDzX2">包含图文作品</span><span class="sw2" data-page-node-id="Zn4KpRr6ebWsjAm93eqbba"></span></div>
+            <div class="ln" style="display:flex;align-items:center;height:36px" data-page-node-id="AO0ETIKHk5WGW5ULKHHA1Z"><span style="flex:1;font-size:12px;color:#241F18" data-page-node-id="4ApGdUEEhZktXEwFlnIdZt">自动跳过已下载</span><span class="sw2" data-page-node-id="1iNGGtBaiVm1eFBcQqxzd7"></span></div>
+          </div>
+          <div class="gl" style="border-radius:18px;padding:8px 12px" class="row" data-page-node-id="r2dOEeuO8GuB1x9L5vrSFg">
+            <span style="flex:1;font-size:11.5px;color:rgba(36,31,24,.55)" data-page-node-id="dGX8PxX7d9AU4A9R0Oy7af">预计下载 · 视频优先原画</span>
+            <span style="font-size:12px;font-weight:600;color:#241F18" data-page-node-id="n8aYDBwB3CyxSHO6D9PCH7">45 个</span>
+            <span class="s1" data-page-node-id="xlzYUEmS6YENFBplU3BrZl">约 1.2 GB</span>
+          </div>
+          <div style="flex:1" data-page-node-id="UpDIDf3o07DfI2Y6URmyDU"></div>
+          <div class="btn-o" style="height:42px" data-page-node-id="6z9Ww76187rqXhrvKcC1XD">开始批量下载</div>
+          <div class="s2" style="text-align:center" data-page-node-id="FxBZKY0RxtoH23C0UY3BQB">后台排队执行 · 通知栏可看进度</div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="WKN5P87yNVamfGnWhW8DpX"><b data-page-node-id="XoGRyj2F5xnozlU3npQ3tU">③ 范围确认</b>（修正版）<br data-page-node-id="citARy5fXBiBKkManSwvvm">单选仅「仅新增」默认勾选</div>
+    </div>
+  <div class="sec" data-page-node-id="dj9rZL4H2FYflCETTel5HM">S5 · 首次引导三页</div>
+  <div class="wall" data-page-node-id="6yfCevdAxD5M6iRJD7650t">
+    <div class="cell" data-page-node-id="ldLlRICrR9v8LslgWMDqO4">
+      <div class="phone" data-page-node-id="UL4GzdWGDyueZSbFbsIEBU"><div class="screen" data-page-node-id="AOExUE8HWZdRBrvKnOXHQR">
+        <div class="island" data-page-node-id="QEqjmGQVACbSGgHgTZf9XX"></div>
+        <div class="sb" data-page-node-id="1YGWXMFmiWjyJjOZ5TQXUH"><span class="tm" data-page-node-id="0SVWBN3DUezxNohWmdVmZO">9:41</span><span class="batt" data-page-node-id="s0UmHQ4TEgmFTBqIzMr3sL"></span></div>
+        <div class="bdy" style="padding-top:50px;align-items:center;text-align:center" data-page-node-id="nXvo2eZuwFJX3ZZUuZVZcC">
+          <div style="width:60px;height:60px;border-radius:22px;background:linear-gradient(150deg,#FF8A3D,#E05A00);display:flex;align-items:center;justify-content:center;box-shadow:0 12px 24px rgba(255,105,0,.35);margin-top:30px" data-page-node-id="NvioANw1GWKkcUyPdC1Bej"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" data-page-node-id="yaxFr3ocjKTuts4W1tOw7N"><path d="M12 3v11m0 0 4.5-4.5M12 14 7.5 9.5" data-page-node-id="iXXBHSciStCmLSi1VofkW8"/><path d="M5 19.5h14" data-page-node-id="euPQqH4z3MfIz6MU8oBcFv"/></svg></div>
+          <div style="font-size:17px;font-weight:600;color:#241F18;margin-top:12px" data-page-node-id="pBzvhjVtNpK4Ed4GKfY8c0">抖红快下载</div>
+          <div class="s1" style="line-height:1.7;padding:0 12px;margin-top:4px" data-page-node-id="jE70ynVXGwXeISvNELHe78">抖音 · 快手 · 小红书<br data-page-node-id="tNEjXFSygNuyCMzFOPjE8b">无水印保存，一次到位</div>
+          <div style="flex:1" data-page-node-id="Eiv8E6MwTlrhUEh9KPacYR"></div>
+          <div class="row" data-page-node-id="vpaEMskmlXRoYnUQxrkLg2"><span style="width:13px;height:5px;border-radius:3px;background:#FF6900" data-page-node-id="FQpdKCIMuE4RCQslrTlsRp"></span><span style="width:5px;height:5px;border-radius:3px;background:rgba(36,31,24,.2)" data-page-node-id="vhaeCz9OyYRzCQsW5kr22b"></span><span style="width:5px;height:5px;border-radius:3px;background:rgba(36,31,24,.2)" data-page-node-id="Xv9AdXIhOfBrn46Z4VzQaz"></span></div>
+          <div class="btn-o" style="height:40px;align-self:stretch" data-page-node-id="r2WEyBmCEStyE13NXURPKf">了解能力</div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="3WdvzhIixSM2nuoOGJRDVv"><b data-page-node-id="ca95AbiG8AK8NNGPDvcxP6">引导 1 · 品牌</b></div>
+    </div>
+    <div class="cell" data-page-node-id="fSEnMv4bPiAVrr3lQvuX6L">
+      <div class="phone" data-page-node-id="yP2JPgFMstpyOsma0NXcm6"><div class="screen" data-page-node-id="wKzFsPSSXs4mmI4LrkjqDp">
+        <div class="island" data-page-node-id="qqUBraq8sPTcadlULgtiPb"></div>
+        <div class="sb" data-page-node-id="XoTfUsjrdKZrnBxbhUhggC"><span class="tm" data-page-node-id="MKVVqLR6hgDc8reKNxUKVh">9:41</span><span class="batt" data-page-node-id="5rorGuvSlqUsSF1gxxeGHg"></span></div>
+        <div class="bdy" style="padding-top:48px" data-page-node-id="96vgMRJTywBPBuPO6lFFgc">
+          <div style="display:flex;flex-direction:column;gap:2px" data-page-node-id="Zh5wIE8dgJNXBwG1eojUBL"><span class="t2" data-page-node-id="KT2uKbYSSv2eogG2qcgpnl">能做什么</span><span class="s1" data-page-node-id="PkPFNTSCToGpqgQz2NP72I">三件核心能力</span></div>
+          <div class="gl" style="border-radius:18px;padding:9px 11px" class="row" data-page-node-id="nL9Ak2b7vKQP0aUoMcBYDF">
+            <div style="width:30px;height:30px;border-radius:11px;background:rgba(255,105,0,.15);display:flex;align-items:center;justify-content:center;flex:none" data-page-node-id="NgxwbcsvbrTkHh3dPj8A9p"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D95A00" stroke-width="2" data-page-node-id="4d0LgVhvYQlfJ5a4BJnZ6X"><path d="M12 3v12m0 0 4.5-4.5M12 15 7.5 10.5" data-page-node-id="XFGtXum9OM56R1RgXvktXw"/><path d="M5 20h14" data-page-node-id="XWBGPh5v13hxhAjExl314f"/></svg></div>
+            <div data-page-node-id="0y1YHlAhc0i7FCdglciGi9"><div class="t3" data-page-node-id="NIhpH9kiAGruHoAujKbX88">无水印原画</div><div class="s2" data-page-node-id="lHXct6hXlns4Gs8zQhs2FG">视频与图文原画质保存</div></div>
+          </div>
+          <div class="gl" style="border-radius:18px;padding:9px 11px" class="row" data-page-node-id="EFPVQ9OMQHiKJdxIkjgi0L">
+            <div style="width:30px;height:30px;border-radius:11px;background:rgba(255,105,0,.15);display:flex;align-items:center;justify-content:center;flex:none" data-page-node-id="k4Ahj0YT5nc8dX8oVDzKUR"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D95A00" stroke-width="2" data-page-node-id="lvBfsdqHUcBggOfHxB6ooi"><rect x="3" y="4" width="18" height="13" rx="2.5" data-page-node-id="zCxhozzONTOxDDvtaFdcC6"/><path d="M8 21h8M12 17v4" data-page-node-id="ZLHd73iHvvEfsq01eXbe74"/></svg></div>
+            <div data-page-node-id="YVZNpumuFdhOCkeHk2E14D"><div class="t3" data-page-node-id="tSmtcZOGIj0JiYHzeA1XC6">主页批量</div><div class="s2" data-page-node-id="mYiqF3ADAsbKUgYjBwgVTZ">一次抓取博主全部作品</div></div>
+          </div>
+          <div class="gl" style="border-radius:18px;padding:9px 11px" class="row" data-page-node-id="SFalXMbfsEyQB2uOn17JS9">
+            <div style="width:30px;height:30px;border-radius:11px;background:rgba(255,105,0,.15);display:flex;align-items:center;justify-content:center;flex:none" data-page-node-id="szBOVI4jRUIJjaw2l4CaOU"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D95A00" stroke-width="2" data-page-node-id="V8BxMIhK3GJ6RAo1P76w0o"><path d="M12 2.8a9 9 0 1 0 9 9" data-page-node-id="hSXm2XfJMacOOCMz1NC67G"/><path d="M21 2.8v5h-5" data-page-node-id="uttfnsUhE4sAejD7r8Ghi1"/></svg></div>
+            <div data-page-node-id="HNy1UfS0AICUEpQHhKZwhe"><div class="t3" data-page-node-id="YItKqtqtTZ1MzEwVGUPS7H">自动识别</div><div class="s2" data-page-node-id="IFeZ61WQmWgURKH4dKjOK6">剪贴板与分享直达解析</div></div>
+          </div>
+          <div style="flex:1" data-page-node-id="Ah31GEjb9V47u5GI7msFDa"></div>
+          <div class="row" style="justify-content:center" data-page-node-id="IjUVXUEKKlNx5149tbrkWe"><span style="width:5px;height:5px;border-radius:3px;background:rgba(36,31,24,.2)" data-page-node-id="mhjBUBoh0GtAWBZpEKwoEF"></span><span style="width:13px;height:5px;border-radius:3px;background:#FF6900" data-page-node-id="GfojMpXUpVeHlusDdb9bT3"></span><span style="width:5px;height:5px;border-radius:3px;background:rgba(36,31,24,.2)" data-page-node-id="m7HtUebf2W1AE2EuXiBqs0"></span></div>
+          <div class="btn-o" style="height:40px" data-page-node-id="i5YKYKxda46Jaww6He6qSb">下一步</div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="AQIT9DqLfQQVcVXF9nnH6L"><b data-page-node-id="robKZEIJAZOHuR0ekRlvs3">引导 2 · 能力</b></div>
+    </div>
+    <div class="cell" data-page-node-id="D1oAXBJRuoY4NymA0EqSd4">
+      <div class="phone" data-page-node-id="QafgUSVLhCPHYa8KBaiNOE"><div class="screen" data-page-node-id="gD109DGpQCuj4H5hMMPPWY">
+        <div class="island" data-page-node-id="TyY8EPeDghmxNdL23G0DAj"></div>
+        <div class="sb" data-page-node-id="Q690DkmpR5N55jrs49iT32"><span class="tm" data-page-node-id="3ErKlrZytfHVTcuSMh89cY">9:41</span><span class="batt" data-page-node-id="2gEqThF30Il1lAfht45GNg"></span></div>
+        <div class="bdy" style="padding-top:48px" data-page-node-id="yeM1wSQIZe8nBvkasuB28w">
+          <div style="display:flex;flex-direction:column;gap:2px" data-page-node-id="KACPTbOl51eh0OiWeti4vy"><span class="t2" data-page-node-id="h9WgfEm4IiwQ2H03FC3neW">开始前</span><span class="s1" data-page-node-id="7faKFZY2e0WF1LTl7YzQie">两项系统权限，可随时在设置里调整</span></div>
+          <div class="gl" style="border-radius:18px;padding:2px 12px;display:flex;flex-direction:column" data-page-node-id="gilYND2ub4EBM7IOCLuMQB">
+            <div style="display:flex;align-items:center;height:42px" data-page-node-id="kWxHiDI9glBlYi8zXMD6Lz"><span style="flex:1;font-size:12px;color:#241F18" data-page-node-id="Bs2JvXSgusxoJTjQmdB3Lf">下载完成通知</span><span class="sw2" style="width:32px;height:18px;border-radius:9px" data-page-node-id="ysmCMF5Z8Pca9HcQ1I2Miu"></span></div>
+            <div class="ln" style="display:flex;align-items:center;height:42px" data-page-node-id="O0Mapa9Sh4ACPtHqBxJstu"><span style="flex:1;font-size:12px;color:#241F18" data-page-node-id="MS8poZ2e78lNU5RWpgsjaY">保存到相册</span><span class="sw2" style="width:32px;height:18px;border-radius:9px" data-page-node-id="qgq0qLxBzq2eZJLgHnZrjq"></span></div>
+          </div>
+          <div class="gl" style="border-radius:16px;padding:8px 10px" class="row" data-page-node-id="SVTZ0O4naWT6xgbMOYx3KD"><span class="s2" data-page-node-id="P8IATUBNBnbNQ35njMYdlL">所有文件仅保存在本机，不上传任何服务器</span></div>
+          <div style="flex:1" data-page-node-id="Kd8Q3ZgDwCgz3JxaH5bota"></div>
+          <div class="row" style="justify-content:center" data-page-node-id="oQzIaypgGo3Skzy9qNIEDh"><span style="width:5px;height:5px;border-radius:3px;background:rgba(36,31,24,.2)" data-page-node-id="SJLnyRUap7tguoKoeT5GHa"></span><span style="width:5px;height:5px;border-radius:3px;background:rgba(36,31,24,.2)" data-page-node-id="IJUOpbWKQ3cqm4mNEU5Cy4"></span><span style="width:13px;height:5px;border-radius:3px;background:#FF6900" data-page-node-id="uLVbxRKPsvWV7ReSyzBClu"></span></div>
+          <div class="btn-o" style="height:40px" data-page-node-id="BHFNWBYgEZCLkV6ynDjchf">开始使用</div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="YEo5DeB7BFYpxKL7vCudSY"><b data-page-node-id="Ba2Huo96aZ2G7ra34at97q">引导 3 · 权限</b></div>
+    </div>
+  </div>
+
+  <div class="sec" data-page-node-id="DWf5CJMutjFRVqqIOY5QF9">S6 · 空态双场景</div>
+  <div class="wall" data-page-node-id="zOrZIlJcZLVFEecDpVI6EA">
+    <div class="cell" data-page-node-id="xWl5nRtSSOfeDn3aOjEHLV">
+      <div class="phone" data-page-node-id="QmitXU0sz9OGmz2N2RLapT"><div class="screen" data-page-node-id="YkgdRNAIdKSbzERlr7hGhx">
+        <div class="island" data-page-node-id="AmuS0WLI7sD4XvCR19Rk9j"></div>
+        <div class="sb" data-page-node-id="n8GoNUyxPQqTHHWSFQ7jwv"><span class="tm" data-page-node-id="k3yVJcoE52gxWhuvfsW73q">9:41</span><span class="batt" data-page-node-id="FyCfY08hAyl3IaGXvGPlZ5"></span></div>
+        <div class="bdy" style="padding-top:48px" data-page-node-id="XTQPZo8nWhpkYD3iqWMU5S">
+          <div class="row" style="align-items:baseline" data-page-node-id="uFENoD0kU4KDGpucmvo4Lc"><span class="t1" data-page-node-id="M1RxTDU8FgXNp5UYFIHWDx">我的下载</span><span class="s2" data-page-node-id="DIliTegH4Mt5XRM0uRjGMf">0 个任务</span></div>
+          <div class="gl" style="border-radius:21px;height:40px;display:flex;align-items:center;gap:8px;padding:0 13px" data-page-node-id="MV4TRkI0jYWFGRH1NWiH5N"><span style="font-size:12px;color:rgba(36,31,24,.55)" data-page-node-id="64UIrGPrGjb8QHn6iyhPz0">粘贴链接或分享口令，立即解析</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:0 6px" data-page-node-id="3xSN7fEBhKJhu4UocfoQhE">
+            <div style="width:62px;height:62px;border-radius:22px;background:rgba(255,255,255,.55);border:1px solid rgba(255,255,255,.7);box-shadow:inset 0 1.5px 0 rgba(255,255,255,.95);backdrop-filter:blur(18px) saturate(1.6);-webkit-backdrop-filter:blur(18px) saturate(1.6);display:flex;align-items:center;justify-content:center" data-page-node-id="vkRawDaqgwdFEr6GrtebYS"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="rgba(224,90,0,.75)" stroke-width="1.9" data-page-node-id="LAAo0Q2kJ7tvTogN1kLtQk"><path d="M12 3v11m0 0 4.2-4.2M12 14 7.8 9.8" data-page-node-id="cF6ZFRDq8kWD8cimRNsKZw"/><path d="M5 18.5h14" data-page-node-id="dIMFpplT4PMLHz5cObwsaW"/></svg></div>
+            <div style="font-size:14px;font-weight:600;color:#241F18" data-page-node-id="PMCEoHdPhny6OZ8C6gdZpc">还没有下载任务</div>
+            <div class="s1" style="line-height:1.6" data-page-node-id="N48zEstbsRnBmoiPKR4RCQ">从抖音 / 快手 / 小红书分享或粘贴链接，无水印保存在本机</div>
+            <div style="display:flex;flex-direction:column;gap:7px;align-self:stretch" data-page-node-id="FK4dkJuCMT1FXhIVPU0Jnw">
+              <div class="btn-o" style="height:40px" data-page-node-id="vedvEk6U05nol37vBsZ0YX">粘贴链接</div>
+              <div class="btn-g" data-page-node-id="gHminmb83Vw4uLEcwrFh9D">批量下载博主主页</div>
+            </div>
+          </div>
+          <div class="s2" style="text-align:center" data-page-node-id="WWorBZi0MsdsmPeCR3G7L9">分享的视频 / 图文会自动出现在这里</div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="CBKzaE9SL3Pb8gKVC0EnlH"><b data-page-node-id="5nwNtxFdsvCh5ouLfQAK87">任务空态</b><br data-page-node-id="j15BbFXmh64JNLroHHqijg">双入口引导（对应埋码 entry）</div>
+    </div>
+    <div class="cell" data-page-node-id="FznrjHtQoiDPh7cIjZJU5L">
+      <div class="phone" data-page-node-id="6FJYCS2O3mxgzYpKwyigW2"><div class="screen" data-page-node-id="EUU2VsHRglBg1Anbjts0aZ">
+        <div class="island" data-page-node-id="Qin6W1yGieDgCCV9BfoNeh"></div>
+        <div class="sb" data-page-node-id="x4BCHk3bFdzm58yuGeKKTQ"><span class="tm" data-page-node-id="kFV31pCLQNtNFEDkcBlRDq">9:41</span><span class="batt" data-page-node-id="70VO0b0OBWizKM0Wv1xFAg"></span></div>
+        <div class="bdy" style="padding-top:48px" data-page-node-id="E2FQMALQyLlN4fdSKb1qEb">
+          <div class="row" style="align-items:baseline" data-page-node-id="qGazB7S5tXVI0HAXUS0E2Q"><span class="t1" data-page-node-id="LhqybXHWTSLLV4b2NAplK2">失败</span><span class="s2" data-page-node-id="bLPSt1ouuymgbuncuUANjL">跨平台聚合</span></div>
+          <div class="row" style="gap:6px" data-page-node-id="OFEi71KEBSRm3e6M3RDJoY">
+            <div class="gl" style="flex:1;border-radius:16px;padding:7px 0;display:flex;flex-direction:column;align-items:center" data-page-node-id="HXcPGO9yM1b7Oz2OpldCBW"><span style="font-size:15px;font-weight:600;color:#C23B3A" data-page-node-id="vNhgMgryn5FEzqERJojRPg">0</span><span class="s2" data-page-node-id="T2bbPGY0Md1OQafwJkq7BF">今日失败</span></div>
+            <div class="gl" style="flex:1;border-radius:16px;padding:7px 0;display:flex;flex-direction:column;align-items:center" data-page-node-id="fc16nJiS2Wv3rRtxnbLJIp"><span style="font-size:15px;font-weight:600;color:#241F18" data-page-node-id="dGgDuAeAgeMX7SJ72oYvjU">0</span><span class="s2" data-page-node-id="LChID8BdmOsYnrGEmFCHHr">近 7 天</span></div>
+            <div class="gl" style="flex:1;border-radius:16px;padding:7px 0;display:flex;flex-direction:column;align-items:center" data-page-node-id="XpjRG0f9pvpPD8Nyi3UIie"><span style="font-size:15px;font-weight:600;color:#241F18" data-page-node-id="1cYy5RX9qcYMjzepCoHYqS">0</span><span class="s2" data-page-node-id="l24G0tgWLUX8YsqRLFJ7IH">累计</span></div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:0 6px" data-page-node-id="jsofBWIHx6hkIB9jB1wUGb">
+            <div style="width:58px;height:58px;border-radius:20px;background:rgba(255,255,255,.55);border:1px solid rgba(255,255,255,.7);box-shadow:inset 0 1.5px 0 rgba(255,255,255,.95);backdrop-filter:blur(18px) saturate(1.6);-webkit-backdrop-filter:blur(18px) saturate(1.6);display:flex;align-items:center;justify-content:center" data-page-node-id="zhU5ThorLLe9Np8NLv0VlG"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="rgba(36,31,24,.4)" stroke-width="1.9" data-page-node-id="JGJ7SVqJCAG0SYOlbQNw50"><circle cx="12" cy="12" r="9" data-page-node-id="mnu1WHNvLaot48Mnimg0eh"/><path d="M12 8v5M12 16.6v.1" data-page-node-id="9n5GMYpWXpBjRF9QV78pfu"/></svg></div>
+            <div style="font-size:14px;font-weight:600;color:#241F18" data-page-node-id="oHaFLyzgbuS4sj0T1nY8Eo">干干净净，没有失败任务</div>
+            <div class="s1" style="line-height:1.6" data-page-node-id="eBZWLTbBATyT24ofUMrqPw">下载失败会自动收进这里，可一键重试或查看原因</div>
+          </div>
+          <div class="btn-g" data-page-node-id="YmDFGCMGWU2vrCcq7IsSoK">去下载一个试试</div>
+          <div class="s2" style="text-align:center" data-page-node-id="4qp97SggELgdcgHx9vmgZ6">仍失败可查看失败日志定位原因</div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="jXNfOoABIBS2ktGWHu5Fg3"><b data-page-node-id="rxvFhNF3rSrpD7l9fzTurw">失败空态</b><br data-page-node-id="GCMxYwvoVuUIEDCfGAbGvL">统计条 + 引导</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
