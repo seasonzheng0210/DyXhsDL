@@ -237,4 +237,19 @@
     <string name="events_log_empty">No events recorded yet — interact with the app and they will appear here.</string>
     <string name="clear_events_log">Clear Events</string>
     <string name="events_log_cleared">Events log cleared</string>
+    <string name="home_preview_parse">Parse works</string>
+    <string name="home_preview_loading">Parsing homepage works…</string>
+    <string name="home_preview_author_fmt">Author: %1$s</string>
+    <string name="home_preview_count_fmt">Total works: %1$d · %2$d new to download</string>
+    <string name="home_preview_range_all">All</string>
+    <string name="home_preview_range_latest">Latest 10</string>
+    <string name="home_preview_range_sync">Sync new</string>
+    <string name="home_preview_confirm">Start download</string>
+    <string name="home_preview_bad_link">Cannot recognize homepage link. Paste a Douyin profile link or a work link.</string>
+    <string name="home_preview_empty">No works found (account may be private or empty).</string>
+    <string name="home_preview_need_login">Douyin login required: paste any Douyin link on the Video tab and log in inside the page, then retry.</string>
+    <string name="home_preview_failed">Homepage parse failed: %1$s</string>
+    <string name="home_preview_none_new">All works already downloaded, nothing new.</string>
+    <string name="home_preview_started">Started downloading %1$d works</string>
+    <string name="home_preview_default_author">Douyin author</string>
 </resources>

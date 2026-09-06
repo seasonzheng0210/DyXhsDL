@@ -24,6 +24,12 @@ import com.neoruaa.xhsdn.utils.DownloadLogger
 import com.neoruaa.xhsdn.utils.EventTracker
 import com.neoruaa.xhsdn.utils.UrlUtils
 import com.neoruaa.xhsdn.web.BgWebViewParser
+import com.neoruaa.xhsdn.data.HomeRepo
+import com.neoruaa.xhsdn.data.HomepageBatchStore
+import com.neoruaa.xhsdn.douyin.DouyinPostItem
+import com.neoruaa.xhsdn.douyin.abogus.DouyinAbogus
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -96,7 +102,7 @@ class DownloadService : Service() {
         val modeRaw = intent?.getStringExtra(EXTRA_MODE)
         // 批量模式（主页批量/网页爬取/图集）以 EXTRA_URLS 列表为准，单链 EXTRA_URL 可空；
         // 此前 url 为空直接 stopSelf 会把主页批量静默吞掉（列表到了也一个都不下）
-        val isBatchMode = modeRaw == MODE_DOUYIN_HOME || modeRaw == MODE_WEBCRAWL || modeRaw == MODE_DOUYIN_IMAGES
+        val isBatchMode = modeRaw == MODE_DOUYIN_HOME || modeRaw == MODE_WEBCRAWL || modeRaw == MODE_DOUYIN_IMAGES || modeRaw == MODE_HOMEPAGE
         if (url.isNullOrBlank() && !isBatchMode) {
             // 没有任务可跑，安全地停掉自己
             stopSelf(startId)
@@ -129,11 +135,17 @@ class DownloadService : Service() {
                 startDownloadDouyinImagesInternal(urls, pageUrl, taskIdExtra)
             }
             MODE_DOUYIN_HOME -> {
-                // 抖音主页批量：WebView 主页爬取收集到全部 /video/{id} 页链接，
+                // 抖音主页批量（旧路径）：WebView 主页爬取收集到全部 /video/{id} 页链接，
                 // 逐条后台解析（HTTP 快解 → 后台 WebView 兜底）后同任务卡批量下载
                 val urls = intent.urlListExtra(EXTRA_URLS)
                 val pageUrl = intent.getStringExtra(EXTRA_URL)
                 startDouyinHomeBatch(urls, pageUrl, taskIdExtra)
+            }
+            MODE_HOMEPAGE -> {
+                // 主页批量 v2（P1）：预览确认后的作品直链批量下载（post API 列表已带直链，
+                // 免逐条 detail）。批次本体经 HomepageBatchStore 进程内传递，Intent 只带 token。
+                val token = intent.getStringExtra(EXTRA_URL)
+                startHomepageBatchInternal(token, taskIdExtra)
             }
             else -> when (source) {
                 "douyin" -> {
@@ -735,6 +747,161 @@ class DownloadService : Service() {
     }
     // endregion
 
+    // region 主页批量 v2（MODE_HOMEPAGE，P1）
+
+    /**
+     * 主页批量 v2：预览确认后的直链批量下载。
+     * 列表阶段（MainActivity.fetchHomepagePreview）已由 post API 拿齐每条作品直链/图集，
+     * 这里只做：去重过滤 → Semaphore(2) 并发下载 → 单条直链失效重解析重试 → 落账 → 终态。
+     * 取消/失败重跑：成功条已入账 HomeRepo，重试时 filterNew 自动跳过（天然只跑失败条）。
+     */
+    private fun startHomepageBatchInternal(token: String?, taskIdExtra: Long?) {
+        val batch = if (token.isNullOrBlank()) null else HomepageBatchStore.take(token)
+        if (batch == null || batch.items.isEmpty()) {
+            updateNotification(getString(R.string.download_failed_notification_title),
+                getString(R.string.no_valid_link_found), false)
+            maybeStop()
+            return
+        }
+        val batchKey = batch.homepageUrl.ifBlank { batch.secUid }
+        if (!activeUrls.add(batchKey)) return
+
+        scope.launch {
+            var myTaskId: Long = taskIdExtra ?: -1L
+            try {
+                // 账本去重：重试/追更时跳过已下载条目
+                val pendingItems = HomeRepo.filterNew(this@DownloadService, batch.secUid, batch.items)
+                if (myTaskId < 0) {
+                    val label = if (pendingItems.size == batch.items.size) batch.items.size
+                    else "${pendingItems.size}(共${batch.items.size})"
+                    myTaskId = TaskManager.createTask(
+                        batchKey, "主页·${batch.authorNickname.ifBlank { "抖音作者" }}(${label})",
+                        NoteType.VIDEO, pendingItems.size, source = "douyin"
+                    ).also { TaskManager.startTask(it) }
+                }
+                activeJobs[myTaskId] = coroutineContext[Job]!!
+                if (pendingItems.isEmpty()) {
+                    DownloadLogger.logInfo(this@DownloadService, "douyin", batchKey, "主页批量：全部作品已下载过，无新增")
+                    TaskManager.completeTask(myTaskId, true, null)
+                    updateNotification(getString(R.string.download_completed_notification_title), "主页作品无新增", false)
+                    return@launch
+                }
+
+                val myJob = coroutineContext[Job]
+                val completed = AtomicInteger(0)
+                val failed = AtomicInteger(0)
+                val successIds = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
+                val total = pendingItems.size
+
+                fun tickProgress() {
+                    TaskManager.updateProgress(myTaskId, completed.get(), failed.get(), 0f)
+                    updateNotification(getString(R.string.downloading_files),
+                        "主页·${batch.authorNickname.ifBlank { "抖音" }} ${completed.get() + failed.get()}/$total", true)
+                }
+
+                val sem = kotlinx.coroutines.sync.Semaphore(2)
+                val workers = pendingItems.mapIndexed { index, post ->
+                    launch(Dispatchers.IO) {
+                        if (myJob?.isActive == false) return@launch
+                        sem.withPermit {
+                            if (myJob?.isActive == false) return@withPermit
+                            val ok = downloadHomepageItem(post, index, myTaskId)
+                            if (ok) {
+                                completed.incrementAndGet()
+                                successIds.add(post.id)
+                                DownloadLogger.logInfo(this@DownloadService, "douyin",
+                                    "https://www.douyin.com/video/${post.id}", "主页批量v2：单条完成(${post.type})")
+                            } else {
+                                failed.incrementAndGet()
+                                DownloadLogger.logFailure(this@DownloadService, "douyin",
+                                    "https://www.douyin.com/video/${post.id}", "主页批量v2：单条失败(${post.type})")
+                            }
+                            tickProgress()
+                        }
+                    }
+                }
+                workers.joinAll()
+
+                val success = completed.get() > 0 && failed.get() == 0
+                // 入账：无论整批成败，成功条都记账（重试只跑失败条）
+                if (successIds.isNotEmpty()) {
+                    HomeRepo.recordBatch(this@DownloadService, batch.secUid, batch.authorNickname, successIds)
+                }
+                TaskManager.completeTask(myTaskId, success,
+                    when {
+                        success -> null
+                        completed.get() > 0 -> "部分主页作品下载失败"
+                        else -> "主页作品全部下载失败（可能需登录抖音后重试）"
+                    })
+                updateNotification(
+                    if (success) getString(R.string.download_completed_notification_title)
+                    else getString(R.string.download_failed_notification_title),
+                    "主页作品：成功 ${completed.get()}，失败 ${failed.get()}",
+                    false
+                )
+            } catch (e: CancellationException) {
+                if (myTaskId > 0) TaskManager.failIfActive(myTaskId, getString(R.string.download_cancelled_by_user))
+            } catch (e: Exception) {
+                Log.e(TAG, "homepage batch v2 error", e)
+                if (myTaskId > 0) {
+                    DownloadLogger.logFailure(this@DownloadService, "douyin", batchKey, "主页批量v2异常终止: ${e.message}")
+                    TaskManager.failIfActive(myTaskId, "主页批量异常: ${e.message}")
+                }
+            } finally {
+                activeUrls.remove(batchKey)
+                if (myTaskId > 0) activeJobs.remove(myTaskId)
+                maybeStop()
+            }
+        }
+    }
+
+    /**
+     * 下载单条作品：列表直链优先；失败/失效时按作品页 URL 走 resolveDouyinMediaInfo
+     * 重解析一次再试（note 页对图文帖）。文件名带 (index+1)_ 序号防撞名。
+     */
+    private suspend fun downloadHomepageItem(post: DouyinPostItem, index: Int, taskId: Long): Boolean {
+        val fileName = "${index + 1}_${post.title}"
+        val downloader = FileDownloader(this@DownloadService, createCallback(taskId))
+        val directOk = when (post.type) {
+            DouyinMediaType.IMAGE -> runCatching {
+                downloadImages(
+                    downloader,
+                    DouyinMediaInfo(DouyinMediaType.IMAGE, post.title, null, post.imageUrls, null, post.id, DouyinAbogus.SIGN_UA),
+                    taskId
+                )
+            }.getOrElse { e ->
+                DownloadLogger.logFailure(this@DownloadService, "douyin", post.imageUrls.firstOrNull() ?: post.id, "主页批量v2图集下载异常: ${e.message}")
+                false
+            }
+            DouyinMediaType.VIDEO -> post.videoUrl?.let { v ->
+                runCatching {
+                    downloader.downloadFile(v, "$fileName.mp4", DouyinParser.REFERER, DouyinAbogus.SIGN_UA)
+                }.getOrElse { e ->
+                    DownloadLogger.logFailure(this@DownloadService, "douyin", v, "主页批量v2下载异常: ${e.message}")
+                    false
+                }
+            } ?: false
+        }
+        if (directOk) return true
+
+        // 直链失效/下载失败：按作品页重解析一次（note/{id} 对图文帖，video/{id} 对视频帖）
+        val pageUrl = if (post.type == DouyinMediaType.IMAGE) {
+            "https://www.douyin.com/note/${post.id}"
+        } else {
+            "https://www.douyin.com/video/${post.id}"
+        }
+        val (info, _) = resolveDouyinMediaInfo(pageUrl)
+        val retryInfo = info ?: return false
+        return when (retryInfo.type) {
+            DouyinMediaType.IMAGE -> downloadImages(downloader, retryInfo.copy(title = post.title), taskId)
+            DouyinMediaType.VIDEO -> runCatching {
+                downloader.downloadFile(retryInfo.videoUrl!!, "$fileName.mp4", DouyinParser.REFERER, retryInfo.userAgent)
+            }.getOrElse { false }
+        }
+    }
+
+    // endregion
+
     // region 抖音图文/图集下载（WebView 兜底路径）
     /**
      * 抖音图文/图集帖下载（WebView 兜底路径）：复用/预建 IMAGE 任务，逐张下载帖子图集图片。
@@ -1311,6 +1478,17 @@ class DownloadService : Service() {
         const val MODE_WEBCRAWL = "webcrawl"
         const val MODE_DOUYIN_IMAGES = "douyin_images"
         const val MODE_DOUYIN_HOME = "douyin_home_batch"
+        const val MODE_HOMEPAGE = "homepage_batch"
+
+        /** 主页批量 v2：批次本体已在 HomepageBatchStore，Intent 只传 token。 */
+        fun startHomepageBatch(context: Context, token: String, taskId: Long? = null) {
+            val intent = Intent(context, DownloadService::class.java).apply {
+                putExtra(EXTRA_MODE, MODE_HOMEPAGE)
+                putExtra(EXTRA_URL, token)
+                taskId?.let { putExtra(EXTRA_TASK_ID, it) }
+            }
+            context.startForegroundService(intent)
+        }
 
         /** HTTP 直解快解预算：超过即转后台 WebView 兜底（避免被风控空响应拖死）。 */
         private const val HTTP_FAST_TIMEOUT_MS = 10_000L

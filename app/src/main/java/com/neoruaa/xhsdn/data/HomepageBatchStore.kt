@@ -1,0 +1,40 @@
+package com.neoruaa.xhsdn.data
+
+import com.neoruaa.xhsdn.douyin.DouyinPostItem
+
+/**
+ * 主页批量下载的批次暂存（进程内单例）。
+ *
+ * 为什么不走 Intent extra：作品列表可达数百条（含直链/图集 URL），序列化成 JSON 塞
+ * Intent 有 TransactionTooLarge 风险。MainActivity 预览确认后 putBatch(token)，
+ * DownloadService 用 EXTRA_URL=token 取回。App 与 Service 同进程，直接引用安全。
+ */
+object HomepageBatchStore {
+    enum class Range { ALL, LATEST_N, SYNC_NEW }
+
+    data class Batch(
+        val secUid: String,
+        val authorNickname: String,
+        val homepageUrl: String,
+        val range: Range,
+        val latestN: Int,
+        val items: List<DouyinPostItem>
+    )
+
+    private val pending = HashMap<String, Batch>()
+    private var counter = 0L
+
+    @Synchronized
+    fun put(batch: Batch): String {
+        val token = "hb_${System.currentTimeMillis()}_${counter++}"
+        pending[token] = batch
+        // 防泄漏：只保留最近 5 个批次
+        while (pending.size > 5) {
+            pending.remove(pending.keys.first())
+        }
+        return token
+    }
+
+    @Synchronized
+    fun take(token: String): Batch? = pending.remove(token)
+}

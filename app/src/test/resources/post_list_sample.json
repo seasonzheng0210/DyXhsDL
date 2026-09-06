@@ -1,0 +1,40 @@
+{
+  "status_code": 0,
+  "status_msg": "",
+  "max_cursor": 1725500000000,
+  "has_more": 1,
+  "aweme_list": [
+    {
+      "aweme_id": "7400000000000000001",
+      "desc": "第一条视频作品 #日常",
+      "create_time": 1725499000,
+      "author": {"sec_uid": "SEC_TEST_UID", "nickname": "测试作者"},
+      "video": {
+        "play_addr": {"url_list": ["https://www.douyin.com/aweme/v1/play/?video_id=v123&ratio=1080p&line=0"]},
+        "cover": {"url_list": ["https://p3-sign.douyinpic.com/cover1.jpeg"]}
+      }
+    },
+    {
+      "aweme_id": "7400000000000000002",
+      "desc": "图文帖标题",
+      "create_time": 1725498000,
+      "author": {"sec_uid": "SEC_TEST_UID", "nickname": "测试作者"},
+      "images": [
+        {"url_list": ["https://p3-pc-sign.douyinpic.com/tos-cn-i-abc~noop.jpeg"]},
+        {"url_list": ["https://p3-pc-sign.douyinpic.com/tos-cn-i-def~noop.jpeg"]}
+      ],
+      "video": {
+        "play_addr": {"url_list": ["https://sf3-dycdn-tos.pstatp.com/osts/music_bgm.mp3"]}
+      }
+    },
+    {
+      "aweme_id": "7400000000000000003",
+      "desc": "直播回放应被跳过",
+      "create_time": 1725497000,
+      "author": {"sec_uid": "SEC_TEST_UID", "nickname": "测试作者"},
+      "video": {
+        "play_addr": {"url_list": ["https://example.com/live_replay.m3u8"]}
+      }
+    }
+  ]
+}

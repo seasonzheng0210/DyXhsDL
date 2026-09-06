@@ -75,6 +75,11 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.neoruaa.xhsdn.douyin.DouyinParser
 import com.neoruaa.xhsdn.douyin.DouyinMediaType
+import com.neoruaa.xhsdn.douyin.DouyinPostItem
+import com.neoruaa.xhsdn.douyin.WebDetailBlockedException
+import com.neoruaa.xhsdn.data.HomeRepo
+import com.neoruaa.xhsdn.data.HomepageBatchStore
+import com.neoruaa.xhsdn.web.BgWebViewParser
 import com.neoruaa.xhsdn.kuaishou.KuaishouParser
 import kotlinx.coroutines.Dispatchers
 import androidx.lifecycle.lifecycleScope
@@ -429,7 +434,9 @@ class MainActivity : ComponentActivity() {
                         trackEvent("main_tab_switch", mapOf("tab" to if (it == 0) "video" else "homepage"))
                         mainTab = it
                     },
-                    onHomepageDownload = { link -> launchDouyinHomepageDownload(link) },
+                    onHomepageDownload = { link -> fetchHomepagePreview(link) },
+                    homePreview = homePreview,
+                    onHomepageConfirm = { range, _ -> (homePreview as? HomePreviewState.Ready)?.let { confirmHomepageDownload(it, range) } },
                     onDownload = {
                         if (!manualInputLinks) {
                             ensureStoragePermission {
@@ -847,6 +854,101 @@ class MainActivity : ComponentActivity() {
      *  - 主页链接（分享文案 / /user/{sec_uid}）：直接交给 WebView 加载并爬取；
      *  - 视频链接：用移动端 aweme/v1/feed 接口反查 author.sec_uid → /user/{sec_uid} 再爬取。
      */
+    /**
+     * 主页批量 v2 预览状态（P1）。状态类型见文件顶层 [HomePreviewState]。
+     */
+    private var homePreview by mutableStateOf<HomePreviewState>(HomePreviewState.Idle)
+
+    /**
+     * 主页下载 v2 入口：输入主页链接/视频链接 → post API 拉作品列表 → 预览卡（昵称/总数/新增）。
+     * L1 直取 403 → BgWebViewParser 预热一次重试；仍风控 → 提示先登录。
+     */
+    private fun fetchHomepagePreview(input: String) {
+        trackEvent("homepage_preview")
+        val cleanUrl = UrlUtils.extractFirstUrl(input)
+        if (cleanUrl == null) {
+            showToast(getString(R.string.invalid_link_please_reenter))
+            return
+        }
+        ensureStoragePermission {
+            homePreview = HomePreviewState.Loading
+            lifecycleScope.launch {
+                try {
+                    val secUid = withContext(Dispatchers.IO) {
+                        if (UrlUtils.isDouyinHomepageLink(input)) {
+                            val final = runCatching { DouyinParser.resolveFinalUrl(cleanUrl) }.getOrDefault(cleanUrl)
+                            Regex("""(?:iesdouyin|douyin)\.com/(?:share/)?user/([0-9A-Za-z_-]+)""")
+                                .find(final)?.groupValues?.getOrNull(1)
+                        } else {
+                            DouyinParser.resolveAuthorHomepageUrl(cleanUrl)
+                                ?.substringAfterLast('/')?.substringBefore('?')
+                        }
+                    }
+                    if (secUid.isNullOrBlank()) {
+                        homePreview = HomePreviewState.Error(getString(R.string.home_preview_bad_link), false)
+                        return@launch
+                    }
+                    val homepageUrl = "https://www.douyin.com/user/$secUid"
+                    val items = mutableListOf<DouyinPostItem>()
+                    var nickname: String? = HomeRepo.nickname(this@MainActivity, secUid)
+                    var cursor = 0L
+                    var hasMore = true
+                    var page = 0
+                    while (hasMore && page < HOMEPAGE_MAX_PAGES) {
+                        val pg = try {
+                            withContext(Dispatchers.IO) { DouyinParser.fetchPostList(secUid, cursor) }
+                        } catch (e: WebDetailBlockedException) {
+                            // 风控：离屏 WebView 预热种 cookie 后重试一次
+                            BgWebViewParser(applicationContext).warmupAndSnapshot(homepageUrl)
+                            withContext(Dispatchers.IO) { DouyinParser.fetchPostList(secUid, cursor) }
+                        }
+                        items += pg.items
+                        nickname = nickname ?: pg.nickname
+                        cursor = pg.maxCursor
+                        hasMore = pg.hasMore
+                        page++
+                    }
+                    if (items.isEmpty()) {
+                        homePreview = HomePreviewState.Error(getString(R.string.home_preview_empty), false)
+                        return@launch
+                    }
+                    val lastSync = HomeRepo.lastSync(this@MainActivity, secUid)
+                    val newItems = HomeRepo.filterNew(this@MainActivity, secUid, items)
+                    homePreview = HomePreviewState.Ready(
+                        secUid, nickname ?: getString(R.string.home_preview_default_author),
+                        homepageUrl, items.size, newItems, lastSync
+                    )
+                } catch (e: WebDetailBlockedException) {
+                    homePreview = HomePreviewState.Error(getString(R.string.home_preview_need_login), true)
+                } catch (e: Exception) {
+                    homePreview = HomePreviewState.Error(
+                        getString(R.string.home_preview_failed, e.message ?: "unknown"), false
+                    )
+                }
+            }
+        }
+    }
+
+    /** 预览确认：按范围选条 → HomepageBatchStore 暂存 → Service 批量下载。 */
+    private fun confirmHomepageDownload(state: HomePreviewState.Ready, range: HomepageBatchStore.Range) {
+        val chosen = when (range) {
+            HomepageBatchStore.Range.ALL -> state.newItems
+            HomepageBatchStore.Range.LATEST_N -> state.newItems.take(HOMEPAGE_LATEST_N)
+            HomepageBatchStore.Range.SYNC_NEW -> state.newItems.filter { it.createTime > state.lastSync }
+        }
+        if (chosen.isEmpty()) {
+            showToast(getString(R.string.home_preview_none_new))
+            return
+        }
+        trackEvent("homepage_confirm", mapOf("range" to range.name, "count" to chosen.size.toString()))
+        val token = HomepageBatchStore.put(
+            HomepageBatchStore.Batch(state.secUid, state.nickname, state.homepageUrl, range, HOMEPAGE_LATEST_N, chosen)
+        )
+        com.neoruaa.xhsdn.DownloadService.startHomepageBatch(this, token)
+        showToast(getString(R.string.home_preview_started, chosen.size))
+        homePreview = HomePreviewState.Idle
+    }
+
     private fun launchDouyinHomepageDownload(input: String) {
         trackEvent("homepage_download")
         val cleanUrl = UrlUtils.extractFirstUrl(input)
@@ -1088,6 +1190,10 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val PERMISSION_REQUEST_CODE = 3001
         const val WEBVIEW_REQUEST_CODE = 3002
+        /** 「最新 N 条」范围档的 N。 */
+        private const val HOMEPAGE_LATEST_N = 10
+        /** post 列表翻页上限：20 页 × 18 条 = 360 条，覆盖绝大多数作者。 */
+        private const val HOMEPAGE_MAX_PAGES = 20
     }
 }
 
@@ -1120,6 +1226,8 @@ private fun MainScreen(
     mainTab: Int = 0,
     onMainTabSelected: (Int) -> Unit = {},
     onHomepageDownload: (String) -> Unit = {},
+    homePreview: HomePreviewState = HomePreviewState.Idle,
+    onHomepageConfirm: (HomepageBatchStore.Range, Int) -> Unit = { _, _ -> },
     onClipboardBubbleActivate: () -> Unit = {},
     onDismissPrompt: () -> Unit,
     onCancelSelectiveDownload: () -> Unit,
@@ -1517,7 +1625,9 @@ private fun MainScreen(
                         )
                     } else {
                         HomepagePage(
-                            onHomepageDownload = onHomepageDownload,
+                            preview = homePreview,
+                            onPreview = onHomepageDownload,
+                            onConfirm = onHomepageConfirm,
                             modifier = Modifier.fillMaxSize()
                         )
                     }
@@ -1663,6 +1773,8 @@ private fun HistoryPage(
     selectedTab: Int = 0,
     onTabSelected: (Int) -> Unit = {},
     onHomepageDownload: (String) -> Unit = {},
+    homePreview: HomePreviewState = HomePreviewState.Idle,
+    onHomepageConfirm: (HomepageBatchStore.Range, Int) -> Unit = { _, _ -> },
     onClipboardBubbleActivate: () -> Unit = {},
     onDismissPrompt: () -> Unit,
     modifier: Modifier = Modifier,
@@ -2640,16 +2752,34 @@ private fun MainTabBar(
     }
 }
 
+/** 主页批量 v2 预览状态（文件内私有，MainActivity 与 HomepagePage 共用）。 */
+private sealed interface HomePreviewState {
+    data object Idle : HomePreviewState
+    data object Loading : HomePreviewState
+    data class Ready(
+        val secUid: String,
+        val nickname: String,
+        val homepageUrl: String,
+        val total: Int,
+        val newItems: List<DouyinPostItem>,
+        val lastSync: Long
+    ) : HomePreviewState
+    data class Error(val message: String, val needLogin: Boolean) : HomePreviewState
+}
+
 /**
- * 主页下载页：手动粘贴抖音主页/视频链接，反查作者并批量下载该作者全部视频。
+ * 主页下载页（v2 两段式）：粘贴链接 → 解析预览（作者/总数/新增）→ 选范围 → 确认批量下载。
  */
 @Composable
 private fun HomepagePage(
-    onHomepageDownload: (String) -> Unit,
+    preview: HomePreviewState,
+    onPreview: (String) -> Unit,
+    onConfirm: (HomepageBatchStore.Range, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val ctx = LocalContext.current
     var link by remember { mutableStateOf("") }
+    var selectedRange by remember { mutableStateOf(HomepageBatchStore.Range.ALL) }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -2701,7 +2831,7 @@ private fun HomepagePage(
             Button(
                 onClick = {
                     if (link.isNotBlank()) {
-                        onHomepageDownload(link)
+                        onPreview(link)
                     } else {
                         Toast.makeText(ctx, ctx.getString(R.string.please_enter_url), Toast.LENGTH_SHORT).show()
                     }
@@ -2709,8 +2839,99 @@ private fun HomepagePage(
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColorsPrimary()
             ) {
-                Text(stringResource(R.string.homepage_start_download), color = Color.White)
+                Text(stringResource(R.string.home_preview_parse), color = Color.White)
             }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        when (val p = preview) {
+            is HomePreviewState.Loading -> {
+                Text(
+                    text = stringResource(R.string.home_preview_loading),
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+            }
+            is HomePreviewState.Error -> {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    cornerRadius = 14.dp,
+                    colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceVariant)
+                ) {
+                    Text(
+                        text = p.message,
+                        fontSize = 13.sp,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
+            is HomePreviewState.Ready -> {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    cornerRadius = 14.dp,
+                    colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = stringResource(R.string.home_preview_author_fmt, p.nickname),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MiuixTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(
+                                R.string.home_preview_count_fmt, p.total, p.newItems.size
+                            ),
+                            fontSize = 13.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        // 范围三档：全部 / 最新 N 条 / 追更
+                        val rangeLabels = listOf(
+                            stringResource(R.string.home_preview_range_all),
+                            stringResource(R.string.home_preview_range_latest),
+                            stringResource(R.string.home_preview_range_sync)
+                        )
+                        val ranges = listOf(
+                            HomepageBatchStore.Range.ALL,
+                            HomepageBatchStore.Range.LATEST_N,
+                            HomepageBatchStore.Range.SYNC_NEW
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rangeLabels.forEachIndexed { i, label ->
+                                val selectedNow = ranges[i] == selectedRange
+                                Card(
+                                    modifier = Modifier.clickable {
+                                        selectedRange = ranges[i]
+                                    },
+                                    cornerRadius = 14.dp,
+                                    colors = CardDefaults.defaultColors(
+                                        color = if (selectedNow) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.surface
+                                    )
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (selectedNow) FontWeight.Medium else FontWeight.Normal,
+                                        color = if (selectedNow) Color.White else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(
+                            onClick = { onConfirm(selectedRange, p.newItems.size) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColorsPrimary()
+                        ) {
+                            Text(stringResource(R.string.home_preview_confirm), color = Color.White)
+                        }
+                    }
+                }
+            }
+            HomePreviewState.Idle -> {}
         }
         Spacer(modifier = Modifier.height(16.dp))
         Text(

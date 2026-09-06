@@ -230,4 +230,19 @@
     <string name="events_log_empty">暂无埋码记录 — 操作 App 后会自动记录。</string>
     <string name="clear_events_log">清除埋码</string>
     <string name="events_log_cleared">埋码日志已清除</string>
+    <string name="home_preview_parse">解析作品</string>
+    <string name="home_preview_loading">正在解析主页作品…</string>
+    <string name="home_preview_author_fmt">作者：%1$s</string>
+    <string name="home_preview_count_fmt">作品总数：%1$d · 新增 %2$d 待下载</string>
+    <string name="home_preview_range_all">全部</string>
+    <string name="home_preview_range_latest">最新10条</string>
+    <string name="home_preview_range_sync">追更</string>
+    <string name="home_preview_confirm">确认下载</string>
+    <string name="home_preview_bad_link">无法识别主页链接，请粘贴抖音主页链接或作品链接</string>
+    <string name="home_preview_empty">未获取到作品（账号可能私密或无作品）</string>
+    <string name="home_preview_need_login">需要登录抖音：请先在「视频下载」页粘贴任意抖音链接进入网页登录，再回来重试</string>
+    <string name="home_preview_failed">主页解析失败：%1$s</string>
+    <string name="home_preview_none_new">该作者作品都已下载过，无新增</string>
+    <string name="home_preview_started">已开始下载 %1$d 条作品</string>
+    <string name="home_preview_default_author">抖音作者</string>
 </resources>
