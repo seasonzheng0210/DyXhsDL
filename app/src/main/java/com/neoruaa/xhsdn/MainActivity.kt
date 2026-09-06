@@ -1852,6 +1852,8 @@ private fun HistoryPage(
     }
 
     val dark = isSystemInDarkTheme()
+    // 主按钮前景字：暗色启用态按令牌用浅橙字（#FFC9A3），亮色/禁用态保持白
+    val primaryButtonFg = if (dark) GlassTokens.OrangeOnDark else Color.White
     Box(modifier = modifier) {
         Card(
             modifier = Modifier.fillMaxSize(),
@@ -2088,11 +2090,11 @@ private fun HistoryPage(
                         imageVector = if (manualInputLinks) MiuixIcons.Link else MiuixIcons.File,
                         contentDescription = stringResource(R.string.github_link),
                         modifier = Modifier.padding(end = 8.dp),
-                        tint = Color.White
+                        tint = primaryButtonFg
                     )
                     Text(
                         text = if (uiState.isDownloading) stringResource(R.string.downloading_files) else if (manualInputLinks) stringResource(R.string.manual_input_links) else stringResource(R.string.start_download_from_clipboard),
-                        color = Color.White,
+                        color = primaryButtonFg,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -2313,20 +2315,22 @@ private fun TaskCell(
             .fillMaxWidth()
             .clip(ContinuousRoundedRectangle(18.dp))
     ) {
-        // 删除按钮（满铺整项，卡片左移后露出右端"删除"）
+        // 删除按钮（满铺红层，α=左滑进度；静止 α=0 → 不透过玻璃卡底色显形，根治珊瑚/粉穿帮）
+        val deleteProgress = (-offsetX.value / REVEAL).coerceIn(0f, 1f)
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .background(Color(0xFFF44336))
-                .padding(end = 24.dp)
-                .clickable { onDelete() },
-            contentAlignment = Alignment.CenterEnd
+                .background(Color(0xFFF44336).copy(alpha = deleteProgress))
+                .clickable { onDelete() }
         ) {
             Text(
                 text = "删除",
-                color = Color.White,
+                color = Color.White.copy(alpha = deleteProgress),
                 fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 24.dp)
             )
         }
 
@@ -2547,7 +2551,7 @@ private fun TaskCell(
                      modifier = Modifier.weight(1f),
                      colors = ButtonDefaults.buttonColorsPrimary()
                  ) {
-                     Text("停止", color = Color.White)
+                     Text("停止", color = MiuixTheme.colorScheme.onPrimary)
                  }
             } else {
 
@@ -2571,7 +2575,7 @@ private fun TaskCell(
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.buttonColorsPrimary()
                             ) {
-                                Text("坚持下载", color = Color.White)
+                                Text("坚持下载", color = MiuixTheme.colorScheme.onPrimary)
                             }
                             Button(
                                 onClick = onWebCrawl,
@@ -2595,7 +2599,7 @@ private fun TaskCell(
                         ) {
                             Text(
                                 text = stringResource(R.string.retry),
-                                color = Color.White
+                                color = MiuixTheme.colorScheme.onPrimary
                             )
                         }
                     }
