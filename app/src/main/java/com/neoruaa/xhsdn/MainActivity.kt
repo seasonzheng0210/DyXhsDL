@@ -128,6 +128,7 @@ import com.neoruaa.xhsdn.ui.TabRowDefaults
 import com.neoruaa.xhsdn.ui.TabRowWithContour
 import com.neoruaa.xhsdn.ui.SelectableMediaWaterfall
 import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
+import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
 import com.neoruaa.xhsdn.ui.glass.GlassTokens
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -2062,22 +2063,25 @@ private fun HistoryPage(
 
         // 悬停在页面底部的下载按钮
         // 右下角紧凑 FAB：避免遮挡任务卡片列表（替代原先的底部宽栏）
-        Card(
+        GlassPrimaryWrap(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = navPadding + 12.dp)
-                .clickable(enabled = !uiState.isDownloading) {
+                .padding(end = 16.dp, bottom = navPadding + 12.dp),
+            cornerRadius = 22.dp
+        ) {
+            Card(
+                modifier = Modifier.clickable(enabled = !uiState.isDownloading) {
                     if (manualInputLinks) {
                         onShowInputDialogChange(true)
                     } else {
                         onDownload()
                     }
                 },
-            cornerRadius = 22.dp,
-            colors = CardDefaults.defaultColors(
-                color = if (uiState.isDownloading) MiuixTheme.colorScheme.disabledPrimaryButton else MiuixTheme.colorScheme.primary
-            )
-        ) {
+                cornerRadius = 22.dp,
+                colors = CardDefaults.defaultColors(
+                    color = if (uiState.isDownloading) MiuixTheme.colorScheme.disabledPrimaryButton else MiuixTheme.colorScheme.primary
+                )
+            ) {
             Column(
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -2109,6 +2113,7 @@ private fun HistoryPage(
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                 }
+            }
             }
         }
 
@@ -2546,12 +2551,17 @@ private fun TaskCell(
                                 task.status == com.neoruaa.xhsdn.data.TaskStatus.QUEUED
 
             if (isDownloading) {
-                 Button(
-                     onClick = onStop,
+                 GlassPrimaryWrap(
                      modifier = Modifier.weight(1f),
-                     colors = ButtonDefaults.buttonColorsPrimary()
+                     cornerRadius = 20.dp
                  ) {
-                     Text("停止", color = MiuixTheme.colorScheme.onPrimary)
+                     Button(
+                         onClick = onStop,
+                         modifier = Modifier.fillMaxWidth(),
+                         colors = ButtonDefaults.buttonColorsPrimary()
+                     ) {
+                         Text("停止", color = MiuixTheme.colorScheme.onPrimary)
+                     }
                  }
             } else {
 
@@ -2570,12 +2580,17 @@ private fun TaskCell(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Button(
-                                onClick = onContinue,
+                            GlassPrimaryWrap(
                                 modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColorsPrimary()
+                                cornerRadius = 20.dp
                             ) {
-                                Text("坚持下载", color = MiuixTheme.colorScheme.onPrimary)
+                                Button(
+                                    onClick = onContinue,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColorsPrimary()
+                                ) {
+                                    Text("坚持下载", color = MiuixTheme.colorScheme.onPrimary)
+                                }
                             }
                             Button(
                                 onClick = onWebCrawl,
@@ -2592,15 +2607,20 @@ private fun TaskCell(
                 } else {
                     // 重试按钮（仅失败任务显示）
                     if (task.status == com.neoruaa.xhsdn.data.TaskStatus.FAILED) {
-                        Button(
-                            onClick = onRetry,
+                        GlassPrimaryWrap(
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColorsPrimary()
+                            cornerRadius = 20.dp
                         ) {
-                            Text(
-                                text = stringResource(R.string.retry),
-                                color = MiuixTheme.colorScheme.onPrimary
-                            )
+                            Button(
+                                onClick = onRetry,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColorsPrimary()
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.retry),
+                                    color = MiuixTheme.colorScheme.onPrimary
+                                )
+                            }
                         }
                     }
                 }
@@ -2902,18 +2922,23 @@ private fun HomepagePage(
             ) {
                 Text(stringResource(R.string.homepage_paste_clipboard))
             }
-            Button(
-                onClick = {
-                    if (link.isNotBlank()) {
-                        onPreview(link)
-                    } else {
-                        Toast.makeText(ctx, ctx.getString(R.string.please_enter_url), Toast.LENGTH_SHORT).show()
-                    }
-                },
+            GlassPrimaryWrap(
                 modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColorsPrimary()
+                cornerRadius = 20.dp
             ) {
-                Text(stringResource(R.string.home_preview_parse), color = Color.White)
+                Button(
+                    onClick = {
+                        if (link.isNotBlank()) {
+                            onPreview(link)
+                        } else {
+                            Toast.makeText(ctx, ctx.getString(R.string.please_enter_url), Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColorsPrimary()
+                ) {
+                    Text(stringResource(R.string.home_preview_parse), color = MiuixTheme.colorScheme.onPrimary)
+                }
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -3063,12 +3088,17 @@ private fun HomepagePage(
                         modifier = Modifier.padding(horizontal = 4.dp)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = { onConfirm(selectedRange, limitN, includeImages, skipDownloaded) },
+                    GlassPrimaryWrap(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColorsPrimary()
+                        cornerRadius = 22.dp
                     ) {
-                        Text(stringResource(R.string.home_preview_confirm), color = Color.White)
+                        Button(
+                            onClick = { onConfirm(selectedRange, limitN, includeImages, skipDownloaded) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColorsPrimary()
+                        ) {
+                            Text(stringResource(R.string.home_preview_confirm), color = MiuixTheme.colorScheme.onPrimary)
+                        }
                     }
                 }
             }

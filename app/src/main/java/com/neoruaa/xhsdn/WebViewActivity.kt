@@ -74,6 +74,7 @@ import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
+import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
 import androidx.compose.ui.res.stringResource
 import com.kyant.capsule.ContinuousRoundedRectangle
@@ -408,24 +409,29 @@ private fun WebViewScreen(
                             text = stringResource(R.string.webview_go)
                         )
                     }
-                    Button(
-                        onClick = {
-                            if (isHomepage) {
-                                if (!finished.value) {
-                                    finishHomepageCrawl(context, webView, collectedVideoUrls, onResult, finished, statusMsg)
-                                }
-                            } else if (!finished.value) {
-                                extractImages(context, webView, sniffedVideoUrls, capturedUrls, capturedImageUrls, source, finished, onResult, 0, statusMsg, extractionFailed, retryUrl, direct, fallback)
-                            }
-                        },
+                    GlassPrimaryWrap(
                         modifier = Modifier.weight(1f),
-                        enabled = !loading,
-                        colors = ButtonDefaults.buttonColorsPrimary()
+                        cornerRadius = 20.dp
                     ) {
-                        Text(
-                            text = if (isHomepage) "完成爬取" else stringResource(R.string.webview_crawl),
-                            color = Color.White
-                        )
+                        Button(
+                            onClick = {
+                                if (isHomepage) {
+                                    if (!finished.value) {
+                                        finishHomepageCrawl(context, webView, collectedVideoUrls, onResult, finished, statusMsg)
+                                    }
+                                } else if (!finished.value) {
+                                    extractImages(context, webView, sniffedVideoUrls, capturedUrls, capturedImageUrls, source, finished, onResult, 0, statusMsg, extractionFailed, retryUrl, direct, fallback)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !loading,
+                            colors = ButtonDefaults.buttonColorsPrimary()
+                        ) {
+                            Text(
+                                text = if (isHomepage) "完成爬取" else stringResource(R.string.webview_crawl),
+                                color = MiuixTheme.colorScheme.onPrimary
+                            )
+                        }
                     }
                     // 抖音/快手：提供"直链解析(备用)"入口，WebView 取不到时强制走后台直链解析（主页爬取模式无此按钮）
                     if ((source == "douyin" || source == "kuaishou") && !isHomepage) {
@@ -460,12 +466,17 @@ private fun WebViewScreen(
                             Text(text = "去登录${sourceLabel}", color = Color.White)
                         }
                         if (extractionFailed.value) {
-                            Button(
-                                onClick = { retryExtract() },
+                            GlassPrimaryWrap(
                                 modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColorsPrimary()
+                                cornerRadius = 20.dp
                             ) {
-                                Text(text = "重试提取", color = Color.White)
+                                Button(
+                                    onClick = { retryExtract() },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColorsPrimary()
+                                ) {
+                                    Text(text = "重试提取", color = MiuixTheme.colorScheme.onPrimary)
+                                }
                             }
                         }
                     }
