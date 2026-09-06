@@ -882,11 +882,14 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch {
                 try {
                     val secUid = withContext(Dispatchers.IO) {
-                        if (UrlUtils.isDouyinHomepageLink(input)) {
-                            val final = runCatching { DouyinParser.resolveFinalUrl(cleanUrl) }.getOrDefault(cleanUrl)
-                            Regex("""(?:iesdouyin|douyin)\.com/(?:share/)?user/([0-9A-Za-z_-]+)""")
-                                .find(final)?.groupValues?.getOrNull(1)
+                        // 先归一化短链：主页分享短链（v.douyin.com/x → share/user/{sec_uid}）须识别为主页
+                        val finalUrl = runCatching { DouyinParser.resolveFinalUrl(cleanUrl) }.getOrDefault(cleanUrl)
+                        val userFromFinal = Regex("""(?:iesdouyin|douyin)\.com/(?:share/)?user/([0-9A-Za-z_-]+)""")
+                            .find(finalUrl)?.groupValues?.getOrNull(1)
+                        userFromFinal ?: if (UrlUtils.isDouyinHomepageLink(input)) {
+                            null
                         } else {
+                            // 视频链接：反查作者主页（resolveAuthorHomepageUrl 内部会再跟跳一次，幂等）
                             DouyinParser.resolveAuthorHomepageUrl(cleanUrl)
                                 ?.substringAfterLast('/')?.substringBefore('?')
                         }
@@ -905,8 +908,11 @@ class MainActivity : ComponentActivity() {
                         val pg = try {
                             withContext(Dispatchers.IO) { DouyinParser.fetchPostList(secUid, cursor) }
                         } catch (e: WebDetailBlockedException) {
-                            // 风控：离屏 WebView 预热种 cookie 后重试一次
-                            BgWebViewParser(applicationContext).warmupAndSnapshot(homepageUrl)
+                            // 风控：离屏 WebView 预热种 cookie 后重试一次。
+                            // 预热页用轻量首页而非 /user/{secUid}——cookie 按域共享，任意
+                            // www.douyin.com 页都能种下 UIFID 指纹；user 页过重，慢机（模拟器
+                            // 软渲染）20s 内 onPageFinished 不触发即超时，预热等于空转（E2E 实证）。
+                            BgWebViewParser(applicationContext).warmupAndSnapshot(HOMEPAGE_WARMUP_URL)
                             withContext(Dispatchers.IO) { DouyinParser.fetchPostList(secUid, cursor) }
                         }
                         items += pg.items
@@ -1204,8 +1210,10 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val PERMISSION_REQUEST_CODE = 3001
         const val WEBVIEW_REQUEST_CODE = 3002
-        /** 「最新 N 条」范围档的 N。 */
+        /** 预览拉取翻页上限（防异常账号无限翻页拖垮 Service）。 */
         private const val HOMEPAGE_MAX_PAGES = 20
+        /** 主页批量 cookie 预热的轻量页：同域即种 UIFID 指纹（user 页过重，慢机 20s 预热会超时空转）。 */
+        private const val HOMEPAGE_WARMUP_URL = "https://www.douyin.com/"
     }
 }
 
