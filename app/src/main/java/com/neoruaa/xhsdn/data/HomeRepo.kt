@@ -23,7 +23,8 @@ object HomeRepo {
     data class AuthorRecord(
         val nickname: String,
         val downloadedIds: MutableSet<String>,
-        var lastSync: Long
+        var lastSync: Long,
+        var lastUsed: Long = 0L
     )
 
     private val authors = LinkedHashMap<String, AuthorRecord>()
@@ -53,7 +54,8 @@ object HomeRepo {
                 authors[key] = AuthorRecord(
                     nickname = o.optString("nickname", ""),
                     downloadedIds = ids,
-                    lastSync = o.optLong("lastSync", 0L)
+                    lastSync = o.optLong("lastSync", 0L),
+                    lastUsed = o.optLong("lastUsed", 0L)
                 )
             }
         }.onFailure { Log.w(TAG, "home_index.json 读取失败（按空账本继续）: ${it.message}") }
@@ -68,6 +70,7 @@ object HomeRepo {
                 val o = JSONObject()
                 o.put("nickname", r.nickname)
                 o.put("lastSync", r.lastSync)
+                o.put("lastUsed", r.lastUsed)
                 o.put("downloadedIds", org.json.JSONArray(r.downloadedIds.toList()))
                 arr.put(k, o)
             }
@@ -102,6 +105,30 @@ object HomeRepo {
         ensureLoaded(ctx)
         val done = authors[secUid]?.downloadedIds ?: return items
         return items.filter { it.id !in done }
+    }
+
+    /**
+     * 预览/解析成功时记录"最近使用"，供主页 tab「上次解析」快捷卡取最近作者。
+     * 未下载过任何作品的作者也会留下记录（仅有 lastUsed 而无 downloadedIds）。
+     */
+    @Synchronized
+    fun touch(ctx: Context, secUid: String, nickname: String) {
+        ensureLoaded(ctx)
+        val r = authors.getOrPut(secUid) {
+            AuthorRecord(nickname, LinkedHashSet(), 0L, System.currentTimeMillis())
+        }
+        if (nickname.isNotBlank()) {
+            authors[secUid] = r.copy(nickname = nickname)
+        }
+        r.lastUsed = System.currentTimeMillis()
+        save(ctx)
+    }
+
+    /** 最近一次预览/下载过的作者及其 secUid（无任何记录返回 null）。 */
+    @Synchronized
+    fun recentAuthor(ctx: Context): Pair<String, AuthorRecord>? {
+        ensureLoaded(ctx)
+        return authors.entries.maxByOrNull { it.value.lastUsed }?.let { it.key to it.value }
     }
 
     /**

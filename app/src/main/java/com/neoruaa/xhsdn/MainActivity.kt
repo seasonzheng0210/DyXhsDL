@@ -57,6 +57,8 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -95,6 +97,7 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -436,7 +439,11 @@ class MainActivity : ComponentActivity() {
                     },
                     onHomepageDownload = { link -> fetchHomepagePreview(link) },
                     homePreview = homePreview,
-                    onHomepageConfirm = { range, _ -> (homePreview as? HomePreviewState.Ready)?.let { confirmHomepageDownload(it, range) } },
+                    onHomepageConfirm = { range, n, includeImages, skipDownloaded ->
+                        (homePreview as? HomePreviewState.Ready)?.let {
+                            confirmHomepageDownload(it, range, n, includeImages, skipDownloaded)
+                        }
+                    },
                     onDownload = {
                         if (!manualInputLinks) {
                             ensureStoragePermission {
@@ -914,9 +921,11 @@ class MainActivity : ComponentActivity() {
                     }
                     val lastSync = HomeRepo.lastSync(this@MainActivity, secUid)
                     val newItems = HomeRepo.filterNew(this@MainActivity, secUid, items)
+                    // 记录最近作者，供「上次解析」快捷卡（nickname 为空时仍记录 secUid 级）
+                    HomeRepo.touch(this@MainActivity, secUid, nickname.orEmpty())
                     homePreview = HomePreviewState.Ready(
                         secUid, nickname ?: getString(R.string.home_preview_default_author),
-                        homepageUrl, items.size, newItems, lastSync
+                        homepageUrl, items, newItems, lastSync
                     )
                 } catch (e: WebDetailBlockedException) {
                     homePreview = HomePreviewState.Error(getString(R.string.home_preview_need_login), true)
@@ -929,20 +938,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** 预览确认：按范围选条 → HomepageBatchStore 暂存 → Service 批量下载。 */
-    private fun confirmHomepageDownload(state: HomePreviewState.Ready, range: HomepageBatchStore.Range) {
-        val chosen = when (range) {
-            HomepageBatchStore.Range.ALL -> state.newItems
-            HomepageBatchStore.Range.LATEST_N -> state.newItems.take(HOMEPAGE_LATEST_N)
-            HomepageBatchStore.Range.SYNC_NEW -> state.newItems.filter { it.createTime > state.lastSync }
-        }
+    /** 预览确认：按范围+开关选条 → HomepageBatchStore 暂存 → Service 批量下载。 */
+    private fun confirmHomepageDownload(
+        state: HomePreviewState.Ready,
+        range: HomepageBatchStore.Range,
+        latestN: Int,
+        includeImages: Boolean,
+        skipDownloaded: Boolean
+    ) {
+        val chosen = scopeHomepageItems(state, range, latestN, includeImages, skipDownloaded)
         if (chosen.isEmpty()) {
             showToast(getString(R.string.home_preview_none_new))
             return
         }
         trackEvent("homepage_confirm", mapOf("range" to range.name, "count" to chosen.size.toString()))
         val token = HomepageBatchStore.put(
-            HomepageBatchStore.Batch(state.secUid, state.nickname, state.homepageUrl, range, HOMEPAGE_LATEST_N, chosen)
+            HomepageBatchStore.Batch(
+                state.secUid, state.nickname, state.homepageUrl, range, latestN,
+                includeImages, skipDownloaded, chosen
+            )
         )
         com.neoruaa.xhsdn.DownloadService.startHomepageBatch(this, token)
         showToast(getString(R.string.home_preview_started, chosen.size))
@@ -1191,8 +1205,6 @@ class MainActivity : ComponentActivity() {
         private const val PERMISSION_REQUEST_CODE = 3001
         const val WEBVIEW_REQUEST_CODE = 3002
         /** 「最新 N 条」范围档的 N。 */
-        private const val HOMEPAGE_LATEST_N = 10
-        /** post 列表翻页上限：20 页 × 18 条 = 360 条，覆盖绝大多数作者。 */
         private const val HOMEPAGE_MAX_PAGES = 20
     }
 }
@@ -1227,7 +1239,7 @@ private fun MainScreen(
     onMainTabSelected: (Int) -> Unit = {},
     onHomepageDownload: (String) -> Unit = {},
     homePreview: HomePreviewState = HomePreviewState.Idle,
-    onHomepageConfirm: (HomepageBatchStore.Range, Int) -> Unit = { _, _ -> },
+    onHomepageConfirm: (HomepageBatchStore.Range, Int, Boolean, Boolean) -> Unit = { _, _, _, _ -> },
     onClipboardBubbleActivate: () -> Unit = {},
     onDismissPrompt: () -> Unit,
     onCancelSelectiveDownload: () -> Unit,
@@ -1774,7 +1786,7 @@ private fun HistoryPage(
     onTabSelected: (Int) -> Unit = {},
     onHomepageDownload: (String) -> Unit = {},
     homePreview: HomePreviewState = HomePreviewState.Idle,
-    onHomepageConfirm: (HomepageBatchStore.Range, Int) -> Unit = { _, _ -> },
+    onHomepageConfirm: (HomepageBatchStore.Range, Int, Boolean, Boolean) -> Unit = { _, _, _, _ -> },
     onClipboardBubbleActivate: () -> Unit = {},
     onDismissPrompt: () -> Unit,
     modifier: Modifier = Modifier,
@@ -2752,6 +2764,34 @@ private fun MainTabBar(
     }
 }
 
+/** 主页批量：指定数量档的默认值与步进。 */
+private const val HOMEPAGE_DEFAULT_LIMIT = 100
+private const val HOMEPAGE_LIMIT_STEP = 10
+
+/**
+ * 主页批量：按范围档 + 两开关计算实际待下载作品集（UI 统计与确认共用，保证所见即所得）。
+ *  - ONLY_NEW：恒为未下载集合（"仅新增"定义即未下载，不受 skipDownloaded 影响）；
+ *  - ALL：skipDownloaded=true 时等同仅新增，false 时含已下载（全量重下）；
+ *  - LATEST_N：从全量/新增里取最新 N 条；
+ *  - includeImages=false 时剔除图文帖（只下视频）。
+ */
+private fun scopeHomepageItems(
+    state: HomePreviewState.Ready,
+    range: HomepageBatchStore.Range,
+    latestN: Int,
+    includeImages: Boolean,
+    skipDownloaded: Boolean
+): List<DouyinPostItem> {
+    val base = when (range) {
+        HomepageBatchStore.Range.ONLY_NEW -> state.newItems
+        HomepageBatchStore.Range.ALL -> if (skipDownloaded) state.newItems else state.allItems
+        HomepageBatchStore.Range.LATEST_N ->
+            if (skipDownloaded) state.newItems.take(latestN) else state.allItems.take(latestN)
+    }
+    return if (includeImages) base
+    else base.filter { it.type == com.neoruaa.xhsdn.douyin.DouyinMediaType.VIDEO }
+}
+
 /** 主页批量 v2 预览状态（文件内私有，MainActivity 与 HomepagePage 共用）。 */
 private sealed interface HomePreviewState {
     data object Idle : HomePreviewState
@@ -2760,7 +2800,9 @@ private sealed interface HomePreviewState {
         val secUid: String,
         val nickname: String,
         val homepageUrl: String,
-        val total: Int,
+        /** 本次拉取的全量作品（含已下载，供"全部作品"档与网格预览）。 */
+        val allItems: List<DouyinPostItem>,
+        /** 未下载过的新作品（= allItems − 已下载，默认"仅新增"档与统计条用）。 */
         val newItems: List<DouyinPostItem>,
         val lastSync: Long
     ) : HomePreviewState
@@ -2774,12 +2816,15 @@ private sealed interface HomePreviewState {
 private fun HomepagePage(
     preview: HomePreviewState,
     onPreview: (String) -> Unit,
-    onConfirm: (HomepageBatchStore.Range, Int) -> Unit,
+    onConfirm: (HomepageBatchStore.Range, Int, Boolean, Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val ctx = LocalContext.current
     var link by remember { mutableStateOf("") }
-    var selectedRange by remember { mutableStateOf(HomepageBatchStore.Range.ALL) }
+    var selectedRange by remember { mutableStateOf(HomepageBatchStore.Range.ONLY_NEW) }
+    var limitN by remember { mutableStateOf(HOMEPAGE_DEFAULT_LIMIT) }
+    var includeImages by remember { mutableStateOf(true) }
+    var skipDownloaded by remember { mutableStateOf(true) }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -2866,72 +2911,195 @@ private fun HomepagePage(
                 }
             }
             is HomePreviewState.Ready -> {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 14.dp,
-                    colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = stringResource(R.string.home_preview_author_fmt, p.nickname),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MiuixTheme.colorScheme.onSurface
-                        )
+                val p = preview as HomePreviewState.Ready
+                val downloadedCount = (p.allItems.size - p.newItems.size).coerceAtLeast(0)
+                val selCount = scopeHomepageItems(p, selectedRange, limitN, includeImages, skipDownloaded).size
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // 作者卡 + 三格统计
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        cornerRadius = 14.dp,
+                        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = stringResource(R.string.home_preview_author_fmt, p.nickname),
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MiuixTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                HomeStatCell(
+                                    stringResource(R.string.home_stat_new), p.newItems.size,
+                                    valueColor = MiuixTheme.colorScheme.primary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                HomeStatCell(
+                                    stringResource(R.string.home_stat_downloaded), downloadedCount,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                HomeStatCell(
+                                    stringResource(R.string.home_stat_total), p.allItems.size,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    // 作品预览网格：最新 9 条，视频/图文以底色+角标区分
+                    p.allItems.take(9).chunked(3).forEach { rowItems ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            rowItems.forEach { item -> HomeGridCell(item, Modifier.weight(1f)) }
+                            repeat(3 - rowItems.size) { Spacer(modifier = Modifier.weight(1f)) }
+                        }
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = stringResource(
-                                R.string.home_preview_count_fmt, p.total, p.newItems.size
-                            ),
-                            fontSize = 13.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        // 范围三档：全部 / 最新 N 条 / 追更
-                        val rangeLabels = listOf(
-                            stringResource(R.string.home_preview_range_all),
-                            stringResource(R.string.home_preview_range_latest),
-                            stringResource(R.string.home_preview_range_sync)
-                        )
-                        val ranges = listOf(
-                            HomepageBatchStore.Range.ALL,
-                            HomepageBatchStore.Range.LATEST_N,
-                            HomepageBatchStore.Range.SYNC_NEW
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            rangeLabels.forEachIndexed { i, label ->
-                                val selectedNow = ranges[i] == selectedRange
-                                Card(
-                                    modifier = Modifier.clickable {
-                                        selectedRange = ranges[i]
-                                    },
-                                    cornerRadius = 14.dp,
-                                    colors = CardDefaults.defaultColors(
-                                        color = if (selectedNow) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.surface
-                                    )
-                                ) {
-                                    Text(
-                                        text = label,
-                                        fontSize = 12.sp,
-                                        fontWeight = if (selectedNow) FontWeight.Medium else FontWeight.Normal,
-                                        color = if (selectedNow) Color.White else MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                    )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    // 范围选择（列表单选）
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        cornerRadius = 14.dp,
+                        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(6.dp)) {
+                            HomeRangeRow(
+                                label = stringResource(R.string.home_preview_range_all),
+                                countText = p.allItems.size.toString(),
+                                selected = selectedRange == HomepageBatchStore.Range.ALL
+                            ) { selectedRange = HomepageBatchStore.Range.ALL }
+                            HomeRangeRow(
+                                label = stringResource(R.string.home_preview_range_only_new),
+                                countText = p.newItems.size.toString(),
+                                selected = selectedRange == HomepageBatchStore.Range.ONLY_NEW,
+                                pill = stringResource(R.string.home_preview_recommend)
+                            ) { selectedRange = HomepageBatchStore.Range.ONLY_NEW }
+                            // 指定数量行：尾部 −/+ 步进（点击即选中该档）
+                            val cappedN = limitN.coerceAtMost(p.allItems.size.coerceAtLeast(1))
+                            HomeRangeRow(
+                                label = stringResource(R.string.home_preview_range_latest),
+                                selected = selectedRange == HomepageBatchStore.Range.LATEST_N,
+                                countText = cappedN.toString()
+                            ) { selectedRange = HomepageBatchStore.Range.LATEST_N }
+                            // 步进控件（独立于选中态，点击先切档再步进）
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 12.dp, end = 6.dp, bottom = 2.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                            ) {
+                                Spacer(modifier = Modifier.weight(1f))
+                                HomeStepButton("−") {
+                                    selectedRange = HomepageBatchStore.Range.LATEST_N
+                                    limitN = (limitN - HOMEPAGE_LIMIT_STEP).coerceAtLeast(HOMEPAGE_LIMIT_STEP)
+                                }
+                                Text(
+                                    text = cappedN.toString(),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MiuixTheme.colorScheme.onSurface,
+                                    modifier = Modifier.width(36.dp),
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                                HomeStepButton("+") {
+                                    selectedRange = HomepageBatchStore.Range.LATEST_N
+                                    limitN = (limitN + HOMEPAGE_LIMIT_STEP)
+                                        .coerceAtMost(p.allItems.size.coerceAtLeast(HOMEPAGE_LIMIT_STEP))
                                 }
                             }
                         }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Button(
-                            onClick = { onConfirm(selectedRange, p.newItems.size) },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColorsPrimary()
-                        ) {
-                            Text(stringResource(R.string.home_preview_confirm), color = Color.White)
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    // 开关组
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        cornerRadius = 14.dp,
+                        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)) {
+                            HomeSwitchRow(stringResource(R.string.home_opt_include_images), includeImages) {
+                                includeImages = it
+                            }
+                            HomeSwitchRow(stringResource(R.string.home_opt_skip_downloaded), skipDownloaded) {
+                                skipDownloaded = it
+                            }
                         }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = stringResource(R.string.home_preview_estimate_fmt, selCount),
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { onConfirm(selectedRange, limitN, includeImages, skipDownloaded) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColorsPrimary()
+                    ) {
+                        Text(stringResource(R.string.home_preview_confirm), color = Color.White)
                     }
                 }
             }
-            HomePreviewState.Idle -> {}
+            HomePreviewState.Idle -> {
+                // 「上次解析」快捷卡：最近一位作者，点击重新解析
+                val recent = remember { HomeRepo.recentAuthor(ctx) }
+                if (recent != null) {
+                    val (recentSecUid, rec) = recent
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                link = "https://www.douyin.com/user/$recentSecUid"
+                                onPreview(link)
+                            },
+                        cornerRadius = 14.dp,
+                        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.18f)),
+                                contentAlignment = androidx.compose.ui.Alignment.Center
+                            ) {
+                                Text(
+                                    text = (rec.nickname.ifBlank { ctx.getString(R.string.home_preview_default_author) })
+                                        .take(1),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MiuixTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(
+                                        R.string.home_preview_recent_hint,
+                                        rec.nickname.ifBlank { ctx.getString(R.string.home_preview_default_author) }
+                                    ),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MiuixTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = stringResource(R.string.home_preview_recent_sub, rec.downloadedIds.size),
+                                    fontSize = 11.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
         }
         Spacer(modifier = Modifier.height(16.dp))
         Text(
@@ -2939,5 +3107,161 @@ private fun HomepagePage(
             fontSize = 12.sp,
             color = Color.Gray
         )
+    }
+}
+
+/** 主页预览统计格：label + 数值，valueColor 非空时数值用该色（高亮）。 */
+@Composable
+private fun HomeStatCell(label: String, value: Int, valueColor: Color? = null, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.6f))
+            .padding(vertical = 8.dp),
+        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = value.toString(),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+            color = valueColor ?: MiuixTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = label,
+            fontSize = 10.5.sp,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+        )
+    }
+}
+
+/** 主页预览网格单元：视频=灰绿底+播放三角，图文=焦糖底+2x2 缩略。 */
+@Composable
+private fun HomeGridCell(item: com.neoruaa.xhsdn.douyin.DouyinPostItem, modifier: Modifier = Modifier) {
+    val isVideo = item.type == com.neoruaa.xhsdn.douyin.DouyinMediaType.VIDEO
+    Box(
+        modifier = modifier
+            .height(78.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (isVideo) Color(0xFFBFD0C6) else Color(0xFFE0A06B)),
+        contentAlignment = androidx.compose.ui.Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(22.dp)) {
+            val w = this.size.width
+            val h = this.size.height
+            if (isVideo) {
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(w * 0.28f, h * 0.16f)
+                    lineTo(w * 0.28f, h * 0.84f)
+                    lineTo(w * 0.84f, h * 0.5f)
+                    close()
+                }
+                drawPath(path, Color.White.copy(alpha = 0.95f))
+            } else {
+                val gap = w * 0.08f
+                val side = (w - gap * 3) / 2
+                for (r in 0..1) {
+                    for (c in 0..1) {
+                        drawRect(
+                            color = Color.White.copy(alpha = 0.9f),
+                            topLeft = androidx.compose.ui.geometry.Offset(gap + c * (side + gap), gap + r * (side + gap)),
+                            size = androidx.compose.ui.geometry.Size(side, side)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 主页预览范围行：整行可点，选中高亮为主色底白字；可选尾部 pill 与计数。 */
+@Composable
+private fun HomeRangeRow(
+    label: String,
+    countText: String? = null,
+    pill: String? = null,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) MiuixTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            color = if (selected) Color.White else MiuixTheme.colorScheme.onSurface
+        )
+        if (pill != null) {
+            Text(
+                text = pill,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (selected) Color.White else MiuixTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(
+                        if (selected) Color.White.copy(alpha = 0.25f)
+                        else MiuixTheme.colorScheme.primary.copy(alpha = 0.14f)
+                    )
+                    .padding(horizontal = 7.dp, vertical = 2.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+        }
+        if (countText != null) {
+            Text(
+                text = countText,
+                fontSize = 12.sp,
+                color = if (selected) Color.White.copy(alpha = 0.9f)
+                else MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+        }
+    }
+}
+
+/** 主页预览步进小按钮（指定数量 − / +）。 */
+@Composable
+private fun HomeStepButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier = modifier
+            .size(26.dp)
+            .clip(RoundedCornerShape(50))
+            .background(MiuixTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            .clickable(onClick = onClick),
+        contentAlignment = androidx.compose.ui.Alignment.Center
+    ) {
+        Text(
+            text = text,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = MiuixTheme.colorScheme.onSurface
+        )
+    }
+}
+
+/** 主页预览开关行：Miuix Switch。 */
+@Composable
+private fun HomeSwitchRow(title: String, checked: Boolean, modifier: Modifier = Modifier, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            fontSize = 13.sp,
+            color = MiuixTheme.colorScheme.onSurface
+        )
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }

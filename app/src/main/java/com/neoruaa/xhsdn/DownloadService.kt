@@ -769,8 +769,10 @@ class DownloadService : Service() {
         scope.launch {
             var myTaskId: Long = taskIdExtra ?: -1L
             try {
-                // 账本去重：重试/追更时跳过已下载条目
-                val pendingItems = HomeRepo.filterNew(this@DownloadService, batch.secUid, batch.items)
+                // 账本去重：重试/追更时跳过已下载条目（用户关闭"自动跳过已下载"时全量重下）
+                val pendingItems = if (batch.skipDownloaded) {
+                    HomeRepo.filterNew(this@DownloadService, batch.secUid, batch.items)
+                } else batch.items
                 if (myTaskId < 0) {
                     val label = if (pendingItems.size == batch.items.size) batch.items.size
                     else "${pendingItems.size}(共${batch.items.size})"
