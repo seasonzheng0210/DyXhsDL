@@ -73,6 +73,8 @@ import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
+import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
+import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
 import androidx.compose.ui.res.stringResource
 import com.kyant.capsule.ContinuousRoundedRectangle
 
@@ -115,7 +117,12 @@ class WebViewActivity : ComponentActivity() {
         val mode = intent?.getStringExtra("mode") ?: "extract"
 
         setContent {
-            val controller = ThemeController(ColorSchemeMode.System)
+            // 玻璃态：固定玻璃色板（亮/暗随系统），不跟随 Monet 动态色
+            val controller = ThemeController(
+                colorSchemeMode = ColorSchemeMode.System,
+                lightColors = GlassColorSchemes.light(),
+                darkColors = GlassColorSchemes.dark()
+            )
             val localInitialUrl = initialUrl // Capture the variable in the composition scope
             val localSource = source
             val localMode = mode
@@ -124,7 +131,9 @@ class WebViewActivity : ComponentActivity() {
             // 直达下载模式下，提取失败才降级为可见页（让用户登录/手动重试），否则全程不展示平台网页
             val fallback = remember { mutableStateOf(false) }
             MiuixTheme(controller = controller) {
-                WebViewScreen(
+                Box(modifier = Modifier.fillMaxSize()) {
+                    WallpaperLayer(modifier = Modifier.fillMaxSize())
+                    WebViewScreen(
                     initialUrl = localInitialUrl,
                     source = localSource,
                     mode = localMode,
@@ -152,6 +161,7 @@ class WebViewActivity : ComponentActivity() {
                         activity?.finish()
                     }
                 )
+                }
             }
         }
     }
@@ -316,6 +326,8 @@ private fun WebViewScreen(
 
     Scaffold(
         contentWindowInsets = if (invisible) WindowInsets(0, 0, 0, 0) else WindowInsets.statusBars.union(WindowInsets.displayCutout),
+        // 玻璃态：容器底色透明，让最底 WallpaperLayer 透出
+        containerColor = Color.Transparent,
         topBar = if (invisible) ({
         }) else ({
             TopAppBar(

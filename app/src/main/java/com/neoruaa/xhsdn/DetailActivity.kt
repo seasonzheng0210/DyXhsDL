@@ -75,6 +75,8 @@ import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
+import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
+import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
 import java.io.File
 import androidx.core.content.FileProvider
 import androidx.compose.foundation.layout.statusBars
@@ -180,11 +182,18 @@ class DetailActivity : ComponentActivity() {
         )
 
         setContent {
-            val controller = ThemeController(ColorSchemeMode.System)
+            // 玻璃态：固定玻璃色板（亮/暗随系统），不跟随 Monet 动态色
+            val controller = ThemeController(
+                colorSchemeMode = ColorSchemeMode.System,
+                lightColors = GlassColorSchemes.light(),
+                darkColors = GlassColorSchemes.dark()
+            )
             val uiState by viewModel.state.collectAsStateWithLifecycle()
             val topBarState = rememberTopAppBarState()
             MiuixTheme(controller = controller) {
-                DetailScreen(
+                Box(modifier = Modifier.fillMaxSize()) {
+                    WallpaperLayer(modifier = Modifier.fillMaxSize())
+                    DetailScreen(
                     uiState = uiState,
                     onBack = { finish() },
                     onMediaClick = { openFile(it) },
@@ -197,7 +206,7 @@ class DetailActivity : ComponentActivity() {
                         if (!noteUrl.isNullOrEmpty()) {
                             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             clipboard.setPrimaryClip(ClipData.newPlainText("xhs_url", noteUrl))
-                            Toast.makeText(this, R.string.link_copied, Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@DetailActivity, R.string.link_copied, Toast.LENGTH_SHORT).show()
                         }
                     },
                     onWebCrawl = {
@@ -206,7 +215,7 @@ class DetailActivity : ComponentActivity() {
                             val cleanUrl = com.neoruaa.xhsdn.utils.UrlUtils.extractFirstUrl(noteUrl)
                             if (cleanUrl != null) {
                                 // Launch WebViewActivity for the web crawl
-                                val webViewIntent = Intent(this, WebViewActivity::class.java).apply {
+                                val webViewIntent = Intent(this@DetailActivity, WebViewActivity::class.java).apply {
                                     putExtra("url", cleanUrl)
                                     // Don't pass task_id here - let WebViewActivity create the task when user clicks "爬取"
                                 }
@@ -215,12 +224,13 @@ class DetailActivity : ComponentActivity() {
                                 startActivityForResult(webViewIntent, MainActivity.WEBVIEW_REQUEST_CODE)
                                 finish() // Close DetailActivity and return to MainActivity
                             } else {
-                                Toast.makeText(this, R.string.no_valid_link_found, Toast.LENGTH_SHORT).show()
+                                Toast.makeText(this@DetailActivity, R.string.no_valid_link_found, Toast.LENGTH_SHORT).show()
                             }
                         }
                     },
                     topBarState = topBarState
                 )
+                }
             }
         }
     }
@@ -269,6 +279,8 @@ private fun DetailScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.displayCutout),
+        // 玻璃态：容器底色透明，让最底 WallpaperLayer 透出
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = uiState.taskTitle,

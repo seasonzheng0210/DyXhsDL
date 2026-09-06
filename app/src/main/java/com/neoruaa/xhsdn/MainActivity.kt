@@ -127,6 +127,10 @@ import com.kyant.capsule.ContinuousRoundedRectangle
 import com.neoruaa.xhsdn.ui.TabRowDefaults
 import com.neoruaa.xhsdn.ui.TabRowWithContour
 import com.neoruaa.xhsdn.ui.SelectableMediaWaterfall
+import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
+import com.neoruaa.xhsdn.ui.glass.GlassTokens
+import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
+import androidx.compose.foundation.isSystemInDarkTheme
 import com.neoruaa.xhsdn.viewmodels.MainUiState
 import com.neoruaa.xhsdn.viewmodels.MainViewModel
 import com.neoruaa.xhsdn.viewmodels.MediaItem
@@ -188,7 +192,12 @@ class MainActivity : ComponentActivity() {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
         setContent {
-            val controller = ThemeController(ColorSchemeMode.System)
+            // 玻璃态：注入固定玻璃色板（亮/暗两套随系统明暗），不跟随 Monet 动态色（锁品牌徕卡橙）
+            val controller = ThemeController(
+                colorSchemeMode = ColorSchemeMode.System,
+                lightColors = GlassColorSchemes.light(),
+                darkColors = GlassColorSchemes.dark()
+            )
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
             val topBarState = rememberTopAppBarState()
             val scrollBehavior = MiuixScrollBehavior(state = topBarState)
@@ -1276,8 +1285,12 @@ private fun MainScreen(
     val ctx = LocalContext.current
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // 玻璃态壁纸层（最底，透出 Chrome/内容层玻璃）
+        WallpaperLayer(modifier = Modifier.fillMaxSize())
         Scaffold(
             contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.displayCutout),
+            // 玻璃态：容器底色透明，让最底 WallpaperLayer 透出
+            containerColor = Color.Transparent,
             topBar = {
                 val title = stringResource(R.string.app_full_name)
                 TopAppBar(
@@ -1838,12 +1851,14 @@ private fun HistoryPage(
         }
     }
 
+    val dark = isSystemInDarkTheme()
     Box(modifier = modifier) {
         Card(
             modifier = Modifier.fillMaxSize(),
             cornerRadius = 18.dp,
             colors = CardDefaults.defaultColors(
-                color = MiuixTheme.colorScheme.surface
+                // 玻璃态：页面级 Chrome 面板（亮 70% 白 / 暗 12% 白，壁纸透出）
+                color = if (dark) GlassTokens.ChromeDark else GlassTokens.ChromeLight
             )
         ) {
             Column(
@@ -2744,10 +2759,12 @@ private fun MainTabBar(
     onSelected: (Int) -> Unit
 ) {
     val items = listOf(stringResource(R.string.main_tab_video), stringResource(R.string.homepage_download))
+    val dark = isSystemInDarkTheme()
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MiuixTheme.colorScheme.surface)
+            // 玻璃态：底栏 Chrome 玻璃（亮 70% 白 / 暗 12% 白）
+            .background(if (dark) GlassTokens.ChromeDark else GlassTokens.ChromeLight)
             .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
@@ -2762,7 +2779,7 @@ private fun MainTabBar(
                 ) {
                     Text(
                         text = label,
-                        color = if (selectedNow) MiuixTheme.colorScheme.primary else Color.Gray,
+                        color = if (selectedNow) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurfaceSecondary,
                         fontWeight = if (selectedNow) FontWeight.Medium else FontWeight.Normal,
                         fontSize = 14.sp
                     )

@@ -16,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -73,6 +74,9 @@ import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
+import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
+import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
+import androidx.compose.ui.graphics.Color
 import android.graphics.Color as AndroidColor
 
 private const val PREFS_NAME = "XHSDownloaderPrefs"
@@ -252,25 +256,34 @@ class SettingsActivity : ComponentActivity() {
         val isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightNavigationBars = !isNightMode
         setContent {
-            val controller = ThemeController(ColorSchemeMode.System)
+            // 玻璃态：固定玻璃色板（亮/暗随系统），不跟随 Monet 动态色
+            val controller = ThemeController(
+                colorSchemeMode = ColorSchemeMode.System,
+                lightColors = GlassColorSchemes.light(),
+                darkColors = GlassColorSchemes.dark()
+            )
             val uiState by viewModel.state.collectAsStateWithLifecycle()
             val topBarState = rememberTopAppBarState()
             MiuixTheme(controller = controller) {
-                SettingsScreen(
-                    uiState = uiState,
-                    onBack = { finishWithResult() },
-                    onCreateLivePhotosChange = viewModel::onCreateLivePhotosChange,
-                    onUseCustomNamingChange = viewModel::onUseCustomNamingChange,
-                    onTemplateChange = viewModel::onTemplateChange,
-                    onResetTemplate = viewModel::onResetTemplate,
-                    onDebugNotificationChange = viewModel::onDebugNotificationChange,
-                    onSelectiveDownloadChange = viewModel::onSelectiveDownloadChange,
-                    onKeepScreenOnChange = viewModel::onKeepScreenOnChange,
-                    onShowClipboardBubbleChange = viewModel::onShowClipboardBubbleChange,
-                    onAutoReadClipboardChange = viewModel::onAutoReadClipboardChange,
-                    onManualInputLinksChange = viewModel::onManualInputLinksChange,
-                    topBarState = topBarState
-                )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // 玻璃态壁纸层（最底）
+                    WallpaperLayer(modifier = Modifier.fillMaxSize())
+                    SettingsScreen(
+                        uiState = uiState,
+                        onBack = { finishWithResult() },
+                        onCreateLivePhotosChange = viewModel::onCreateLivePhotosChange,
+                        onUseCustomNamingChange = viewModel::onUseCustomNamingChange,
+                        onTemplateChange = viewModel::onTemplateChange,
+                        onResetTemplate = viewModel::onResetTemplate,
+                        onDebugNotificationChange = viewModel::onDebugNotificationChange,
+                        onSelectiveDownloadChange = viewModel::onSelectiveDownloadChange,
+                        onKeepScreenOnChange = viewModel::onKeepScreenOnChange,
+                        onShowClipboardBubbleChange = viewModel::onShowClipboardBubbleChange,
+                        onAutoReadClipboardChange = viewModel::onAutoReadClipboardChange,
+                        onManualInputLinksChange = viewModel::onManualInputLinksChange,
+                        topBarState = topBarState
+                    )
+                }
             }
         }
     }
@@ -313,6 +326,8 @@ private fun SettingsScreen(
     top.yukonga.miuix.kmp.basic.Scaffold(
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets.statusBars
             .union(androidx.compose.foundation.layout.WindowInsets.displayCutout),
+        // 玻璃态：容器底色透明，让最底 WallpaperLayer 透出
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = stringResource(R.string.settings),
