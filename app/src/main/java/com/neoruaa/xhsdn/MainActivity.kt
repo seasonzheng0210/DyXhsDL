@@ -130,6 +130,7 @@ import com.neoruaa.xhsdn.ui.SelectableMediaWaterfall
 import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
 import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
 import com.neoruaa.xhsdn.ui.glass.GlassTokens
+import com.neoruaa.xhsdn.ui.OnboardingScreen
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
 import androidx.compose.foundation.isSystemInDarkTheme
 import com.neoruaa.xhsdn.viewmodels.MainUiState
@@ -243,8 +244,8 @@ class MainActivity : ComponentActivity() {
             var detectedPlatform by remember { mutableStateOf<String?>(null) }
             // 任务栏当前平台页签：0=抖音 / 1=小红书 / 2=快手；识别到链接自动跳转
             var taskTab by remember { mutableStateOf(0) }
-            // 底部主标签栏：0=视频下载 / 1=主页下载
-            var mainTab by remember { mutableStateOf(0) }
+            // 底部主标签栏：0=首页(主页批量三步) / 1=任务(我的下载列表) / 2=我的(设置页内嵌)；默认进任务
+            var mainTab by remember { mutableStateOf(1) }
             // 已处理过的剪贴板链接（去重用），相同链接不再重复读取/下载
             var lastHandledUrl by remember { mutableStateOf<String?>(null) }
             var manualInputLinks by remember { mutableStateOf(prefs.getBoolean("manual_input_links", false)) }
@@ -435,6 +436,10 @@ class MainActivity : ComponentActivity() {
             MiuixTheme(controller = controller) {
                 // 手动输入链接对话框状态
                 var showInputDialog by remember { mutableStateOf(false) }
+                // UI v2 S5：首次引导（仅全新安装首启展示，SharedPreferences 标记）
+                var showOnboarding by remember {
+                    mutableStateOf(!prefs.getBoolean(ONBOARDING_DONE_KEY, false))
+                }
 
                 MainScreen(
                     uiState = uiState,
@@ -444,7 +449,8 @@ class MainActivity : ComponentActivity() {
                     scrollBehavior = scrollBehavior,
                     mainTab = mainTab,
                     onMainTabSelected = {
-                        trackEvent("main_tab_switch", mapOf("tab" to if (it == 0) "video" else "homepage"))
+                        val tabLabel = when (it) { 0 -> "home"; 1 -> "tasks"; else -> "mine" }
+                        trackEvent("main_tab_switch", mapOf("tab" to tabLabel))
                         mainTab = it
                     },
                     onHomepageDownload = { link -> fetchHomepagePreview(link) },
@@ -756,6 +762,18 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+                }
+
+                // UI v2 S5：引导页浮于主界面之上（首启仅一次；完成后进入主界面）
+                if (showOnboarding) {
+                    OnboardingScreen(
+                        onDone = {
+                            prefs.edit().putBoolean(ONBOARDING_DONE_KEY, true).apply()
+                            trackEvent("onboarding_finish")
+                            showOnboarding = false
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
         }
@@ -1220,6 +1238,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val PERMISSION_REQUEST_CODE = 3001
         const val WEBVIEW_REQUEST_CODE = 3002
+        /** UI v2 S5 首次引导完成标记（仅全新安装首启展示）。 */
+        private const val ONBOARDING_DONE_KEY = "v2_onboarding_done"
         /** 预览拉取翻页上限（防异常账号无限翻页拖垮 Service）。 */
         private const val HOMEPAGE_MAX_PAGES = 20
         /** 主页批量 cookie 预热的轻量页：同域即种 UIFID 指纹（user 页过重，慢机 20s 预热会超时空转）。 */
@@ -1293,7 +1313,8 @@ private fun MainScreen(
             // 玻璃态：容器底色透明，让最底 WallpaperLayer 透出
             containerColor = Color.Transparent,
             topBar = {
-                val title = stringResource(R.string.app_full_name)
+                // UI v2：顶栏标题随主标签切换（0 首页=主页批量 / 1 任务=我的下载 / 2 我的）
+                val title = when (mainTab) { 0 -> "主页下载"; 1 -> "我的下载"; else -> "我的" }
                 TopAppBar(
                     title = title,
                     largeTitle = title,
@@ -1607,19 +1628,7 @@ private fun MainScreen(
                             }
                         }
 
-                        Box(
-                            modifier = Modifier
-                                .padding(end = 12.dp)
-//                                .size(48.dp)
-                                .clickable { onOpenSettings() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = MiuixIcons.Settings,
-                                contentDescription = "设置",
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
+                        // UI v2：设置入口已并入底部「我的」tab（原顶栏齿轮移除）
                     }
                 )
             }
@@ -1630,8 +1639,9 @@ private fun MainScreen(
                     .padding(padding)
             ) {
                 Box(modifier = Modifier.weight(1f)) {
-                    if (mainTab == 0) {
-                        HistoryPage(
+                    when (mainTab) {
+                        // 1=任务（默认入口）：我的下载任务列表
+                        1 -> HistoryPage(
                             uiState = uiState,
                             manualInputLinks = manualInputLinks,
                             showInputDialog = showInputDialog,
@@ -1653,20 +1663,45 @@ private fun MainScreen(
                             onTabSelected = onTabSelected,
                             onHomepageDownload = onHomepageDownload,
                             onClipboardBubbleActivate = onClipboardBubbleActivate,
+                            onGoHomepage = { onMainTabSelected(0) },
+                            onOpenFailureLog = { showFailureLogDialog = true },
                             onDismissPrompt = onDismissPrompt,
                             modifier = Modifier.fillMaxSize(),
                             nestedScrollConnection = miuixScrollBehavior.nestedScrollConnection
                         )
-                    } else {
-                        HomepagePage(
+                        // 0=首页：主页批量下载三步流程
+                        0 -> HomepagePage(
                             preview = homePreview,
                             onPreview = onHomepageDownload,
                             onConfirm = onHomepageConfirm,
                             modifier = Modifier.fillMaxSize()
                         )
+                        // 2=我的：内嵌设置页（UI v2 S3 分组；原 SettingsActivity 保留独立入口）
+                        else -> {
+                            // 设置数据全量落在 SharedPreferences：remember 持 VM 实例即可，无需 lifecycle-viewmodel-compose 依赖
+                            val settingsContext = LocalContext.current
+                            val settingsPrefs = remember { settingsContext.getSharedPreferences("XHSDownloaderPrefs", Context.MODE_PRIVATE) }
+                            val settingsVm = remember { com.neoruaa.xhsdn.SettingsViewModel(settingsPrefs) }
+                            val settingsState by settingsVm.state.collectAsStateWithLifecycle()
+                            com.neoruaa.xhsdn.SettingsScreen(
+                                uiState = settingsState,
+                                embedded = true,
+                                onCreateLivePhotosChange = settingsVm::onCreateLivePhotosChange,
+                                onUseCustomNamingChange = settingsVm::onUseCustomNamingChange,
+                                onTemplateChange = settingsVm::onTemplateChange,
+                                onResetTemplate = settingsVm::onResetTemplate,
+                                onDebugNotificationChange = settingsVm::onDebugNotificationChange,
+                                onSelectiveDownloadChange = settingsVm::onSelectiveDownloadChange,
+                                onKeepScreenOnChange = settingsVm::onKeepScreenOnChange,
+                                onShowClipboardBubbleChange = settingsVm::onShowClipboardBubbleChange,
+                                onAutoReadClipboardChange = settingsVm::onAutoReadClipboardChange,
+                                onManualInputLinksChange = settingsVm::onManualInputLinksChange,
+                                topBarState = rememberTopAppBarState()
+                            )
+                        }
                     }
                 }
-                // 底部主标签栏：视频下载 / 主页下载
+                // 底部主标签栏：首页 / 任务 / 我的（UI v2）
                 MainTabBar(mainTab, onMainTabSelected)
             }
         }
@@ -1807,6 +1842,8 @@ private fun HistoryPage(
     selectedTab: Int = 0,
     onTabSelected: (Int) -> Unit = {},
     onHomepageDownload: (String) -> Unit = {},
+    onGoHomepage: () -> Unit = {},
+    onOpenFailureLog: () -> Unit = {},
     homePreview: HomePreviewState = HomePreviewState.Idle,
     onHomepageConfirm: (HomepageBatchStore.Range, Int, Boolean, Boolean) -> Unit = { _, _, _, _ -> },
     onClipboardBubbleActivate: () -> Unit = {},
@@ -1969,35 +2006,237 @@ private fun HistoryPage(
                     Spacer(Modifier.height(6.dp))
                 }
                 if (filteredTasks.isEmpty()) {
-                    // 空状态
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .clip(ContinuousRoundedRectangle(18.dp))
-                            .background(MiuixTheme.colorScheme.surfaceVariant)
-                            .padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.Info,
-                            contentDescription = stringResource(R.string.no_downloaded_files),
-                            modifier = Modifier.size(48.dp),
-                            tint = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = stringResource(R.string.no_downloaded_files),
-                            fontWeight = FontWeight.Medium,
-                            fontSize = MiuixTheme.textStyles.headline1.fontSize,
-                            color = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = stringResource(R.string.ready_to_download),
-                            fontSize = MiuixTheme.textStyles.body2.fontSize,
-                            color = Color.Gray
-                        )
+                    // ===== UI v2 S6 空态双场景 =====
+                    if (selectedTab >= 3) {
+                        // S6-2 失败聚合空态：统计条（今日 / 近 7 天 / 累计）+ 引导
+                        val nowMs = System.currentTimeMillis()
+                        val todayCal = java.util.Calendar.getInstance().apply {
+                            set(java.util.Calendar.HOUR_OF_DAY, 0)
+                            set(java.util.Calendar.MINUTE, 0)
+                            set(java.util.Calendar.SECOND, 0)
+                            set(java.util.Calendar.MILLISECOND, 0)
+                        }
+                        val todayStart = todayCal.timeInMillis
+                        val weekAgo = nowMs - 7L * 24 * 3600 * 1000
+                        val failedTasks = tasks.filter { it.status == com.neoruaa.xhsdn.data.TaskStatus.FAILED }
+                        val failedToday = failedTasks.count { (it.completedAt ?: it.createdAt) >= todayStart }
+                        val failedWeek = failedTasks.count { (it.completedAt ?: it.createdAt) >= weekAgo }
+                        val failedTotal = failedTasks.size
+                        val tPrimary = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight
+                        val tSecondary = if (dark) GlassTokens.TextSecondaryDark else GlassTokens.TextSecondaryLight
+                        val statCardBg = if (dark) GlassTokens.CardDark else GlassTokens.CardLight
+                        val emptyCtx = LocalContext.current
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            // 统计条（跨平台聚合）
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                cornerRadius = 22.dp,
+                                colors = CardDefaults.defaultColors(color = statCardBg)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 18.dp)
+                                ) {
+                                    listOf("今日失败" to failedToday, "近 7 天" to failedWeek, "累计" to failedTotal).forEach { (label, value) ->
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Text(
+                                                text = "$value",
+                                                color = if (value > 0) GlassTokens.OrangeTextDeep else tPrimary,
+                                                fontSize = 21.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(Modifier.height(3.dp))
+                                            Text(text = label, color = tSecondary, fontSize = 11.5.sp)
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(28.dp))
+                            Text(
+                                text = "干干净净，没有失败任务",
+                                color = tPrimary,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "下载失败会自动收进这里，可一键重试或查看原因",
+                                color = tSecondary,
+                                fontSize = 12.5.sp,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            Spacer(Modifier.height(24.dp))
+                            val goPaste: () -> Unit = {
+                                EventTracker.track(emptyCtx, "empty_go_download", mapOf("where" to "failed"))
+                                if (manualInputLinks) onShowInputDialogChange(true) else onDownload()
+                            }
+                            GlassPrimaryWrap(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                cornerRadius = 24.dp
+                            ) {
+                                Button(
+                                    onClick = goPaste,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
+                                    colors = ButtonDefaults.buttonColorsPrimary()
+                                ) {
+                                    Text("去下载一个试试", color = primaryButtonFg, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                            Spacer(Modifier.height(14.dp))
+                            Text(
+                                text = "仍失败可查看失败日志定位原因",
+                                color = if (dark) Color(0xFFFFB066) else GlassTokens.OrangeTextDeep,
+                                fontSize = 12.sp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        EventTracker.track(emptyCtx, "failure_log_open", mapOf("from" to "empty"))
+                                        onOpenFailureLog()
+                                    }
+                                    .padding(vertical = 6.dp),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    } else if (tasks.isEmpty()) {
+                        // S6-1 全局空态：双入口引导（粘贴链接 / 批量下载博主主页）
+                        val tPrimary = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight
+                        val tSecondary = if (dark) GlassTokens.TextSecondaryDark else GlassTokens.TextSecondaryLight
+                        val ctaCardBg = if (dark) GlassTokens.CardDark else GlassTokens.CardLight
+                        val emptyCtx = LocalContext.current
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 24.dp, vertical = 30.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            // 玻璃装饰圆
+                            Box(
+                                modifier = Modifier
+                                    .size(88.dp)
+                                    .clip(RoundedCornerShape(30.dp))
+                                    .background(ctaCardBg),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = MiuixIcons.Download,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(42.dp),
+                                    tint = if (dark) Color(0xFFFFB066) else GlassTokens.OrangeTextDeep
+                                )
+                            }
+                            Spacer(Modifier.height(24.dp))
+                            Text(
+                                text = "还没有下载任务",
+                                color = tPrimary,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                text = "从抖音 / 快手 / 小红书分享或粘贴链接，无水印保存在本机",
+                                color = tSecondary,
+                                fontSize = 13.sp,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            Spacer(Modifier.height(28.dp))
+                            val pasteAction: () -> Unit = {
+                                EventTracker.track(emptyCtx, "empty_paste", mapOf("where" to "tasks"))
+                                if (manualInputLinks) onShowInputDialogChange(true) else onDownload()
+                            }
+                            GlassPrimaryWrap(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                cornerRadius = 24.dp
+                            ) {
+                                Button(
+                                    onClick = pasteAction,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
+                                    colors = ButtonDefaults.buttonColorsPrimary()
+                                ) {
+                                    Text("粘贴链接", color = primaryButtonFg, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            // 次级玻璃按钮：批量下载博主主页
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .clickable {
+                                        EventTracker.track(emptyCtx, "empty_homepage", mapOf("where" to "tasks"))
+                                        onGoHomepage()
+                                    },
+                                cornerRadius = 24.dp,
+                                colors = CardDefaults.defaultColors(color = ctaCardBg)
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("批量下载博主主页", color = tPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                            Spacer(Modifier.height(24.dp))
+                            Text(
+                                text = "分享的视频 / 图文会自动出现在这里",
+                                color = tSecondary,
+                                fontSize = 11.5.sp
+                            )
+                        }
+                    } else {
+                        // 平台页签为空但其他平台有任务：轻量提示，避免误导"全局没有任务"
+                        val tPrimary = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight
+                        val tSecondary = if (dark) GlassTokens.TextSecondaryDark else GlassTokens.TextSecondaryLight
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = MiuixIcons.Info,
+                                contentDescription = null,
+                                modifier = Modifier.size(44.dp),
+                                tint = tSecondary.copy(alpha = 0.6f)
+                            )
+                            Spacer(Modifier.height(14.dp))
+                            Text(
+                                text = "该平台还没有任务",
+                                color = tPrimary,
+                                fontSize = 15.5.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = "粘贴其他平台的链接试试，或切换上方页签查看",
+                                color = tSecondary,
+                                fontSize = 12.5.sp,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
                     }
                 } else {
                     LaunchedEffect(filteredTasks.size) {
@@ -2044,15 +2283,9 @@ private fun HistoryPage(
                                 onHomepageDownload = { onHomepageDownload(task.noteUrl) },
                                 onMediaClick = onMediaClick,
                                 onClick = {
-                                    val detailIntent = DetailActivity.newIntent(
-                                        context,
-                                        task.id.toString(),
-                                        task.noteTitle ?: task.noteUrl,
-                                        task.filePaths,
-                                        task.noteContent,
-                                        task.noteUrl  // Pass the note URL
-                                    )
-                                    context.startActivity(detailIntent)
+                                    // UI v2 S2：点任务卡进「任务详情三态页」；文件浏览（DetailActivity）下沉为已完成态的「查看文件」
+                                    EventTracker.track(context, "task_detail_open", mapOf("source" to (task.source ?: "")))
+                                    context.startActivity(TaskDetailActivity.newIntent(context, task.id))
                                 }
                             )
                         }
@@ -2782,7 +3015,8 @@ private fun MainTabBar(
     selected: Int,
     onSelected: (Int) -> Unit
 ) {
-    val items = listOf(stringResource(R.string.main_tab_video), stringResource(R.string.homepage_download))
+    // UI v2：底部主标签 首页 / 任务 / 我的
+    val items = listOf("首页", "任务", "我的")
     val dark = isSystemInDarkTheme()
     Column(
         modifier = Modifier
@@ -2878,22 +3112,10 @@ private fun HomepagePage(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-            .padding(bottom = 56.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+            .padding(horizontal = 16.dp)
+            .padding(top = 4.dp, bottom = 56.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
     ) {
-        Text(
-            text = stringResource(R.string.homepage_download),
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = MiuixTheme.colorScheme.onSurface
-        )
         Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.homepage_desc),
-            fontSize = 13.sp,
-            color = Color.Gray
-        )
-        Spacer(modifier = Modifier.height(16.dp))
         TextField(
             value = link,
             onValueChange = { link = it },

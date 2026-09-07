@@ -305,9 +305,11 @@ class SettingsActivity : ComponentActivity() {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SettingsScreen(
+internal fun SettingsScreen(
     uiState: SettingsUiState,
-    onBack: () -> Unit,
+    // UI v2：embedded=true 时内嵌主界面「我的」tab——不自绘状态栏 inset、不显示顶栏（避免双重留白）
+    embedded: Boolean = false,
+    onBack: (() -> Unit)? = null,
     onCreateLivePhotosChange: (Boolean) -> Unit,
     onUseCustomNamingChange: (Boolean) -> Unit,
     onTemplateChange: (TextFieldValue) -> Unit,
@@ -322,26 +324,34 @@ private fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val scrollBehavior = top.yukonga.miuix.kmp.basic.MiuixScrollBehavior(state = topBarState)
+    val contentInsets = if (embedded) {
+        WindowInsets(0, 0, 0, 0)
+    } else {
+        WindowInsets.statusBars.union(WindowInsets.displayCutout)
+    }
 
     top.yukonga.miuix.kmp.basic.Scaffold(
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets.statusBars
-            .union(androidx.compose.foundation.layout.WindowInsets.displayCutout),
+        contentWindowInsets = contentInsets,
         // 玻璃态：容器底色透明，让最底 WallpaperLayer 透出
         containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                title = stringResource(R.string.settings),
-                navigationIcon = {
-                    Icon(
-                        imageVector = MiuixIcons.Back,
-                        contentDescription = stringResource(R.string.back),
-                        modifier = Modifier
-                            .padding(start = 12.dp)
-                            .clickable { onBack() }
-                    )
-                },
-                scrollBehavior = scrollBehavior
-            )
+            if (!embedded) {
+                TopAppBar(
+                    title = stringResource(R.string.settings),
+                    navigationIcon = {
+                        if (onBack != null) {
+                            Icon(
+                                imageVector = MiuixIcons.Back,
+                                contentDescription = stringResource(R.string.back),
+                                modifier = Modifier
+                                    .padding(start = 12.dp)
+                                    .clickable { onBack() }
+                            )
+                        }
+                    },
+                    scrollBehavior = scrollBehavior
+                )
+            }
         }
     ) { padding ->
         LazyColumn(

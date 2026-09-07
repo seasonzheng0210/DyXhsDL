@@ -44,6 +44,10 @@
             android:name=".DetailActivity"
             android:theme="@style/Theme.MiuixCompatActionBar"
             android:exported="false" />
+        <activity
+            android:name=".TaskDetailActivity"
+            android:theme="@style/Theme.MiuixCompatActionBar"
+            android:exported="false" />
         
         <service
             android:name=".DownloadService"
