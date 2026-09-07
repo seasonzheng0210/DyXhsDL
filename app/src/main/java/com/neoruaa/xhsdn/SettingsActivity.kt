@@ -392,7 +392,11 @@ internal fun SettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                // UI v2：embedded=true 时顶栏不渲染，挂 scrollBehavior 反而吞掉 LazyColumn 滚动事件
+                //（TopAppBar 不存在时 MiuixScrollBehavior 仍持有 nestedScrollConnection）
+                .then(
+                    if (!embedded) Modifier.nestedScroll(scrollBehavior.nestedScrollConnection) else Modifier
+                )
                 .background(MiuixTheme.colorScheme.surface)
                 .padding(padding),
             contentPadding = PaddingValues(bottom = 20.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
