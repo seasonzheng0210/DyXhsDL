@@ -1436,26 +1436,33 @@ class DownloadService : Service() {
 
     private fun updateNotification(title: String, content: String, ongoing: Boolean) {
         val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val n = buildNotification(title, content)
-        // 复用同一个 NOTIFICATION_ID；结束时把 ongoing 标志改为非持续
-        mgr.notify(NOTIFICATION_ID, n)
+        // UI v2 S3「下载完成通知」开关：关闭后不再弹完成/失败等终端通知（进度通知 ongoing 不受影响）
+        val completionEnabled = getSharedPreferences("XHSDownloaderPrefs", Context.MODE_PRIVATE)
+            .getBoolean("download_complete_notification", true)
+        if (ongoing || completionEnabled) {
+            val n = buildNotification(title, content)
+            // 复用同一个 NOTIFICATION_ID；结束时把 ongoing 标志改为非持续
+            mgr.notify(NOTIFICATION_ID, n)
+        }
         if (!ongoing) {
             // 任务结束：移除常驻标记。简单做法：用新的非 ongoing 通知替换
-            val intent = Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (completionEnabled) {
+                val intent = Intent(this, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                val pi = PendingIntent.getActivity(
+                    this, 0, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val end = NotificationCompat.Builder(this, CHANNEL_ID)
+                    .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                    .setContentTitle(title)
+                    .setContentText(content)
+                    .setContentIntent(pi)
+                    .setAutoCancel(true)
+                    .build()
+                mgr.notify(NOTIFICATION_ID, end)
             }
-            val pi = PendingIntent.getActivity(
-                this, 0, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            val end = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_sys_download_done)
-                .setContentTitle(title)
-                .setContentText(content)
-                .setContentIntent(pi)
-                .setAutoCancel(true)
-                .build()
-            mgr.notify(NOTIFICATION_ID, end)
             // 结束通知展示后，稍等片刻再取消前台状态并停止
             android.os.Handler(mainLooper).postDelayed({
                 stopForeground(STOP_FOREGROUND_REMOVE)

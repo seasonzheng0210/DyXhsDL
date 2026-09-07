@@ -261,4 +261,13 @@
     <string name="home_preview_estimate_fmt">Will download %1$d works</string>
     <string name="home_preview_recent_hint">Last parsed · %1$s</string>
     <string name="home_preview_recent_sub">%1$d downloaded · Tap to re-parse</string>
+    <string name="notification_group_title">Notifications</string>
+    <string name="download_complete_notification">Download complete notification</string>
+    <string name="download_complete_notification_desc">Show a notification when a download finishes or fails</string>
+    <string name="diagnostics_group_title">Logs &amp; Diagnostics</string>
+    <string name="failure_log_settings_desc">Tap to view download failure records</string>
+    <string name="normal_log_settings_desc">Tap to view normal download records</string>
+    <string name="events_log_settings_desc">Feature usage events, shared with the developer for analysis</string>
+    <string name="project_home">Project Home</string>
+    <string name="project_home_desc">Open the project repository on GitHub</string>
 </resources>

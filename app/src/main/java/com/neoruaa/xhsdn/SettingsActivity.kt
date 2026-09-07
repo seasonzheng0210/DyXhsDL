@@ -21,27 +21,37 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -64,6 +74,7 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.TopAppBarState
@@ -74,8 +85,11 @@ import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
+import top.yukonga.miuix.kmp.window.WindowDialog
 import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
+import com.neoruaa.xhsdn.utils.DownloadLogger
+import com.neoruaa.xhsdn.utils.EventTracker
 import androidx.compose.ui.graphics.Color
 import android.graphics.Color as AndroidColor
 
@@ -87,6 +101,7 @@ data class SettingsUiState(
     val template: TextFieldValue = TextFieldValue(NamingFormat.DEFAULT_TEMPLATE),
     val tokens: List<NamingFormat.TokenDefinition> = emptyList(),
     val debugNotificationEnabled: Boolean = false,
+    val downloadCompleteNotification: Boolean = true,
     val selectiveDownload: Boolean = false,
     val keepScreenOn: Boolean = false,
     val showClipboardBubble: Boolean = true,
@@ -109,6 +124,7 @@ class SettingsViewModel(private val prefs: SharedPreferences) : ViewModel() {
             template = NamingFormat.DEFAULT_TEMPLATE
         }
         val debugNotificationEnabled = prefs.getBoolean("debug_notification_enabled", false)
+        val downloadCompleteNotification = prefs.getBoolean("download_complete_notification", true)
         val selectiveDownload = prefs.getBoolean("selective_download", false)
         val keepScreenOn = prefs.getBoolean("keep_screen_on", false)
         val showClipboardBubble = prefs.getBoolean("show_clipboard_bubble", true) // Default true
@@ -120,6 +136,7 @@ class SettingsViewModel(private val prefs: SharedPreferences) : ViewModel() {
             template = TextFieldValue(template),
             tokens = NamingFormat.getAvailableTokens(),
             debugNotificationEnabled = debugNotificationEnabled,
+            downloadCompleteNotification = downloadCompleteNotification,
             selectiveDownload = selectiveDownload,
             keepScreenOn = keepScreenOn,
             showClipboardBubble = showClipboardBubble,
@@ -162,6 +179,12 @@ class SettingsViewModel(private val prefs: SharedPreferences) : ViewModel() {
         }
     }
 
+    fun onDownloadCompleteNotificationChange(enabled: Boolean) = updateState {
+        it.copy(downloadCompleteNotification = enabled).also { newState ->
+            persist(newState)
+        }
+    }
+
     fun onSelectiveDownloadChange(enabled: Boolean) = updateState {
         it.copy(selectiveDownload = enabled).also { newState ->
             persist(newState)
@@ -199,6 +222,7 @@ class SettingsViewModel(private val prefs: SharedPreferences) : ViewModel() {
             .putBoolean("use_custom_naming_format", state.useCustomNaming)
             .putString("custom_naming_template", state.template.text.ifBlank { NamingFormat.DEFAULT_TEMPLATE })
             .putBoolean("debug_notification_enabled", state.debugNotificationEnabled)
+            .putBoolean("download_complete_notification", state.downloadCompleteNotification)
             .putBoolean("selective_download", state.selectiveDownload)
             .putBoolean("keep_screen_on", state.keepScreenOn)
             .putBoolean("show_clipboard_bubble", state.showClipboardBubble)
@@ -276,6 +300,7 @@ class SettingsActivity : ComponentActivity() {
                         onTemplateChange = viewModel::onTemplateChange,
                         onResetTemplate = viewModel::onResetTemplate,
                         onDebugNotificationChange = viewModel::onDebugNotificationChange,
+                        onDownloadCompleteNotificationChange = viewModel::onDownloadCompleteNotificationChange,
                         onSelectiveDownloadChange = viewModel::onSelectiveDownloadChange,
                         onKeepScreenOnChange = viewModel::onKeepScreenOnChange,
                         onShowClipboardBubbleChange = viewModel::onShowClipboardBubbleChange,
@@ -310,11 +335,13 @@ internal fun SettingsScreen(
     // UI v2：embedded=true 时内嵌主界面「我的」tab——不自绘状态栏 inset、不显示顶栏（避免双重留白）
     embedded: Boolean = false,
     onBack: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
     onCreateLivePhotosChange: (Boolean) -> Unit,
     onUseCustomNamingChange: (Boolean) -> Unit,
     onTemplateChange: (TextFieldValue) -> Unit,
     onResetTemplate: () -> Unit,
     onDebugNotificationChange: (Boolean) -> Unit,
+    onDownloadCompleteNotificationChange: (Boolean) -> Unit,
     onSelectiveDownloadChange: (Boolean) -> Unit,
     onKeepScreenOnChange: (Boolean) -> Unit,
     onShowClipboardBubbleChange: (Boolean) -> Unit,
@@ -329,8 +356,16 @@ internal fun SettingsScreen(
     } else {
         WindowInsets.statusBars.union(WindowInsets.displayCutout)
     }
+    // UI v2 S3 日志与诊断：弹窗状态（失败日志 / 正常日志 / 埋码事件）
+    var showFailureLogDialog by remember { mutableStateOf(false) }
+    var showNormalLogDialog by remember { mutableStateOf(false) }
+    var showEventsLogDialog by remember { mutableStateOf(false) }
+    var failureLogVersion by remember { mutableStateOf(0) }
+    var normalLogVersion by remember { mutableStateOf(0) }
+    var eventsLogVersion by remember { mutableStateOf(0) }
 
     top.yukonga.miuix.kmp.basic.Scaffold(
+        modifier = modifier,
         contentWindowInsets = contentInsets,
         // 玻璃态：容器底色透明，让最底 WallpaperLayer 透出
         containerColor = Color.Transparent,
@@ -522,6 +557,53 @@ internal fun SettingsScreen(
             }
 
             item {
+                SmallTitle(stringResource(R.string.notification_group_title))
+            }
+
+            item {
+                Card(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp)
+                ) {
+                    MiuixSwitchWidget(
+                        title = stringResource(R.string.download_complete_notification),
+                        description = stringResource(R.string.download_complete_notification_desc),
+                        checked = uiState.downloadCompleteNotification,
+                        onCheckedChange = onDownloadCompleteNotificationChange
+                    )
+                }
+            }
+
+            item {
+                SmallTitle(stringResource(R.string.diagnostics_group_title))
+            }
+
+            item {
+                Card(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp)
+                ) {
+                    BasicComponent(
+                        title = stringResource(R.string.failure_log_title),
+                        summary = stringResource(R.string.failure_log_settings_desc),
+                        onClick = { showFailureLogDialog = true }
+                    )
+                    BasicComponent(
+                        title = stringResource(R.string.normal_log_title),
+                        summary = stringResource(R.string.normal_log_settings_desc),
+                        onClick = { showNormalLogDialog = true }
+                    )
+                    BasicComponent(
+                        title = stringResource(R.string.events_log_title),
+                        summary = stringResource(R.string.events_log_settings_desc),
+                        onClick = { showEventsLogDialog = true }
+                    )
+                }
+            }
+
+            item {
                 SmallTitle(stringResource(R.string.about))
             }
 
@@ -535,6 +617,198 @@ internal fun SettingsScreen(
                         title = stringResource(R.string.version),
                         summary = stringResource(R.string.version_with_prefix, BuildConfig.VERSION_NAME),
                         onClick = { /* No action */ }
+                    )
+                    BasicComponent(
+                        title = stringResource(R.string.project_home),
+                        summary = stringResource(R.string.project_home_desc),
+                        onClick = {
+                            kotlin.runCatching {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/seasonzheng0210/DyXhsDL"))
+                                )
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    // UI v2 S3 日志与诊断弹窗（与 MainActivity 顶部入口共用文案；数据同源）
+    if (showFailureLogDialog) {
+        val logCtx = LocalContext.current
+        val logContent = remember(failureLogVersion) { DownloadLogger.getLogContent(logCtx) }
+        WindowDialog(
+            title = stringResource(R.string.failure_log_title),
+            show = true,
+            onDismissRequest = { showFailureLogDialog = false }
+        ) {
+            Column(modifier = Modifier.padding(top = 8.dp)) {
+                if (logContent.isBlank()) {
+                    Text(
+                        text = stringResource(R.string.failure_log_empty),
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                } else {
+                    Text(
+                        text = logContent,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp)
+                            .verticalScroll(rememberScrollState())
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TextButton(
+                        text = stringResource(R.string.clear_failure_log),
+                        onClick = {
+                            DownloadLogger.clearFailureLog(logCtx)
+                            failureLogVersion++
+                            android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.failure_log_cleared), android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        text = stringResource(R.string.cancel),
+                        onClick = { showFailureLogDialog = false }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        text = stringResource(R.string.copy_log),
+                        onClick = {
+                            val cm = logCtx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("failure_log", logContent))
+                            android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    if (showNormalLogDialog) {
+        val logCtx = LocalContext.current
+        val logContent = remember(normalLogVersion) { DownloadLogger.getNormalLogContent(logCtx) }
+        WindowDialog(
+            title = stringResource(R.string.normal_log_title),
+            show = true,
+            onDismissRequest = { showNormalLogDialog = false }
+        ) {
+            Column(modifier = Modifier.padding(top = 8.dp)) {
+                if (logContent.isBlank()) {
+                    Text(
+                        text = stringResource(R.string.normal_log_empty),
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                } else {
+                    Text(
+                        text = logContent,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp)
+                            .verticalScroll(rememberScrollState())
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TextButton(
+                        text = stringResource(R.string.clear_normal_log),
+                        onClick = {
+                            DownloadLogger.clearNormalLog(logCtx)
+                            normalLogVersion++
+                            android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.normal_log_cleared), android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        text = stringResource(R.string.cancel),
+                        onClick = { showNormalLogDialog = false }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        text = stringResource(R.string.copy_log),
+                        onClick = {
+                            val cm = logCtx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("normal_log", logContent))
+                            android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    if (showEventsLogDialog) {
+        val evCtx = LocalContext.current
+        val eventsContent = remember(eventsLogVersion) { EventTracker.getEventsLogContent(evCtx) }
+        WindowDialog(
+            title = stringResource(R.string.events_log_title),
+            show = true,
+            onDismissRequest = { showEventsLogDialog = false }
+        ) {
+            Column(modifier = Modifier.padding(top = 8.dp)) {
+                Text(
+                    text = stringResource(R.string.events_log_desc),
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+                Spacer(Modifier.height(8.dp))
+                if (eventsContent.isBlank()) {
+                    Text(
+                        text = stringResource(R.string.events_log_empty),
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                } else {
+                    Text(
+                        text = eventsContent,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp)
+                            .verticalScroll(rememberScrollState())
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TextButton(
+                        text = stringResource(R.string.clear_events_log),
+                        onClick = {
+                            EventTracker.clear(evCtx)
+                            eventsLogVersion++
+                            android.widget.Toast.makeText(evCtx, evCtx.getString(R.string.events_log_cleared), android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        text = stringResource(R.string.cancel),
+                        onClick = { showEventsLogDialog = false }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        text = stringResource(R.string.copy_log),
+                        onClick = {
+                            val cm = evCtx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("events_log", eventsContent))
+                            android.widget.Toast.makeText(evCtx, evCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
+                        }
                     )
                 }
             }

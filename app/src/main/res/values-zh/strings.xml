@@ -254,4 +254,15 @@
     <string name="home_preview_estimate_fmt">预计下载 %1$d 个</string>
     <string name="home_preview_recent_hint">上次解析 · %1$s</string>
     <string name="home_preview_recent_sub">%1$d 个已下载 · 点击重新解析</string>
+    <string name="notification_group_title">通知</string>
+    <string name="download_complete_notification">下载完成通知</string>
+    <string name="download_complete_notification_desc">下载完成或失败时在通知栏提醒你</string>
+    <string name="diagnostics_group_title">日志与诊断</string>
+    <string name="failure_log_settings_desc">查看下载失败记录，便于定位问题</string>
+    <string name="normal_log_settings_desc">查看正常下载日志，便于对照排查</string>
+    <string name="events_log_settings_desc">功能使用统计埋码事件，可复制给开发者分析</string>
+    <string name="project_home">项目主页</string>
+    <string name="project_home_desc">在浏览器中打开 GitHub 仓库</string>
+    <string name="normal_log_title">下载正常日志</string>
+    <string name="normal_log_empty">暂无正常日志记录</string>
 </resources>

@@ -1686,11 +1686,13 @@ private fun MainScreen(
                             com.neoruaa.xhsdn.SettingsScreen(
                                 uiState = settingsState,
                                 embedded = true,
+                                modifier = Modifier.fillMaxSize(),
                                 onCreateLivePhotosChange = settingsVm::onCreateLivePhotosChange,
                                 onUseCustomNamingChange = settingsVm::onUseCustomNamingChange,
                                 onTemplateChange = settingsVm::onTemplateChange,
                                 onResetTemplate = settingsVm::onResetTemplate,
                                 onDebugNotificationChange = settingsVm::onDebugNotificationChange,
+                                onDownloadCompleteNotificationChange = settingsVm::onDownloadCompleteNotificationChange,
                                 onSelectiveDownloadChange = settingsVm::onSelectiveDownloadChange,
                                 onKeepScreenOnChange = settingsVm::onKeepScreenOnChange,
                                 onShowClipboardBubbleChange = settingsVm::onShowClipboardBubbleChange,
