@@ -359,7 +359,10 @@ object DouyinParser {
      * 图文帖 images 优先（video.play_addr 是 BGM），与 detail 同规则。
      */
     internal fun parsePostListJson(body: String): DouyinPostPage {
-        if (body.isBlank()) throw Exception("post 接口空响应")
+        // 200 空 body 通常是无 UIFID 指纹的数据中心 IP 风控壳（与 403 等价），
+        // 升格为 WebDetailBlockedException，让上层 catch 走 warmup + 重试一次。
+        // v2.1.0 前硬抛「post 接口空响应」直接失败，重试编排空转（issue: S4 step②③ 视频链接反查）。
+        if (body.isBlank()) throw WebDetailBlockedException("post 接口空响应（可能缺 UIFID 指纹/被风控空壳），需 warmup 重试")
         if (body.contains("ArgusSecurityPlugin") || body.contains("Uifid Not Found")) {
             throw WebDetailBlockedException("post 被 ArgusSecurityPlugin 拦截（缺 UIFID 指纹）")
         }
