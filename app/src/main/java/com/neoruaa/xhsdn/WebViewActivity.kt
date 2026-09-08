@@ -25,6 +25,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -267,11 +268,12 @@ private fun WebViewScreen(
     // 主页爬取模式标识（加载作者主页、自动滚动收集全部 /video/{id}）
     val isHomepage = mode == "homepage"
 
-    // 平台品牌色（快手橙 / 抖音青 / 小红书红）与标识，用于来源区分
+    // 平台品牌色（快手橙 / 抖音近黑·暗近白 / 小红书红，明暗两态——抖音青 #25F4EE 白底不可见）
+    val dark = isSystemInDarkTheme()
     val sourceColor = when (source) {
-        "kuaishou" -> Color(0xFFFE5000)
-        "douyin" -> Color(0xFF25F4EE)
-        else -> Color(0xFFFE2C55)
+        "kuaishou" -> if (dark) Color(0xFFFF7A3D) else Color(0xFFFE5000)
+        "douyin" -> if (dark) Color(0xFFE8EAEF) else Color(0xFF26292F)
+        else -> if (dark) Color(0xFFFF6B81) else Color(0xFFFE2C55)
     }
     val sourceLabel = when {
         isHomepage -> "抖音主页"

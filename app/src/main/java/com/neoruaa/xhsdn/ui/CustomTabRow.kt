@@ -36,6 +36,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -93,8 +94,7 @@ fun TabRow(
             .then(modifier)
             .height(height)
             .background(color = colors.backgroundColor(false)),
-    ) {
-        val config = rememberTabRowConfig(tabs, minWidth, maxWidth, cornerRadius, itemSpacing, this.maxWidth)
+    ) {        val config = rememberTabRowConfig(tabs, minWidth, maxWidth, cornerRadius, itemSpacing, this.maxWidth)
         val density = LocalDensity.current
         val tabWidthPx = with(density) { config.tabWidth.toPx() }
         val spacingPx = with(density) { itemSpacing.toPx() }
@@ -128,7 +128,10 @@ fun TabRow(
                     .width(config.tabWidth)
                     .fillMaxHeight()
                     .clip(config.shape)
-                    .background(colors.backgroundColor(true)),
+                    .then(
+                        colors.backgroundBrush()?.let { Modifier.background(it) }
+                            ?: Modifier.background(colors.backgroundColor(true))
+                    ),
             )
             LazyRow(
                 state = config.listState,
@@ -236,7 +239,10 @@ fun TabRowWithContour(
                     .width(config.tabWidth)
                     .fillMaxHeight()
                     .clip(config.shape)
-                    .background(colors.backgroundColor(true)),
+                    .then(
+                        colors.backgroundBrush()?.let { Modifier.background(it) }
+                            ?: Modifier.background(colors.backgroundColor(true))
+                    ),
             )
             LazyRow(
                 state = config.listState,
@@ -495,11 +501,13 @@ object TabRowDefaults {
         contentColor: Color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         selectedBackgroundColor: Color = MiuixTheme.colorScheme.surfaceContainer,
         selectedContentColor: Color = MiuixTheme.colorScheme.onBackground,
+        selectedBackgroundBrush: Brush? = null,
     ): TabRowColors = TabRowColors(
         backgroundColor = backgroundColor,
         contentColor = contentColor,
         selectedBackgroundColor = selectedBackgroundColor,
         selectedContentColor = selectedContentColor,
+        selectedBackgroundBrush = selectedBackgroundBrush,
     )
 }
 
@@ -509,9 +517,13 @@ data class TabRowColors(
     private val contentColor: Color,
     private val selectedBackgroundColor: Color,
     private val selectedContentColor: Color,
+    private val selectedBackgroundBrush: Brush? = null,
 ) {
     @Stable
     internal fun backgroundColor(selected: Boolean): Color = if (selected) selectedBackgroundColor else backgroundColor
+
+    @Stable
+    internal fun backgroundBrush(): Brush? = selectedBackgroundBrush
 
     @Stable
     internal fun contentColor(selected: Boolean): Color = if (selected) selectedContentColor else contentColor

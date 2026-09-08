@@ -386,10 +386,11 @@ private fun SourcePill(source: String) {
         "douyin", "douyin_home" -> "抖音"
         else -> "小红书"
     }
+    val dark = isSystemInDarkTheme()
     val color = when (source) {
-        "kuaishou" -> Color(0xFFFE5000)
-        "douyin", "douyin_home" -> Color(0xFF00A8A8)
-        else -> Color(0xFFFE2C55)
+        "kuaishou" -> if (dark) Color(0xFFFF7A3D) else Color(0xFFFE5000)
+        "douyin", "douyin_home" -> if (dark) Color(0xFFE8EAEF) else Color(0xFF26292F)
+        else -> if (dark) Color(0xFFFF6B81) else Color(0xFFFE2C55)
     }
     Box(
         modifier = Modifier
@@ -411,12 +412,13 @@ private fun StatusPill(status: TaskStatus) {
         TaskStatus.FAILED -> "下载失败"
         TaskStatus.WAITING_FOR_USER -> "等待选择"
     }
+    // 液态玻璃语义色（与任务列表同 token，明暗两态）
     val color = when (status) {
-        TaskStatus.QUEUED -> Color(0xFF9E9E9E)
-        TaskStatus.DOWNLOADING -> Color(0xFF2196F3)
-        TaskStatus.COMPLETED -> GlassTokens.SuccessGreen
-        TaskStatus.FAILED -> Color(0xFFE5484D)
-        TaskStatus.WAITING_FOR_USER -> Color(0xFFFF9800)
+        TaskStatus.QUEUED -> GlassTokens.QueueGray
+        TaskStatus.DOWNLOADING -> if (dark) GlassTokens.DownloadingDark else GlassTokens.DownloadingLight
+        TaskStatus.COMPLETED -> if (dark) GlassTokens.SuccessGreenDark else GlassTokens.SuccessGreen
+        TaskStatus.FAILED -> if (dark) GlassTokens.FailRedDark else GlassTokens.FailRed
+        TaskStatus.WAITING_FOR_USER -> if (dark) GlassTokens.WaitAmberDark else GlassTokens.WaitAmber
     }
     Box(
         modifier = Modifier
@@ -459,7 +461,7 @@ private fun ActiveCard(
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = "${(task.progress * 100).toInt()}%",
-                        color = if (dark) Color(0xFFFFB066) else GlassTokens.OrangeTextDeep,
+                        color = if (dark) GlassTokens.DownloadingDark else GlassTokens.OrangeTextDeep,
                         fontSize = 40.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -485,7 +487,7 @@ private fun ActiveCard(
                         fontWeight = FontWeight.Medium
                     )
                     if (task.failedFiles > 0) {
-                        Text(text = "${task.failedFiles} 个失败", color = Color(0xFFE5484D), fontSize = 12.5.sp)
+                        Text(text = "${task.failedFiles} 个失败", color = if (dark) GlassTokens.FailRedDark else GlassTokens.FailRed, fontSize = 12.5.sp)
                     }
                 }
                 if (showPauseHint) {
@@ -537,7 +539,7 @@ private fun CompletedCard(
             InfoLine("内容类型", typeText(task), tp, ts)
             if (task.failedFiles > 0) {
                 Spacer(Modifier.height(8.dp))
-                InfoLine("失败文件", "${task.failedFiles} 个", Color(0xFFE5484D), ts, warn = true)
+                InfoLine("失败文件", "${task.failedFiles} 个", if (dark) GlassTokens.FailRedDark else GlassTokens.FailRed, ts, warn = true)
             }
             Spacer(Modifier.height(22.dp))
             if (task.filePaths.isNotEmpty()) {
@@ -584,10 +586,10 @@ private fun FailedCard(
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    modifier = Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(Color(0xFFE5484D))
+                    modifier = Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(if (dark) GlassTokens.FailRedDark else GlassTokens.FailRed)
                 )
                 Spacer(Modifier.width(8.dp))
-                Text(text = "下载失败", color = Color(0xFFE5484D), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(text = "下载失败", color = if (dark) GlassTokens.FailRedDark else GlassTokens.FailRed, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.weight(1f))
                 Text(text = fmtTime(task.completedAt ?: task.createdAt), color = ts, fontSize = 12.sp)
             }
@@ -598,7 +600,7 @@ private fun FailedCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (dark) Color.White.copy(alpha = 0.08f) else Color(0xFFE5484D).copy(alpha = 0.07f))
+                    .background(if (dark) Color.White.copy(alpha = 0.08f) else GlassTokens.FailRed.copy(alpha = 0.07f))
                     .padding(14.dp)
             ) {
                 Text(
@@ -634,7 +636,7 @@ private fun InfoLine(label: String, value: String, tp: Color, ts: Color, maxLine
         Text(text = label, color = ts, fontSize = 12.5.sp, modifier = Modifier.width(64.dp))
         Text(
             text = value,
-            color = if (warn) Color(0xFFE5484D) else tp,
+            color = if (warn) (if (isSystemInDarkTheme()) GlassTokens.FailRedDark else GlassTokens.FailRed) else tp,
             fontSize = 12.5.sp,
             maxLines = maxLines,
             overflow = TextOverflow.Ellipsis,

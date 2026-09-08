@@ -1926,11 +1926,14 @@ private fun HistoryPage(
                     fontSize = 14.sp,
                     height = 40.dp,
                     colors = TabRowDefaults.tabRowColors(
-                        // 玻璃分段：轨道融入页面面板（透明），选中块浮起高光玻璃，文字层级区分
+                        // 液态玻璃分段：轨道透明融入面板；选中块 = 橙→珊瑚粉渐变胶囊（v3）
                         backgroundColor = Color.Transparent,
-                        selectedBackgroundColor = if (dark) GlassTokens.ChromeHighlightDark else GlassTokens.ChromeHighlightLight,
+                        selectedBackgroundColor = if (dark) Color(0x66FFFFFF) else Color(0xE6FFFFFF),
+                        selectedBackgroundBrush = androidx.compose.ui.graphics.Brush.linearGradient(
+                            colors = listOf(GlassTokens.GradientStart, GlassTokens.GradientEnd)
+                        ),
                         contentColor = if (dark) GlassTokens.TextSecondaryDark else GlassTokens.TextSecondaryLight,
-                        selectedContentColor = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight
+                        selectedContentColor = GlassTokens.OrangeOnLight
                     ),
                     itemSpacing = 2.dp,
                     onTabSelected = onTabSelected,
@@ -2101,7 +2104,7 @@ private fun HistoryPage(
                             Spacer(Modifier.height(14.dp))
                             Text(
                                 text = "仍失败可查看失败日志定位原因",
-                                color = if (dark) Color(0xFFFFB066) else GlassTokens.OrangeTextDeep,
+                                color = if (dark) GlassTokens.DownloadingDark else GlassTokens.OrangeTextDeep,
                                 fontSize = 12.sp,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -2139,7 +2142,7 @@ private fun HistoryPage(
                                     imageVector = MiuixIcons.Download,
                                     contentDescription = null,
                                     modifier = Modifier.size(42.dp),
-                                    tint = if (dark) Color(0xFFFFB066) else GlassTokens.OrangeTextDeep
+                                    tint = if (dark) GlassTokens.DownloadingDark else GlassTokens.OrangeTextDeep
                                 )
                             }
                             Spacer(Modifier.height(24.dp))
@@ -2301,7 +2304,8 @@ private fun HistoryPage(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 16.dp, bottom = navPadding + 12.dp),
-            cornerRadius = 22.dp
+            cornerRadius = 22.dp,
+            enabled = !uiState.isDownloading
         ) {
             Card(
                 modifier = Modifier.clickable(enabled = !uiState.isDownloading) {
@@ -2370,7 +2374,8 @@ private fun HistoryPage(
                         .clickable { onClipboardBubbleActivate() },
                     cornerRadius = 18.dp,
                     colors = CardDefaults.defaultColors(
-                        color = Color(0xFFDDECDE)
+                        // 液态：玻璃卡底 + 翠绿语义（v3）
+                        color = if (dark) GlassTokens.CardDark else GlassTokens.CardLight
                     )
                 ) {
                     Row(
@@ -2381,19 +2386,19 @@ private fun HistoryPage(
                         Icon(
                             imageVector = MiuixIcons.Info,
                             contentDescription = null,
-                            tint = Color(0xFF4CAF50),
+                            tint = if (dark) GlassTokens.SuccessGreenDark else GlassTokens.SuccessGreen,
                             modifier = Modifier.size(24.dp)
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = bubbleLabel,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF4CAF50)
+                                color = if (dark) GlassTokens.SuccessGreenDark else GlassTokens.SuccessGreen
                             )
                             Text(
                                 text = detectedXhsLink,
                                 fontSize = 12.sp,
-                                color = Color(0xB04CAF50),
+                                color = (if (dark) GlassTokens.SuccessGreenDark else GlassTokens.SuccessGreen).copy(alpha = 0.7f),
                                 maxLines = 2,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
@@ -2407,7 +2412,7 @@ private fun HistoryPage(
                             Text(
                                 text = "×",
                                 fontSize = 18.sp,
-                                color = Color(0xFF4CAF50)
+                                color = if (dark) GlassTokens.SuccessGreenDark else GlassTokens.SuccessGreen
                             )
                         }
                     }
@@ -2424,7 +2429,7 @@ private fun HistoryPage(
                     }
                     drawPath(
                         path = path,
-                        color = Color(0xFFDDECDE)
+                        color = if (dark) GlassTokens.CardDark else GlassTokens.CardLight
                     )
                 }
             }
@@ -2520,11 +2525,11 @@ private fun TaskCell(
     // 玻璃语汇语义色（明/暗两态；暗色取高亮变体，保证半透玻璃卡上可读）
     val dark = isSystemInDarkTheme()
     val statusColor = when (task.status) {
-        com.neoruaa.xhsdn.data.TaskStatus.QUEUED -> if (dark) Color(0xFFADADAD) else Color(0xFF757575)
-        com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING -> if (dark) Color(0xFFFFC9A3) else GlassTokens.OrangeTextDeep
-        com.neoruaa.xhsdn.data.TaskStatus.COMPLETED -> if (dark) Color(0xFF7ED9AE) else GlassTokens.SuccessGreen
-        com.neoruaa.xhsdn.data.TaskStatus.FAILED -> if (dark) Color(0xFFFF9A8F) else Color(0xFFD64545)
-        com.neoruaa.xhsdn.data.TaskStatus.WAITING_FOR_USER -> if (dark) Color(0xFFFFC77D) else Color(0xFFC26A00)
+        com.neoruaa.xhsdn.data.TaskStatus.QUEUED -> GlassTokens.QueueGray
+        com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING -> if (dark) GlassTokens.DownloadingDark else GlassTokens.DownloadingLight
+        com.neoruaa.xhsdn.data.TaskStatus.COMPLETED -> if (dark) GlassTokens.SuccessGreenDark else GlassTokens.SuccessGreen
+        com.neoruaa.xhsdn.data.TaskStatus.FAILED -> if (dark) GlassTokens.FailRedDark else GlassTokens.FailRed
+        com.neoruaa.xhsdn.data.TaskStatus.WAITING_FOR_USER -> if (dark) GlassTokens.WaitAmberDark else GlassTokens.WaitAmber
     }
     // 玻璃文本 token（标题/元信息）
     val tPrimary = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight
@@ -2573,7 +2578,7 @@ private fun TaskCell(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .background(Color(0xFFF44336).copy(alpha = deleteProgress))
+                .background(GlassTokens.FailRed.copy(alpha = deleteProgress))
                 .clickable { onDelete() }
         ) {
             Text(
@@ -2701,7 +2706,7 @@ private fun TaskCell(
                         Text(
                             text = stringResource(R.string.failed_files_format, task.failedFiles),
                             fontSize = 12.sp,
-                            color = if (dark) Color(0xFFFF9A8F) else Color(0xFFD64545)
+                            color = if (dark) GlassTokens.FailRedDark else GlassTokens.FailRed
                         )
                     }
                 }

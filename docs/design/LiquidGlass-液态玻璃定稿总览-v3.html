@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="fgSv8zHcGGHAbWAvI3dQpw">
+<head data-page-node-id="n63Gs2m3AEG1Cst0aAQMPr">
+<meta charset="UTF-8" data-page-node-id="voUexeWPYGvA7R5h3yyVA1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="edZN4xvrtf8ZTGFRJMOk3I">
+<title>DyXhsDL v3.0 · 液态玻璃定稿总览</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,"MiSans","PingFang SC","HarmonyOS Sans SC","Microsoft YaHei",sans-serif;background:#14101c;color:#F2EFF8;padding:28px 20px 70px}
+  .page{max-width:1360px;margin:0 auto}
+  h1{font-size:24px;font-weight:650;letter-spacing:.4px;background:linear-gradient(120deg,#FFB37A,#FF8FA3 45%,#C7B9FF);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{font-size:12.5px;color:#a99cba;margin-top:8px;line-height:1.8}
+  .sub b{color:#e6def0;font-weight:600}
+  .sec{font-size:14px;font-weight:650;color:#FFB37A;margin:38px 0 16px;letter-spacing:2px;display:flex;align-items:center;gap:12px}
+  .sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(255,179,122,.35),rgba(255,255,255,.06))}
+  .pillars{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .pl{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:18px 18px 16px}
+  .pl h3{font-size:14px;font-weight:650;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .pl p{font-size:12px;color:#b3a6c4;line-height:1.8}
+  .pl .ic{font-size:16px}
+  /* ── token 表 ── */
+  .tkbox{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:18px;padding:18px 20px;margin-bottom:14px}
+  .tkbox h4{font-size:12.5px;font-weight:650;color:#FFB37A;letter-spacing:1.5px;margin-bottom:12px}
+  .tkgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px 20px}
+  .tk{display:flex;align-items:center;gap:10px;font-size:12px;color:#cdc3da;padding:5px 0;border-bottom:1px dashed rgba(255,255,255,.06)}
+  .tk:last-child{border-bottom:none}
+  .tk b{color:#fff;font-weight:600;min-width:88px;font-size:11.5px}
+  .tk code{color:#c9b8ff;font-size:11px;font-family:ui-monospace,Consolas,monospace}
+  .sw{width:18px;height:18px;border-radius:6px;flex:none;border:1px solid rgba(255,255,255,.22);box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+  .sw.lg{width:26px;border-radius:8px}
+  .dual{display:flex;align-items:center;gap:6px}
+  /* ── 手机 mockup ── */
+  .wall{display:flex;flex-wrap:wrap;gap:22px;justify-content:flex-start}
+  .cell{width:252px}
+  .phone{border-radius:48px;background:#0a0a12;padding:10px;box-shadow:0 30px 60px -20px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.08)}
+  .cap{text-align:center;font-size:11.5px;color:#8f84a2;margin-top:10px;line-height:1.6}
+  .cap b{color:#d9cfe9;font-weight:600}
+  .cap .tag-new{display:inline-block;background:linear-gradient(120deg,#FF7A18,#FF5F6D);color:#fff;border-radius:999px;padding:1px 8px;font-size:10px;font-weight:700;margin-left:6px;vertical-align:1px}
+  /* 屏内 */
+  .screen{border-radius:38px;overflow:hidden;position:relative;height:560px;background:
+      radial-gradient(120% 80% at 85% -10%,#E9D5FF 0%,rgba(233,213,255,0) 55%),
+      radial-gradient(110% 75% at -10% 30%,#FFD9E2 0%,rgba(255,217,226,0) 55%),
+      radial-gradient(130% 90% at 15% 110%,#C9ECFF 0%,rgba(201,236,255,0) 50%),
+      radial-gradient(150% 100% at 105% 95%,#FFE3C2 0%,rgba(255,227,194,0) 60%),
+      linear-gradient(160deg,#B7A6FF 0%,#FFB7CC 38%,#A9E0F2 72%,#FFC9A0 100%)}
+  .screen.dark{background:
+      radial-gradient(120% 80% at 85% -10%,#7A4DD0 0%,rgba(122,77,208,0) 55%),
+      radial-gradient(110% 75% at -10% 30%,#C2456E 0%,rgba(194,69,110,0) 55%),
+      radial-gradient(130% 90% at 15% 110%,#2E6FA8 0%,rgba(46,111,168,0) 50%),
+      radial-gradient(150% 100% at 105% 95%,#C96A2E 0%,rgba(201,106,46,0) 60%),
+      linear-gradient(160deg,#241B45 0%,#3B1E38 42%,#14283E 75%,#3A2415 100%)}
+  .island{position:absolute;left:50%;transform:translateX(-50%);top:11px;width:72px;height:21px;border-radius:11px;background:#0a0a12;z-index:5}
+  .screen.dark .island{background:#000}
+  .bdy{position:relative;height:100%;padding:44px 13px 12px;display:flex;flex-direction:column;gap:8px}
+  /* 顶栏 */
+  .sb{display:flex;align-items:center;justify-content:center;padding:2px 0 8px;position:relative;z-index:2}
+  .appnm{font-size:16.5px;font-weight:700;letter-spacing:.3px;color:#241F18;text-shadow:0 1px 0 rgba(255,255,255,.5)}
+  .screen.dark .appnm{color:#F5F6F8;text-shadow:none}
+  /* 液态玻璃块 */
+  .lg{background:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.72);box-shadow:inset 0 1.5px 0 rgba(255,255,255,.95),inset 0 -1px 0 rgba(255,255,255,.25),0 10px 24px -10px rgba(80,40,120,.4);backdrop-filter:blur(26px) saturate(2.1);-webkit-backdrop-filter:blur(26px) saturate(2.1)}
+  .screen.dark .lg{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(255,255,255,.04);backdrop-filter:blur(26px) saturate(1.9);-webkit-backdrop-filter:blur(26px) saturate(1.9)}
+  /* 分段页签 */
+  .tabs{display:flex;gap:3px;background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.5);border-radius:22px;padding:3px;margin:0 2px;box-shadow:inset 0 1px 0 rgba(255,255,255,.5)}
+  .screen.dark .tabs{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)}
+  .tab{flex:1;text-align:center;font-size:11.5px;font-weight:600;color:#241F18;padding:7px 0;border-radius:18px}
+  .tab.on{background:linear-gradient(120deg,#FF9A3D,#FF5F6D);color:#fff;box-shadow:0 5px 12px -4px rgba(255,95,109,.55),inset 0 1px 0 rgba(255,255,255,.5)}
+  .screen.dark .tab{color:#cfd4e0}
+  .screen.dark .tab.on{color:#fff;box-shadow:0 5px 14px -4px rgba(255,120,120,.4)}
+  /* 液态渐变主按钮 */
+  .btn-grad{height:38px;border-radius:999px;background:linear-gradient(120deg,#FF8A3C,#FF5F6D);box-shadow:0 8px 18px -6px rgba(255,95,109,.6),inset 0 1px 0 rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12.5px;font-weight:650}
+  .screen.dark .btn-grad{background:linear-gradient(120deg,rgba(255,138,60,.9),rgba(255,95,109,.85))}
+  /* 清除胶囊 */
+  .clear{display:flex;justify-content:flex-end;padding:0 4px}
+  .clear span{font-size:11px;color:#6a5f7a;background:rgba(255,255,255,.4);border:1px solid rgba(255,255,255,.6);border-radius:999px;padding:3px 10px;font-weight:600;box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
+  .screen.dark .clear span{color:#b9bfcc;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16)}
+  /* 任务卡 */
+  .card{border-radius:24px;padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+  .r1{display:flex;justify-content:space-between;align-items:center}
+  .plat{display:flex;align-items:center;gap:5px}
+  .dot{width:8px;height:8px;border-radius:50%;box-shadow:0 0 0 1.5px rgba(255,255,255,.85)}
+  .plat span{font-size:11.5px;font-weight:650;color:#241F18}
+  .screen.dark .plat span{color:#E8EAEF}
+  .stat{font-size:10.5px;font-weight:650;border-radius:999px;padding:2.5px 9px}
+  .st-f{background:rgba(255,77,94,.14);color:#E23145}
+  .st-ok{background:rgba(0,168,107,.15);color:#00895C}
+  .st-dl{background:linear-gradient(120deg,rgba(255,138,60,.2),rgba(255,95,109,.18));color:#E2560E}
+  .screen.dark .st-f{background:rgba(255,120,130,.2);color:#FF9AA6}
+  .screen.dark .st-ok{background:rgba(122,224,184,.16);color:#7AE0B8}
+  .screen.dark .st-dl{background:rgba(255,170,110,.16);color:#FFB37A}
+  .title{font-size:13.5px;font-weight:650;color:#241F18;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .screen.dark .title{color:#F5F6F8}
+  .r3{display:flex;justify-content:space-between;align-items:center}
+  .r3 .meta{font-size:11px;color:#6a5f7a;display:flex;align-items:center;gap:6px}
+  .r3 .meta .fail{color:#E23145;font-weight:650}
+  .screen.dark .r3 .meta{color:#b9bfcc}
+  .r3 .time{font-size:10.5px;color:#6a5f7a}
+  .screen.dark .r3 .time{color:#9aa1b0}
+  .prog{height:5px;border-radius:3px;background:rgba(36,31,24,.1);overflow:hidden;margin-top:1px}
+  .screen.dark .prog{background:rgba(255,255,255,.14)}
+  .prog>i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#FF8A3C,#FF5F6D);width:45%}
+  .thumbs{display:flex;gap:6px}
+  .thumb{width:52px;height:52px;border-radius:14px;background:linear-gradient(140deg,#E9D5FF,#FFD9E2 55%,#C9ECFF);border:1px solid rgba(255,255,255,.6);box-shadow:inset 0 1px 0 rgba(255,255,255,.8);display:flex;align-items:center;justify-content:center;color:rgba(36,31,24,.45);font-size:17px}
+  .screen.dark .thumb{background:linear-gradient(140deg,#3a2a68,#4a2340 55%,#1e3a52);border:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.5)}
+  .btns{display:flex;gap:7px}
+  .btn-mini{flex:1;height:32px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:650}
+  .btn-mini.grad{background:linear-gradient(120deg,#FF8A3C,#FF5F6D);color:#fff;box-shadow:0 6px 14px -5px rgba(255,95,109,.55)}
+  .screen.dark .btn-mini.grad{background:linear-gradient(120deg,rgba(255,138,60,.9),rgba(255,95,109,.85))}
+  .btn-mini.ghost{background:rgba(255,255,255,.42);border:1px solid rgba(255,255,255,.65);color:#241F18;box-shadow:inset 0 1px 0 rgba(255,255,255,.85)}
+  .screen.dark .btn-mini.ghost{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);color:#d6dae4}
+  /* FAB */
+  .fab{position:absolute;right:16px;bottom:66px;width:46px;height:46px;border-radius:999px;background:linear-gradient(120deg,#FF8A3C,#FF5F6D);box-shadow:0 10px 22px -6px rgba(255,95,109,.7),inset 0 1px 0 rgba(255,255,255,.6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;z-index:4}
+  /* 底栏 */
+  .nav{position:absolute;left:13px;right:13px;bottom:10px;border-radius:26px;padding:6px 4px;display:flex;z-index:4}
+  .nv{flex:1;text-align:center;font-size:11px;font-weight:600;padding:5px 0;border-radius:999px;color:#241F18}
+  .screen.dark .nv{color:#c6cbD8}
+  .nv.on{background:rgba(255,255,255,.55);color:#E04E10;box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 4px 10px -4px rgba(90,40,130,.25)}
+  .screen.dark .nv.on{background:rgba(255,255,255,.16);color:#FFB37A;box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
+  /* 详情页组件 */
+  .hdr{display:flex;align-items:center;gap:10px;padding:2px 2px 6px}
+  .back{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;color:#241F18}
+  .screen.dark .back{color:#e8eaf0}
+  .hdr .tt{font-size:15px;font-weight:700;color:#241F18;flex:1;text-align:center;padding-right:30px}
+  .screen.dark .hdr .tt{color:#F5F6F8}
+  .dnum{font-size:40px;font-weight:800;letter-spacing:-1px;line-height:1;background:linear-gradient(120deg,#FF8A3C,#FF5F6D);-webkit-background-clip:text;background-clip:text;color:transparent;text-align:center;margin:2px 0}
+  .dsub{text-align:center;font-size:11.5px;color:#6a5f7a}
+  .screen.dark .dsub{color:#aab0be}
+  .rows{display:flex;flex-direction:column;gap:0;padding:2px 0}
+  .kv{display:flex;justify-content:space-between;font-size:11.5px;padding:8px 2px;border-bottom:1px solid rgba(255,255,255,.5)}
+  .screen.dark .kv{border-bottom:1px solid rgba(255,255,255,.08)}
+  .kv .k{color:#6a5f7a}
+  .screen.dark .kv .k{color:#9aa1b0}
+  .kv .v{color:#241F18;font-weight:600;max-width:150px;text-align:right}
+  .screen.dark .kv .v{color:#e8eaf0}
+  .kv .v.g{color:#00895C}
+  .screen.dark .kv .v.g{color:#7AE0B8}
+  .sw2{width:34px;height:19px;border-radius:10px;background:linear-gradient(120deg,#FF8A3C,#FF5F6D);position:relative;flex:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.5)}
+  .sw2::after{content:"";position:absolute;top:2px;right:2px;width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  .cell-lg{width:334px}
+  .screen-lg{border-radius:38px;overflow:hidden;position:relative;height:560px;background:
+      radial-gradient(120% 80% at 85% -10%,#E9D5FF 0%,rgba(233,213,255,0) 55%),
+      radial-gradient(110% 75% at -10% 30%,#FFD9E2 0%,rgba(255,217,226,0) 55%),
+      radial-gradient(130% 90% at 15% 110%,#C9ECFF 0%,rgba(201,236,255,0) 50%),
+      linear-gradient(160deg,#B7A6FF 0%,#FFB7CC 45%,#A9E0F2 100%)}
+  .phone-lg{border-radius:48px;background:#0a0a12;padding:10px;box-shadow:0 30px 60px -20px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.08)}
+  .bdy-lg{position:relative;height:100%;padding:44px 14px 12px;display:flex;flex-direction:column;gap:8px}
+  /* 首页 */
+  .home-hero{border-radius:26px;padding:18px 16px;margin-top:2px;position:relative;overflow:hidden}
+  .home-hero::after{content:"";position:absolute;top:-30%;right:-20%;width:70%;height:140%;background:radial-gradient(80% 60% at 70% 30%,rgba(255,255,255,.5),rgba(255,255,255,0) 70%);pointer-events:none}
+  .hh1{font-size:17px;font-weight:750;color:#241F18;position:relative;z-index:1}
+  .screen.dark .hh1{color:#F5F6F8}
+  .hh2{font-size:11px;color:#6a5f7a;margin-top:4px;line-height:1.6;position:relative;z-index:1}
+  .screen.dark .hh2{color:#b0b6c4}
+  .hh3{font-size:10.5px;color:#E2560E;font-weight:650;margin-top:8px;position:relative;z-index:1}
+  .screen.dark .hh3{color:#FFB37A}
+  .input-ph{border-radius:18px;padding:11px 14px;font-size:11.5px;color:#6a5f7a;display:flex;align-items:center;gap:8px}
+  .screen.dark .input-ph{color:#9aa1b0}
+  .sec-label{font-size:11px;font-weight:700;color:#6a5f7a;letter-spacing:1.5px;margin:6px 2px 0}
+  .screen.dark .sec-label{color:#b0b6c4}
+  .rng{display:flex;gap:6px;padding:4px 0}
+  .rng div{flex:1;text-align:center;font-size:11px;font-weight:650;padding:9px 0;border-radius:16px;color:#241F18}
+  .rng div.on{background:linear-gradient(120deg,#FF8A3C,#FF5F6D);color:#fff;box-shadow:0 6px 14px -5px rgba(255,95,109,.5)}
+  .screen.dark .rng div{color:#d6dae4}
+  .rng div.off{background:rgba(255,255,255,.35);border:1px solid rgba(255,255,255,.55)}
+  .screen.dark .rng div.off{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.13)}
+  .stath{display:flex;gap:8px;padding:6px 0}
+  .stath div{flex:1;text-align:center;border-radius:20px;padding:12px 0}
+  .stath b{display:block;font-size:19px;font-weight:800;color:#241F18}
+  .screen.dark .stath b{color:#F5F6F8}
+  .stath span{font-size:10px;color:#6a5f7a}
+  .screen.dark .stath span{color:#aab0be}
+  .grd{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:2px 0}
+  .grd i{height:52px;border-radius:13px;background:linear-gradient(150deg,#E9D5FF,#FFD9E2 55%,#C9ECFF);border:1px solid rgba(255,255,255,.55)}
+  .screen.dark .grd i{background:linear-gradient(150deg,#3a2a68,#4a2340 55%,#1e3a52);border:1px solid rgba(255,255,255,.1)}
+  .c1{background:linear-gradient(135deg,#B7A6FF,#FFB7CC)}
+  .c2{background:linear-gradient(135deg,#A9E0F2,#FFC9A0)}
+  .c3{background:linear-gradient(135deg,#FFD9E2,#C9ECFF)}
+  .c4{background:linear-gradient(135deg,#E9D5FF,#FFE3C2)}
+  .swb{width:100%;height:26px;border-radius:9px;margin-bottom:6px}
+  .dnote{font-size:10.5px;color:#8f84a2;text-align:center;padding:3px 0;line-height:1.5}
+  .diff{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+  .diff th{text-align:left;color:#FFB37A;font-weight:650;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.14);font-size:11.5px;letter-spacing:1px}
+  .diff td{padding:9px 12px;color:#cdc3da;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:top;line-height:1.7}
+  .diff td:first-child{color:#fff;font-weight:600;white-space:nowrap}
+  .diff tr:last-child td{border-bottom:none}
+  .note{background:rgba(255,179,122,.07);border:1px solid rgba(255,179,122,.22);border-radius:14px;padding:12px 16px;font-size:11.5px;color:#d9c4ad;line-height:1.8;margin-top:8px}
+  .note b{color:#FFB37A}
+</style>
+</head>
+<body data-page-node-id="DX1GNW6YWTdpdHsTNEEwkH">
+<div class="page" data-page-node-id="A5we7VKRRGHVpahafbFJaV">
+
+  <h1 data-page-node-id="e0OCSKAVi1GkuqhaoTScrJ">DyXhsDL v3.0 · 液态玻璃（Liquid Glass）定稿总览</h1>
+  <div class="sub" data-page-node-id="5xnv9sBJif0TwZeW0Kb64p">
+    风格方向（用户裁定）：<b data-page-node-id="NpEdGfu8Bw1B2S66Gq0cXf">液态玻璃 · 高饱和渐变</b>，全 App 一套语言（任务列表 / 首页下载 / 详情页 / 设置）。<br data-page-node-id="LEDgu4GzgrLRrPSPrkd7FZ">
+    相比 v2.2.0「暖调壁纸 + 白 70% 玻璃 + 纯色橙」：<b data-page-node-id="Adz6DdcHz39yPD90jPD8WG">① 壁纸升级为高饱和液态多色渐变（亮粉彩 / 暗霓虹两套） ② 玻璃更透（白 50%）+ 1px 高光描边 + 更强 blur/saturate，呈「水珠折射」质感 ③ 主操作改液态渐变胶囊（橙→珊瑚粉）④ 圆角全面放大（卡 24 / 分段 22 / 胶囊 999）</b>。布局与信息架构（R1-R3 任务卡、3-tab、页签）保留 v2.2.0 已验收结构，只做视觉语汇换代。
+  </div>
+
+  <div class="sec" data-page-node-id="yIjMo2K1Ynqm13hUfBzz74">设计语言 · 三个支柱</div>
+  <div class="pillars" data-page-node-id="VfxM4In03HBHQBpoB4E1B1">
+    <div class="pl" data-page-node-id="euIVPSCBPAjrjy4wxFKJDz"><h3 data-page-node-id="eU3tIRAhK7rHQEVTH7Ce7t"><span class="ic" data-page-node-id="i0Z0bffUjB3snWTAraTNRW">🌊</span>液态渐变壁纸</h3><p data-page-node-id="0ORdEAQYDV3HrUgEoPJ9bH">壁纸即光的来源。亮色 = 粉彩高饱和（薰衣草紫→蜜桃粉→雾蓝→杏橙），暗色 = 霓虹高饱和（电紫→酒红→深海蓝→琥珀）。玻璃透出的颜色随壁纸呼吸，同一玻璃块在明暗两态自动获得截然不同的氛围。</p></div>
+    <div class="pl" data-page-node-id="EQhSjMVEetaJgcHmumEg0Q"><h3 data-page-node-id="tqvWHcObyBBFigxJsF5ntq"><span class="ic" data-page-node-id="S0zLzLalYeW6fcqzThqg0t">💧</span>折射玻璃</h3><p data-page-node-id="JxmPvS2jNvHWcBsH53nNtc">白 50%（暗 13%）半透 + 1.5px 顶部内高光 + 1px 描边 + blur(26px) saturate(2.1)。比 v2 更透、有清晰边缘光，像一滴水覆盖在彩色底上——内容层仍以白玻璃压底保证叠字可读。</p></div>
+    <div class="pl" data-page-node-id="ViSA9NiGNalV6kRWfi7Fcn"><h3 data-page-node-id="gdFUxPWPwHHm2chORfrdWA"><span class="ic" data-page-node-id="HT80BsB6UkMKWElieBMGfA">🍬</span>渐变胶囊操作</h3><p data-page-node-id="gY9OWzA0GOg8Xu97XAUbD5">主操作不再是纯色块：FAB / 主按钮 / 选中分段 / 开关全部使用「橙→珊瑚粉」120° 液态渐变 + 顶部高光 + 彩色投影。状态语义色也同步高饱和化（完成翠绿 / 失败珊瑚红 / 进行渐变橙）。</p></div>
+  </div>
+
+  <div class="sec" data-page-node-id="MtddQnT2WHCoWQVI1QMOKm">Design Token · 定稿数值</div>
+
+  <div class="tkbox" data-page-node-id="o1zCY1AUdSPYsWWSOjzUoD">
+    <h4 data-page-node-id="9aon3HR3JgULCohOxeULKS">01 · 壁纸（WallpaperLayer · 双套四色对角渐变）</h4>
+    <div class="tkgrid" data-page-node-id="juayp6hoiMotsFltonJBuA">
+      <div class="tk" data-page-node-id="bTsAjZbhYBnSPTCkkKmSWU"><b data-page-node-id="9AZ0pqDT34TgOFOKfRi8Dn">Light 亮色</b><div class="dual" data-page-node-id="9WS2H8dxJPrWOsOQXVgDef"><div class="sw c1" data-page-node-id="Wt1R2fSN9TGGr96iuxZOEC"></div><div class="sw c2" data-page-node-id="E4CQzx8xHjTEZxErFeOr4v"></div><div class="sw c3" data-page-node-id="0CCBT4lrfHarMxQxxCXKDt"></div><div class="sw c4" data-page-node-id="pI8FFdyYGGJrKusBJDrcXD"></div></div><code data-page-node-id="gxzQqwgZ7GK07gp5eSWc9d">#B7A6FF→#FFB7CC→#A9E0F2→#FFC9A0</code></div>
+      <div class="tk" data-page-node-id="f8g752GhffrtE8UhMd6eix"><b data-page-node-id="lrV49lJYOEloqNAQHAGtQx">Dark 暗色</b><div class="dual" data-page-node-id="Doaispk5gSxW38OCLxgaEp"><div class="sw c1" style="background:linear-gradient(135deg,#241B45,#3B1E38)" data-page-node-id="wk5yZLbXkjtvOdDSzaGOLm"></div><div class="sw c2" style="background:linear-gradient(135deg,#3B1E38,#14283E)" data-page-node-id="12iy3Ec3i6T9IYyg5ZiqMH"></div><div class="sw c3" style="background:linear-gradient(135deg,#14283E,#3A2415)" data-page-node-id="zOj1HrTZwN0T3WBnk6pPWh"></div></div><code data-page-node-id="Vs0stUZVLTllUxKE50ztDS">#241B45→#3B1E38→#14283E→#3A2415</code></div>
+    </div>
+  </div>
+
+  <div class="tkbox" data-page-node-id="H7o3m05Zj7AaEdqxZgV3gr">
+    <h4 data-page-node-id="Rm667iRHvdDkbZkTkhnsHp">02 · 玻璃层（Chrome 顶/底栏 &amp; Card 内容卡 · 亮/暗）</h4>
+    <div class="tkgrid" data-page-node-id="8CXJaaksG9Ju6cDSsSF3tN">
+      <div class="tk" data-page-node-id="GD111FmaijhoGPa8SyqdNM"><b data-page-node-id="gBbREqeDmxWmCnDHFJAlun">Chrome 亮</b><div class="sw lg" style="background:rgba(255,255,255,.5)" data-page-node-id="FWLmGTSiZmwE39dZDoiNjW"></div><code data-page-node-id="gImORXnW8rZcPF0QYj6iZ4">rgba(255,255,255,.50) + 描边 .72 + blur26 sat2.1</code></div>
+      <div class="tk" data-page-node-id="H1zATBQUmxMceCkdGyOP8X"><b data-page-node-id="TBFW2rSXG6w7mZmEIaB8aX">Card 亮</b><div class="sw lg" style="background:rgba(255,255,255,.55)" data-page-node-id="k1BEAHct27yFVJunPbwrdC"></div><code data-page-node-id="XqfsWLoVyqkF65ZxrOzYN0">rgba(255,255,255,.55) + 描边 .75 + 顶高光 .95</code></div>
+      <div class="tk" data-page-node-id="689gA5LfAaXsgSgoy0b355"><b data-page-node-id="40uFqwsLED92KzdmaxCI1T">Chrome 暗</b><div class="sw lg" style="background:rgba(255,255,255,.13)" data-page-node-id="UMCa2DKXk6KqhT1pkR0ri1"></div><code data-page-node-id="zA07VzlXjX2E6u60BW6HwP">rgba(255,255,255,.13) + 描边 .2</code></div>
+      <div class="tk" data-page-node-id="iX2dpQvYFwsh78ynbRhHFq"><b data-page-node-id="T0ekUwSOpgwBAM56HRHXsB">Card 暗</b><div class="sw lg" style="background:rgba(255,255,255,.15)" data-page-node-id="KVoOHDt7yyb3anZKY9xeGP"></div><code data-page-node-id="dnWCRfjte70aRUrDgdTE2z">rgba(255,255,255,.15) + 描边 .22</code></div>
+      <div class="tk" data-page-node-id="tFDD2QLmxag8T6JCfHakvE"><b data-page-node-id="ND7teeuMudE9ojFQFuIYv5">圆角体系</b><div class="sw lg" style="border-radius:12px;background:linear-gradient(120deg,#FF8A3C,#FF5F6D)" data-page-node-id="pv49aL1qgMqjZIHsDEopcS"></div><code data-page-node-id="7MxNqDRMvPmhfWVjQ6kckQ">卡 24 / 分段 22 / 胶囊 999 / 缩略图 14</code></div>
+    </div>
+  </div>
+
+  <div class="tkbox" data-page-node-id="S2Bt8ydcGn59JgwJeHEMP1">
+    <h4 data-page-node-id="VEjJsIB1EMFU3oXi3IZ9sV">03 · 主操作渐变 + 语义状态色（明/暗）</h4>
+    <div class="tkgrid" data-page-node-id="UQm2TRa1dJd9NMioxIGs0O">
+      <div class="tk" data-page-node-id="GDFyeXkI1SXLywOKoSKlfC"><b data-page-node-id="yxaTkjjTDPAnI4i2LE2Bx0">主渐变</b><div class="sw lg" style="border-radius:10px;background:linear-gradient(120deg,#FF8A3C,#FF5F6D)" data-page-node-id="JDpKcBceeSk1DHNz6SEPQM"></div><code data-page-node-id="IjqNyt0NYnvNQiucbhPIUR">120° #FF8A3C → #FF5F6D（暗 .85 alpha）</code></div>
+      <div class="tk" data-page-node-id="93E6ERJTuKSrbwB7ZuDVXj"><b data-page-node-id="Cl57Iix0pDbfACtqb0dzZs">完成 OK</b><div class="sw" style="background:#00A86B" data-page-node-id="jNCWyDaVZ4o5p2xBKNSWZ4"></div><code data-page-node-id="RtiddvNWfJvBVmO6Ibo9Vv">亮 #00895C / 暗 #7AE0B8</code></div>
+      <div class="tk" data-page-node-id="vrfGnwVPWLdn3fuDDGWKyo"><b data-page-node-id="GDa0Gip9qNa19UuSWWF25U">失败 Fail</b><div class="sw" style="background:#FF4D5E" data-page-node-id="JI9F7kilNBSrHnJBE0kQs4"></div><code data-page-node-id="ZUraCLCWf0Fhl3DKO9021G">亮 #E23145 / 暗 #FF9AA6</code></div>
+      <div class="tk" data-page-node-id="yyniz4eDFgMKoQQFk4JvZE"><b data-page-node-id="piRi7suiyGuZJrFtijEfid">等待 Wait</b><div class="sw" style="background:#FFB020" data-page-node-id="jd8cfOGXYFeC6ajJTvh17u"></div><code data-page-node-id="emQYct7cdvH10jHsgOHuGg">亮 #C26A00 / 暗 #FFC77D</code></div>
+      <div class="tk" data-page-node-id="mGiC5rbjx2tCGhC1NANIBZ"><b data-page-node-id="6hgSflQCeazA0Sb7uaspGa">排队 Queue</b><div class="sw" style="background:#9AA0A8" data-page-node-id="QQ8I6MmnbryPwtCNA5PmcB"></div><code data-page-node-id="cg0Xi8Cq6Eryhb2FddMzeY">灰 同 #9AA0A8</code></div>
+      <div class="tk" data-page-node-id="SvgIeXhxIX0SBSIbH92EJy"><b data-page-node-id="c14G74oZPRvjf7Z7rLUBev">文字</b><div class="sw" style="background:#241F18" data-page-node-id="spfOUCCYJHranhCOKpFCOE"></div><code data-page-node-id="7YXI5dYGbVA66XjOsEWTvB">主 #241F18 / 次 55% α（暗 #F5F6F8）</code></div>
+    </div>
+  </div>
+
+  <div class="sec" data-page-node-id="LxnuPEAhmaVMZmfPTYjGLX">屏幕样张 · 任务列表（亮 / 暗）</div>
+  <div class="wall" data-page-node-id="uAf5vFAWzFrwxqLfnecmEq">
+    <div class="cell" data-page-node-id="qC715bFYDgJG8zQc7kIcaA">
+      <div class="phone" data-page-node-id="cCoqtytzfBSmYXGwANFjZP"><div class="screen" data-page-node-id="1TIcpCPseE5M1BF3bNDnTo">
+        <div class="island" data-page-node-id="zSxxgdhiS0SE8IGQHFP9Cv"></div>
+        <div class="bdy" data-page-node-id="fiLn8FlAQmvRrjxOiUMsVE">
+          <div class="sb" data-page-node-id="Q0mBFN4ys5xkDRGHYDg1Vu"><div class="appnm" data-page-node-id="gjoYHoEDv3ZMiS5ZqQZ1Gs">抖快红下载</div></div>
+          <div class="tabs" data-page-node-id="KKB5EWsKpKEFS1BDsrS8kD">
+            <div class="tab on" data-page-node-id="eMzTEvW5iVRi84BXFz1dSr">抖音 2</div><div class="tab" data-page-node-id="InKp9zRG9MkIu3TRDRDGUZ">小红书 1</div><div class="tab" data-page-node-id="qB973FcGxn3uzHisXEOV6B">快手 0</div><div class="tab" data-page-node-id="1q6A3jLeqIFlEcBS1atVKx">失败 2</div>
+          </div>
+          <div class="clear" data-page-node-id="y0hWtI8vzpzouQ5Ja0PfUv"><span data-page-node-id="BP5A8fJYqmuHNjIPAY1Jmo">清除已完成 1</span></div>
+          <div class="card lg" data-page-node-id="jqWRv7PADkYwRcmEsuWYni">
+            <div class="r1" data-page-node-id="6JtQqX5RLzCa7WN6kFztOH">
+              <div class="plat" data-page-node-id="y0QjJ1IQJpmT3S8YfOwEk0"><div class="dot" style="background:#26292F" data-page-node-id="04JVGsIu2nV5FuIlTsxTYg"></div><span data-page-node-id="PFkHcB7Bzbzdl1GDrbLhC1">抖音</span></div>
+              <div class="stat st-f" data-page-node-id="QG8YKx558XMFIt1DRpBiRe">Download Failed</div>
+            </div>
+            <div class="title" data-page-node-id="4Jz4FRRu3q5wwaG2w5iCVi">长视频批量解析中（主页批量 v2）</div>
+            <div class="r3" data-page-node-id="c4eT1RrpSiRSFaXkeIhWo5">
+              <div class="meta" data-page-node-id="8GPW5ODIBzq6dnuXbGhc6F">Video · 10 files <span class="fail" data-page-node-id="HYtZnmrvEskj4G9bnubWNV">· 2 失败</span></div>
+              <div class="time" data-page-node-id="cAZJyVbVhCDLdJsvXKDPAU">09-07 11:20</div>
+            </div>
+            <div class="btns" data-page-node-id="ajtP4c9J5tk1juDztVPMFV"><div class="btn-mini grad" data-page-node-id="mA3upnriTeOhA7cPSGwtWt">重试</div></div>
+          </div>
+          <div class="card lg" data-page-node-id="epAEJSc3wWY9Kcrtl4Ua7Y">
+            <div class="r1" data-page-node-id="PyzDTT8fy32uXXKHge1TQN">
+              <div class="plat" data-page-node-id="Mbc1uWuAa5URpyDPjp8KWA"><div class="dot" style="background:#26292F" data-page-node-id="SOL2yg619OrRyIEdRvcIyw"></div><span data-page-node-id="BNRZxWrcMuxnJjAPmbIbZC">抖音</span></div>
+              <div class="stat st-ok" data-page-node-id="nCsq7MN76etrS4kEtedY1h">已完成</div>
+            </div>
+            <div class="title" data-page-node-id="w3RA1GfblTPKPEJxjwcVpJ">已完成视频：玻璃态下载器 UIv2 演示样片 1080P</div>
+            <div class="r3" data-page-node-id="7Ix6QRTicleTLLioWcDrGm"><div class="meta" data-page-node-id="kfeZEkKwztJCkZNoJAGzFl">Video · 1 files</div><div class="time" data-page-node-id="qDuui9k9HNIt2uZ2AnMlDc">09-07 11:18</div></div>
+            <div class="thumbs" data-page-node-id="i9b5x1tUXunPBgYq4VXIOr">
+              <div class="thumb" data-page-node-id="vE0WFYWBNqcPUidnuBQuTg">▶</div><div class="thumb" data-page-node-id="aTzMjwCBUcgtvTPARdDBlU">▶</div><div class="thumb" data-page-node-id="2WRqMXJUHyhra6lb0EF3ZE">▶</div><div class="thumb" data-page-node-id="EqThNyMURdRlVLP2MkZcFo">▶</div>
+            </div>
+          </div>
+          <div class="card lg" data-page-node-id="U4q15sQwYmao0t4Rjcvddv">
+            <div class="r1" data-page-node-id="455LsvxRkgDIURdDEcoDmx">
+              <div class="plat" data-page-node-id="3bzVgnRquNBdBjZLDfOFbM"><div class="dot" style="background:#FE2C55" data-page-node-id="DaDxt9B9YFVsKGFXJq5sCX"></div><span data-page-node-id="6wBtLEfEWdARFOqWwSV5yC">小红书</span></div>
+              <div class="stat st-dl" data-page-node-id="RCLnbISBmbrKFj5PncKKSt">下载中 45%</div>
+            </div>
+            <div class="title" data-page-node-id="gM4YTYOfnKHhybIPfrLivF">图文种草：秋日通勤穿搭合集分享（第三弹）</div>
+            <div class="r3" data-page-node-id="WeFZRssyFmbWzoYCAzznsC"><div class="meta" data-page-node-id="ubQSuARQEGrRDPVMWlY8ud">图文 · 12 个文件</div><div class="time" data-page-node-id="5SMy8NYlwAJ6AftGc4DWTC">09-07 10:58</div></div>
+            <div class="prog" data-page-node-id="vFDdNUlGZCqEOycDUo1hka"><i data-page-node-id="HN5oN7IoYD0eUrf6jfmEBK"></i></div>
+            <div class="btns" data-page-node-id="V9B0xSqv4ORyEyTLeFsh4l"><div class="btn-mini grad" data-page-node-id="eT2H7CkPC6nJ3xnrUeGFCa">停止</div></div>
+          </div>
+        </div>
+        <div class="fab" data-page-node-id="2jHFa6FEtLKrrA5UpYhzDY">⬇</div>
+        <div class="nav lg" data-page-node-id="7iBaJfmEdSdkUDzoV5jQDU"><div class="nv" data-page-node-id="1qdHiwHxtVhcpcMmEmBRZl">首页下载</div><div class="nv on" data-page-node-id="bEBIql2QoiQnYxEJTQMD2Y">任务</div><div class="nv" data-page-node-id="k7DwnHi9StRX8xL1MDbZt8">设置</div></div>
+      </div></div>
+      <div class="cap" data-page-node-id="YmGV9jjCOmoSqidmJthxET"><b data-page-node-id="mbIRTB4wJGcG3Q16nIQUW0">任务列表 · 亮色</b><br data-page-node-id="3l0POdbFOUOMZ92LTIZMCU">渐变壁纸透出玻璃卡 · 状态色高饱和<br data-page-node-id="UEQRDRmu8yOeQsfv9HgoZc">选中分段 = 渐变胶囊</div>
+    </div>
+
+    <div class="cell" data-page-node-id="vDONbIBFGECr0zjbin8xfB">
+      <div class="phone" data-page-node-id="UL07Ss6ETNIEFkkMIHbA17"><div class="screen dark" data-page-node-id="edWPJldvLr5joghchcUtSh">
+        <div class="island" data-page-node-id="FHbwWoEwl8iT9DxpCMDreC"></div>
+        <div class="bdy" data-page-node-id="a2DONURgRHCYvwvMqT6Uol">
+          <div class="sb" data-page-node-id="CQHY8ND60lKulVWjastV9H"><div class="appnm" data-page-node-id="ERKLIkZLKBEnlkrFfpCSYD">抖快红下载</div></div>
+          <div class="tabs" data-page-node-id="svRb6SoNkLsg4UznBkagpT">
+            <div class="tab" data-page-node-id="BYXqjgamBtKdyMzZCKSNus">抖音 2</div><div class="tab on" data-page-node-id="34ShzfBRJEoezFIjf3pDyM">小红书 1</div><div class="tab" data-page-node-id="i4BScmQWw6m3PY86HYB9WI">快手 0</div><div class="tab" data-page-node-id="rE2T6WyifYrZ5C1cf2N0Hi">失败 2</div>
+          </div>
+          <div class="card lg" data-page-node-id="0lCc3mhOGGDLLC7ETI3EXb">
+            <div class="r1" data-page-node-id="JDTp1oHi0T5aGe3gB2BAXJ">
+              <div class="plat" data-page-node-id="8ETczAzQeXaCf5jLZXgfEX"><div class="dot" style="background:#E8EAEF" data-page-node-id="8DNttlhXTDVGqAr7n3mfnR"></div><span data-page-node-id="7Kg7scEAKl8NtbTmLryqUB">抖音</span></div>
+              <div class="stat st-f" data-page-node-id="Ac08OT4OzhyMBQ9lTXF9Fd">Download Failed</div>
+            </div>
+            <div class="title" data-page-node-id="6kvduG9S40nUNll5FGFs4o">长视频批量解析中（主页批量 v2）</div>
+            <div class="r3" data-page-node-id="ujzGPoJQtPuHPAshIA2aKJ"><div class="meta" data-page-node-id="ZXU06K9kb73Weg5nuOGCMS">Video · 10 files <span class="fail" data-page-node-id="s87LARMcIOuFCcakDEwzKo">· 2 失败</span></div><div class="time" data-page-node-id="DgGBnGyAkB7ncbGEDJNFT2">09-07 11:20</div></div>
+            <div class="btns" data-page-node-id="KQCezKMtuxN3YtSGGrqXrv"><div class="btn-mini grad" data-page-node-id="POuAg9b77rRRR8H9CtqZGS">重试</div></div>
+          </div>
+          <div class="card lg" data-page-node-id="aq7GOCQRK71ooEsXhGHexy">
+            <div class="r1" data-page-node-id="HpzUOiJ0KUBpdptJAeb9bd">
+              <div class="plat" data-page-node-id="tnBOpEvNYE8AAwd7nluSR5"><div class="dot" style="background:#E8EAEF" data-page-node-id="UOymIwxP1yCTAbYL1MlciK"></div><span data-page-node-id="QzbY7BT3ux3adNLUWVIfKv">抖音</span></div>
+              <div class="stat st-ok" data-page-node-id="xYg0H7lJS9G3g88dpzCd99">已完成</div>
+            </div>
+            <div class="title" data-page-node-id="2FiLYy1FJ4diAucyXHhBCC">已完成视频：玻璃态下载器 UIv2 演示样片 1080P</div>
+            <div class="r3" data-page-node-id="7119KuqOCLd5DgfeH2RzS8"><div class="meta" data-page-node-id="UvWw6BpVN1OGnoGQVSTS99">Video · 1 files</div><div class="time" data-page-node-id="vuy3aceunQI0gbEWMjvHph">09-07 11:18</div></div>
+            <div class="thumbs" data-page-node-id="U7YDI22pXDod7YWfqD1ou9"><div class="thumb" data-page-node-id="psmaq0iqxVwWkYaIEg2BIL">▶</div><div class="thumb" data-page-node-id="u55vaEdzH3MuBfwyZlbMD5">▶</div></div>
+          </div>
+          <div class="card lg" data-page-node-id="iH8XG8dx2xuksHgeyW4K3K">
+            <div class="r1" data-page-node-id="d1dm9m3VWGVOQs1jiIHAeT">
+              <div class="plat" data-page-node-id="cHmhn6maftncN2VUg5XoFe"><div class="dot" style="background:#FF6B81" data-page-node-id="BsvgMLQabVSiVzvPLGyhGs"></div><span data-page-node-id="AKeQJbfbbFDP4iQX5CIg9h">小红书</span></div>
+              <div class="stat st-dl" data-page-node-id="WcBSa10TcGFgZcWAZZD4gN">下载中 45%</div>
+            </div>
+            <div class="title" data-page-node-id="L5BXt7cbLlaKbOLCQB7s8G">图文种草：秋日通勤穿搭合集分享（第三弹）</div>
+            <div class="r3" data-page-node-id="dnqmkPbpDWquDA4seCCyAz"><div class="meta" data-page-node-id="3VyWp2OoNrnXwepZjDgaiZ">图文 · 12 个文件</div><div class="time" data-page-node-id="C5kANMANHaWepEvGqzfAQp">09-07 10:58</div></div>
+            <div class="prog" data-page-node-id="EqnzCyddXJwdF7QBETTe6w"><i data-page-node-id="76RjkGJan52GylVPD5fgQf"></i></div>
+            <div class="btns" data-page-node-id="ZepDhKPxPFDh2k5Hum3g7j"><div class="btn-mini grad" data-page-node-id="o2J8BVWtmiUZNzTn5UE1GT">停止</div></div>
+          </div>
+        </div>
+        <div class="fab" data-page-node-id="DinBUDZZzrpAa4xKpnAFSQ">⬇</div>
+        <div class="nav lg" data-page-node-id="J5eBFagSWyUWpgnKne8KjE"><div class="nv" data-page-node-id="jB9G2thSPCtg8VaAYxk78S">首页下载</div><div class="nv on" data-page-node-id="uAHVGEI5Uk0gOlUacm2dB8">任务</div><div class="nv" data-page-node-id="L2AW0SpT8KCn2gXtBz2C2p">设置</div></div>
+      </div></div>
+      <div class="cap" data-page-node-id="Z3yK5X4UVHawjV5SQFjDEL"><b data-page-node-id="4kT4vD0AT5117sIs9YIdNx">任务列表 · 暗色</b><br data-page-node-id="TdrWuXnB2gv0aXRQOk9WPK">霓虹壁纸 + 白 13% 玻璃<br data-page-node-id="D3ns8Biuye0PC9fmHkkALU">状态胶囊暗色高亮变体</div>
+    </div>
+  </div>
+
+  <div class="sec" data-page-node-id="Uu7r23gcvMsxY01j7JzsAK">屏幕样张 · 任务详情三态</div>
+  <div class="wall" data-page-node-id="z9hbWtxwXEE8KDlJ9zWoWo">
+    <div class="cell" data-page-node-id="9kHOBDmdrehcPCSQEozynF">
+      <div class="phone" data-page-node-id="SXsC0v8CrtLpSYTJOty7ou"><div class="screen" data-page-node-id="KJCZQcLVQDXreKKNf57B3J">
+        <div class="island" data-page-node-id="6iXL9Fc9rJF21QFoS6xFQX"></div>
+        <div class="bdy" data-page-node-id="gwRTeTMDCDGbVuWQrur4cA">
+          <div class="hdr" data-page-node-id="dIiJf8fTqfiPgQv3N6tiIC"><div class="back lg" data-page-node-id="y6NI5NiL49oR9VwXAcC8sx">‹</div><div class="tt" data-page-node-id="fAxaAnP6K2YiKFpDRBBvqZ">任务详情</div></div>
+          <div class="card lg" style="align-items:center;padding:18px 14px" data-page-node-id="Qpg88rRSREUCb2TLMF7Q16">
+            <div class="dnum" data-page-node-id="UJPfaucETTQQi1orVwhWbf">45%</div>
+            <div class="dsub" data-page-node-id="o0SQtQ3zrT0DlfxRlt5rCF">5 / 12 个文件 · 正在下载</div>
+            <div class="prog" style="width:100%;margin:8px 0 2px" data-page-node-id="pguqNDYwIvMT8KIxKUnm4J"><i style="width:45%" data-page-node-id="i7qouDkZ6UwgFgNXzzk74Q"></i></div>
+          </div>
+          <div class="card lg" data-page-node-id="k17UiuyNl0PS35dYk8Lnqw">
+            <div class="title" style="font-size:13px" data-page-node-id="t4DeD4HKJBrHkNbJj0RxPV">图文种草：秋日通勤穿搭合集分享（第三弹）</div>
+            <div class="rows" style="margin-top:4px" data-page-node-id="xgqwPb5twyIhVsOYjJyAJA">
+              <div class="kv" data-page-node-id="DsnSoMW6f5wcCTfCYdOchm"><div class="k" data-page-node-id="3OORjJPZyzDu35jptC8rHI">平台</div><div class="v" data-page-node-id="2keq0Gxe5trWCr09PIwXUX">小红书</div></div>
+              <div class="kv" data-page-node-id="RqTew2iUdXWpciz3WDSIWL"><div class="k" data-page-node-id="wGeW8WOZ5tX4OL47xrDmFO">类型</div><div class="v" data-page-node-id="eLxGd46N1ACrmRmrKHbagj">图文 · 12 文件</div></div>
+              <div class="kv" data-page-node-id="RzOg9CrYvM6fXdYtvcuCDp"><div class="k" data-page-node-id="aDqWQNSceumS6lYOvihMHN">已下载</div><div class="v" data-page-node-id="6dDSKOOMrzvAcmbMDQEUQL">5 / 12</div></div>
+              <div class="kv" data-page-node-id="AYnV8tJiPjSBE6Y2MvayU4"><div class="k" data-page-node-id="UJxy5NiuCyvmKrStOMUPF5">保存位置</div><div class="v" data-page-node-id="bMRfTRtJTtTvDOQOCI9Fl9">Download/…</div></div>
+            </div>
+            <div class="btns" style="margin-top:8px" data-page-node-id="MpXLcc7nWcqYW0fUK6hRiv"><div class="btn-mini grad" data-page-node-id="1y1Mw6OZdRjuSVrg5yAbo2">停止</div></div>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="z3oBzYNcQHIq3nCkfIMkRO"><b data-page-node-id="zf81OGPFz4S7OL7oifbbBG">详情 · 下载中</b><br data-page-node-id="qLgHJ6NB2CEX5imf9yHGQL">大字进度 = 渐变数字（液态高光）</div>
+    </div>
+
+    <div class="cell" data-page-node-id="cdD8kFzXJvsw2cFKhte5FT">
+      <div class="phone" data-page-node-id="R8tMtB9ltH6Rt2DYDMdtiT"><div class="screen" data-page-node-id="PM74FJDmo1qs1H3DQpuoHQ">
+        <div class="island" data-page-node-id="jpuEpdzHWoAHebsBgJ3EoZ"></div>
+        <div class="bdy" data-page-node-id="YbqYAKNdXy8A1oDVRSKWyq">
+          <div class="hdr" data-page-node-id="BbH3x3V3HHkwooAQbrWsCO"><div class="back lg" data-page-node-id="knV8Qitpfs9TGCDcI52kbu">‹</div><div class="tt" data-page-node-id="Om0cBxiTviaGrH1EbmYqDe">任务详情</div></div>
+          <div class="card lg" style="align-items:center;padding:18px 14px" data-page-node-id="E1JECLhZ535aGvzPCSiwgZ">
+            <div style="font-size:34px;font-weight:800;color:#00895C" data-page-node-id="MeoUyKgjIEQT6lVN9esVoo">✓</div>
+            <div class="dsub" style="color:#00895C;font-weight:700" data-page-node-id="UiwTB9BVxMsL1RI8dO0ZaC">下载完成</div>
+          </div>
+          <div class="card lg" data-page-node-id="cozESXTiJ7yEb7sIIjSadN">
+            <div class="title" style="font-size:13px" data-page-node-id="U1hJSydylANY6SyXo2Fp28">已完成视频：玻璃态下载器 UIv2 演示样片 1080P</div>
+            <div class="rows" style="margin-top:4px" data-page-node-id="JkAz9msSqNFjqAVNHulIdH">
+              <div class="kv" data-page-node-id="6i7cIplhzNJkAUlCVIiTnl"><div class="k" data-page-node-id="WHeY2DuJRWzTE0P4ULCN3x">平台</div><div class="v" data-page-node-id="aC1bhs2h5SyCNJxZ042HhQ">抖音</div></div>
+              <div class="kv" data-page-node-id="XD4XYRb3WOuGIMzxMbkxo6"><div class="k" data-page-node-id="MSj5WCB7ejIjXVR3B8g1Lw">总大小</div><div class="v g" data-page-node-id="79BJvherZlMynVVHJaMNhF">24.6 MB</div></div>
+              <div class="kv" data-page-node-id="NBNcWvKMnoBTPl8Ufpalzl"><div class="k" data-page-node-id="nJXewWX8vkpISioygoEeO3">保存位置</div><div class="v" data-page-node-id="HHwPRXnKK5M2ATHuTPyu0H">Download/…</div></div>
+            </div>
+            <div class="btns" style="margin-top:8px" data-page-node-id="nRCDFnDLpsybwQiTEqbmBr"><div class="btn-mini grad" data-page-node-id="MuoSgwjYmXgH9BVu2BS2BT">打开</div><div class="btn-mini ghost" data-page-node-id="PBfIxIFQj4rHar2VioLIvf">查看文件</div></div>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="6tiO2n9PbXa3KXbHcB2KwZ"><b data-page-node-id="BdXDs4i9sIin9oYRVGfM1g">详情 · 已完成</b><br data-page-node-id="unMAjyE1CpA2yaY21kJEQS">翠绿语义 · 主/次级按钮分层</div>
+    </div>
+
+    <div class="cell" data-page-node-id="8XH4vxnYntoYWksoixmnOs">
+      <div class="phone" data-page-node-id="5m2J1RewoRDq4TWpLVWvWM"><div class="screen" data-page-node-id="5hEKpUpWq3hczS8i1f79v0">
+        <div class="island" data-page-node-id="JN0eKX38OLEcCXOA7FexsV"></div>
+        <div class="bdy" data-page-node-id="U9R74Fo6QUIoEyiCSK0rhH">
+          <div class="hdr" data-page-node-id="t7sGQAMuFGbQGsnXlUkOrG"><div class="back lg" data-page-node-id="FtygfEHn3ppxoX3Tz8eeTY">‹</div><div class="tt" data-page-node-id="5ZGojdvw5VH6GfBBleiYXt">任务详情</div></div>
+          <div class="card lg" style="align-items:center;padding:18px 14px" data-page-node-id="r2Z7im7Lld2UyYGRhgIwQV">
+            <div style="font-size:34px;font-weight:800;color:#E23145" data-page-node-id="peIdFGs6jeu8oqU5o55XP6">!</div>
+            <div class="dsub" style="color:#E23145;font-weight:700" data-page-node-id="09oJ5rliDZln8HLgavUUYN">下载失败</div>
+          </div>
+          <div class="card lg" data-page-node-id="PL9hN7UO9xeGwpGErU6Srv">
+            <div class="title" style="font-size:13px" data-page-node-id="mABGI0U1RNbwJnhePiL5rS">长视频批量解析中（主页批量 v2）</div>
+            <div class="rows" style="margin-top:4px" data-page-node-id="E7ArfqjSgkqKiYLfIQuMSp">
+              <div class="kv" data-page-node-id="i9SP7jkLHdct4t8t8scDga"><div class="k" data-page-node-id="Qw9cBmLGUY3IS4A54xj1Vr">失败原因</div><div class="v" data-page-node-id="9gGn9KgaCFNMrQ2JUkzbDP">post 接口空响应（风控）…</div></div>
+              <div class="kv" data-page-node-id="4ifApwGPuMRvXZDOY6sRWl"><div class="k" data-page-node-id="2w2N1JOnDHx5cK9sUp6fCS">失败文件</div><div class="v" style="color:#E23145" data-page-node-id="kDouk77etleFm3CHFWbmyw">2 / 10</div></div>
+              <div class="kv" data-page-node-id="4DwDRleT9cV8DEeoIHwVov"><div class="k" data-page-node-id="4iYZSu8gz7m8SJGylZVkEj">耗时</div><div class="v" data-page-node-id="NBemohXDtKqIor021EIkeG">01:32</div></div>
+            </div>
+            <div class="btns" style="margin-top:8px" data-page-node-id="Ffmr5QHtmypADCl23QfNZF"><div class="btn-mini grad" data-page-node-id="biVJQIQwDXuDy0BbcAW4eW">重试</div><div class="btn-mini ghost" data-page-node-id="JMmoCJCajQlGkSl2KWXsAn">查看失败日志</div></div>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap" data-page-node-id="jSenxFbAgH3eGzvfLfOdRb"><b data-page-node-id="X3JXQnGCFXi4lFnUH3nYfx">详情 · 失败</b><br data-page-node-id="B8vzUmEURkr0PY8MmlNruJ">珊瑚红语义 · 日志入口次级钮</div>
+    </div>
+  </div>
+
+  <div class="sec" data-page-node-id="OvxWyhW1vU52te7eA3HP8W">屏幕样张 · 首页下载 &amp; 设置</div>
+  <div class="wall" data-page-node-id="fBsPsTWQkxyPlCIzA9JACH">
+    <div class="cell" data-page-node-id="tEG97YAicZG7yuMMNmeYyW">
+      <div class="phone" data-page-node-id="EWdIqDAivgobXjQuN4oTrE"><div class="screen" data-page-node-id="y5QxXAGUYYmGLofLLtbIcS">
+        <div class="island" data-page-node-id="7efVufSDrQe7EZSX9r57WC"></div>
+        <div class="bdy" data-page-node-id="V8kiwcvcyyohf8PdDYRg7Z">
+          <div class="sb" data-page-node-id="szsp2TBtBxoEdSlu9Ibg3Y"><div class="appnm" data-page-node-id="cz6YC8e4htjYQZJXRM2f8t">抖快红下载</div></div>
+          <div class="home-hero lg" data-page-node-id="wF9xrV46xj2z5xAd8nehdL">
+            <div class="hh1" data-page-node-id="v9FfTjOzHOctBQWFE5nL6i">批量下载博主主页</div>
+            <div class="hh2" data-page-node-id="TylInNfsTtm9lDrnFgTTLs">粘贴博主主页分享链接，一键批量解析全部作品</div>
+            <div class="hh3" data-page-node-id="aBHHzdUdr8PlQ5Jbzv1g9J">支持抖音 · 快手 · 小红书</div>
+          </div>
+          <div class="card lg" style="padding:6px 4px" data-page-node-id="n5DKM1luPGL2HEp5IyfU68"><div class="input-ph" data-page-node-id="UBAfwW8bAlK7SiMxp9Qm8N">🔗 粘贴主页链接，解析全部作品</div></div>
+          <div class="sec-label" data-page-node-id="9wQJ0PQm9sUxooyU2QKBAD">下载范围</div>
+          <div class="rng" data-page-node-id="gm2Bbt34BcJXsIRVqBBaGN"><div class="off" data-page-node-id="4QkG9oAGoegaKLiHFneC9H">仅新增</div><div class="on" data-page-node-id="DSzQcqtQhiXz6fFS7OptAb">全部</div><div class="off" data-page-node-id="DXFiPzqIvSEIdaB8tD5A2S">最新 50</div></div>
+          <div class="stath" data-page-node-id="uF1LpWwZVx3nb11MNWnUbR">
+            <div class="lg" data-page-node-id="I8Z9adboOXJuxBarZH3u5H"><b data-page-node-id="koL2455O9HhdJm0RsLehBP">128</b><span data-page-node-id="tLk1dFnFqJ2oQmZtTg3iH1">全部作品</span></div>
+            <div class="lg" data-page-node-id="YE07SYjA8QQTk4fNjhDKJ7"><b data-page-node-id="WFaHBZviGqk49EtvYGRxRn">36</b><span data-page-node-id="EoMlsmDAhCNfOW1sFaYQqe">新增</span></div>
+            <div class="lg" data-page-node-id="hp88K8MgoDGcCQAQg7QYNb"><b data-page-node-id="YBQMFpNYW45TZ9Kyej5yLs">92</b><span data-page-node-id="3HDcIv99QqsBPywEIBZsNp">已下载</span></div>
+          </div>
+          <div class="sec-label" data-page-node-id="07fXvKdRbprjxtq3U0dYAQ">作品预览</div>
+          <div class="grd" data-page-node-id="pNT2NWkpHRdF1EIO0JhQvl"><i data-page-node-id="Sa2tEQcx102Zmvf06LcznJ"></i><i data-page-node-id="gZGB7zaWkbK2Cxp11QvE54"></i><i data-page-node-id="AynBmBJIqAAeXmdJ9PDo5f"></i><i data-page-node-id="2cPYvySkb2w1bAxiMCdJdZ"></i><i data-page-node-id="aTxWMp3hFS8ZdDXFXwbPrv"></i><i data-page-node-id="07OUNozZPB6y5pEXCFsjMT"></i><i data-page-node-id="f1SG1cFWbWO7xiSw23LM0D"></i><i data-page-node-id="4Ora3byBqB2JjL7LKk7H6i"></i><i data-page-node-id="Dhqsa8Lly2oLntODqEx41x"></i></div>
+          <div class="btn-grad" style="margin-top:4px" data-page-node-id="D4nqWdviMZF0L3iUEvMZFP">开始批量下载（128 个作品）</div>
+        </div>
+        <div class="nav lg" style="top:auto" data-page-node-id="vJvx9D9Qyj38hzC2VGEX4k"><div class="nv on" data-page-node-id="nDQnae10sHT7hLvydkoJfG">首页下载</div><div class="nv" data-page-node-id="BFBbEhhy1I3a0HL4Gpm6CN">任务</div><div class="nv" data-page-node-id="aGDFROQUCqZYlQ4KaCwIpX">设置</div></div>
+      </div></div>
+      <div class="cap" data-page-node-id="GrbUmNuDk2psO4OVlD5nnd"><b data-page-node-id="TCbvx2ZpBHtDqh9k3cQSLg">首页下载</b><br data-page-node-id="DcKTxoKHxDYGxL13YxyO6Z">hero 渐变玻璃卡 + 统计三卡<br data-page-node-id="AQXc7md9cLJMcz4Llw6VFD">范围档渐变选中</div>
+    </div>
+
+    <div class="cell" data-page-node-id="yVR464HZmjMWQ0DewYkd3l">
+      <div class="phone" data-page-node-id="4E6YVQ6iKj49rNQk7bC2NR"><div class="screen" data-page-node-id="rFPQuw22xUU81ZWgKz7fa5">
+        <div class="island" data-page-node-id="GkuXJCesHZpMamDnkZ0IsD"></div>
+        <div class="bdy" data-page-node-id="cDhfJvzZGp61gomtfXwcJg">
+          <div class="sb" data-page-node-id="uhpn6tNZUatPMuDKyLCJ9t"><div class="appnm" data-page-node-id="I67vCRjxPrto1OvFBp0qpJ">设置</div></div>
+          <div class="card lg" style="padding:4px 14px" data-page-node-id="7wD4AhM5UYrBT6PAnWAh8q">
+            <div class="sec-label" style="margin:8px 2px 2px" data-page-node-id="siOIp3snQZdCwv7nTsd5PI">下载选项</div>
+            <div class="kv" data-page-node-id="HrAdQv5jLts3SKmLgufOIe"><div class="k" data-page-node-id="UtL0ShTnjAkmJatGRFQLbj">创建实况照片</div><div class="v" style="display:flex;justify-content:flex-end" data-page-node-id="fUsrsc9uXCMahMQUvMxUP4"><div class="sw2" data-page-node-id="YEuV2kq5zTMvLdpvKuv0QQ"></div></div></div>
+            <div class="kv" data-page-node-id="tkBciFKNH96Edw96mRKvTI"><div class="k" data-page-node-id="tRHDfGTYMFrqBNuAuViH0I">自定义命名</div><div class="v" style="display:flex;justify-content:flex-end" data-page-node-id="owHfP8m2P6Gn31zQr2xiTy"><div class="sw2" data-page-node-id="SBgzqpcaloiMpkq75Vj3UQ"></div></div></div>
+            <div class="kv" data-page-node-id="YZAFYORJ9JDcd36IUPJAWV"><div class="k" data-page-node-id="Aqn3Sij7zeFyB6qobpKpTn">智能选择下载</div><div class="v" style="display:flex;justify-content:flex-end" data-page-node-id="ahGlQg0NsdTPvzp73UqjeA"><div class="sw2" data-page-node-id="BW0JYCRpKbeCpYI72epsp9"></div></div></div>
+            <div class="kv" data-page-node-id="BM0a2ZU5QNKTMhchlQSsaL"><div class="k" data-page-node-id="xcsq31O7rPhu0IsxEDXhXs">保持屏幕常亮</div><div class="v" style="display:flex;justify-content:flex-end" data-page-node-id="OKTogNPzgYxm6eGHOSeZ3J"><div class="sw2" data-page-node-id="XwuQWIdPxCJVYgcn0EdEdT"></div></div></div>
+            <div class="sec-label" style="margin:8px 2px 2px" data-page-node-id="ttGT3Hd01oEL4bXzdo1aQX">剪贴板</div>
+            <div class="kv" data-page-node-id="vMQ5Rb8B6VmX4ub4ZUcyZR"><div class="k" data-page-node-id="qMAgry0bhgCrPtgvm15Duc">自动读取剪贴板</div><div class="v" style="display:flex;justify-content:flex-end" data-page-node-id="yt8RwYWGvAqyQEwOv1H6xX"><div class="sw2" data-page-node-id="QeVUYgM9iuDFRmVfIWE1LC"></div></div></div>
+            <div class="kv" data-page-node-id="B9877g9fmH3cqnvxYefdSU"><div class="k" data-page-node-id="F4kaR24YEM9yXN4z7b6kAk">显示检测气泡</div><div class="v" style="display:flex;justify-content:flex-end" data-page-node-id="3KCRuF7TmtHEDCizqBLtl8"><div class="sw2" data-page-node-id="vM4766SqDMBj4FNTaxKnd1"></div></div></div>
+          </div>
+        </div>
+        <div class="nav lg" data-page-node-id="0IHx8ynat8UAEqVM954OtO"><div class="nv" data-page-node-id="BwCue52LYHQE2nfzpqonIe">首页下载</div><div class="nv" data-page-node-id="L2NLWZ7WC4nTpsOKzi88PM">任务</div><div class="nv on" data-page-node-id="v8syXKA2om49CApkWAg97G">设置</div></div>
+      </div></div>
+      <div class="cap" data-page-node-id="VsOWvtrY9uYw5O16AMIhui"><b data-page-node-id="NS4zeGDgrEJqGEiiEb9eM0">设置</b><br data-page-node-id="xAxdjHyCwND7au3wQTPqk8">分组玻璃卡 · 渐变开关</div>
+    </div>
+  </div>
+
+  <div class="sec" data-page-node-id="Iw2P7gHplEEApqSg8AHQUF">v2.2.0 → v3.0 差异对照</div>
+  <table class="diff" data-page-node-id="cRawcq12W9FOCzZZJiIQIb">
+    <tr data-page-node-id="d5ivQyRiv5nIdPyV1IJ6Kn"><th data-page-node-id="h7fpxJZF3ADQD1E1Gzq9Or">维度</th><th data-page-node-id="6D3pPvO7fGdsXt7KVKN2vi">v2.2.0（软光玻璃）</th><th data-page-node-id="eC4tEyyv8pDhU9PxspZ1iO">v3.0（液态玻璃）</th></tr>
+    <tr data-page-node-id="6fIJjRSJJayIA5QUGn0P4z"><td data-page-node-id="rBkJW1Sy8iGEYsEDxjcAy3">壁纸</td><td data-page-node-id="9AmjQLJJTP0JOCwYBRwpyT">徕卡暖调低饱和四色（米白/焦糖/鼠尾草/雾蓝）</td><td data-page-node-id="hABQHHoWNBoeKVSsiXDdjI">高饱和液态渐变：亮=粉彩（紫/粉/蓝/杏），暗=霓虹（电紫/酒红/深蓝/琥珀）</td></tr>
+    <tr data-page-node-id="VIadrc2rBK3DIgH2hWg2xX"><td data-page-node-id="4As62Y7I20q1cuHcKHxEPk">玻璃透明度</td><td data-page-node-id="1AJlhuJG4H704OkdoJ1voY">Chrome 白 70% / Card 白 85%（近实心）</td><td data-page-node-id="VPXCGuP4Z3sowCVqp9nmYx">Chrome 白 50% / Card 白 55%（更透，壁纸色透出）</td></tr>
+    <tr data-page-node-id="bu5QHLpHN98UVowCXOLqmS"><td data-page-node-id="3XgfCoPepMLdPsj0UAlKvH">玻璃描边</td><td data-page-node-id="Jl3c8iPE92SSDFESAnUEDD">仅顶部 1px 高光，无边缘描边</td><td data-page-node-id="7SUeVdBH0UQBbA2Nxbu8lZ">1px 半透描边 + 1.5px 顶部内高光 → 「水珠折射」边缘光</td></tr>
+    <tr data-page-node-id="qqHq4rPxB3sRG6rDUbA5AN"><td data-page-node-id="5FbDP48pmHz22dHtkOSfL3">主操作</td><td data-page-node-id="IJqMpBnf0Fsoy46XZ7sEOM">纯色玻璃橙 rgba(255,105,0,.82)</td><td data-page-node-id="qVy0dNNtjO3XwCuiicLend">120° 渐变胶囊 #FF8A3C→#FF5F6D + 顶高光 + 彩色投影</td></tr>
+    <tr data-page-node-id="cWQyKuhr5PyxERzYE1JfVR"><td data-page-node-id="1JAWzShYpxMMuoOeLMrWzf">选中分段</td><td data-page-node-id="p4ZEOQzUc9gvfp3D7TWMMe">白 90% 浮起块</td><td data-page-node-id="ZkWGMr0iET3D9fGwUjimtm">渐变胶囊（与主按钮同语汇）</td></tr>
+    <tr data-page-node-id="nR95RZPmoknKuT3sMeFwHF"><td data-page-node-id="ckXmGB9SWiiLdjMLFtUL34">状态色</td><td data-page-node-id="0dutj65b8pqRxCT0mEUmFz">Material 蓝/绿/红 收敛版</td><td data-page-node-id="s2d14Vq4yjVQV39StMZfxv">高饱和：完成翠绿 #00895C / 失败珊瑚 #E23145 / 等待琥珀 / 排队灰</td></tr>
+    <tr data-page-node-id="FFF1Ds804rTImcsz545YHZ"><td data-page-node-id="AI706IFaTUuRuHGPcD3lVW">圆角</td><td data-page-node-id="EUeeiYDDfTZddnxDVdB0hY">卡 18 / 分段 20</td><td data-page-node-id="GB69PZ8KHmDhOMAdZZjtzb">卡 24 / 分段 22 / 缩略图 14</td></tr>
+    <tr data-page-node-id="uP3bBnvqk1YHcaGrsQTUo8"><td data-page-node-id="P5sz1cSvOQ8CIBcKkAy2sO">布局与结构</td><td colspan="2" data-page-node-id="K4aq2xpRKEa9ISOvVf30Jc">不变：3-tab、R1-R3 任务卡、左滑删除、页签过滤、空态双场景 —— v2.2.0 已验收，本轮只换视觉语汇</td></tr>
+  </table>
+
+  <div class="note" data-page-node-id="9idHZa9ofDsP3kPSR8JUtc">
+    <b data-page-node-id="nW6ewiYOUu4q2EZPUiDBhl">落地方式：</b>全部改动收敛在 GlassTokens / GlassColorSchemes / WallpaperLayer / GlassPrimaryWrap + 页签 colors / 语义色引用点，一处调 token 全 App 生效。<br data-page-node-id="kzDxyhhmV8TFuI3ND7JF9n">
+    <b data-page-node-id="HlHikK1yIB7I0LANxKppUv">风险控制：</b>渐变胶囊按钮上的文字保持白 / onPrimary；暗色所有彩色状态取高亮变体保证半透玻璃可读；任务卡仍以白 55% 底承载正文（叠字安全）。验收 = 亮/暗各五屏截图。
+  </div>
+
+</div>
+</body>
+</html>

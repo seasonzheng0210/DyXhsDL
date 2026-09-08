@@ -140,7 +140,7 @@ fun OnboardingScreen(
                                 .clip(RoundedCornerShape(999.dp))
                                 .background(
                                     if (active) {
-                                        if (dark) Color(0xFFFFB066) else GlassTokens.OrangePrimaryLight
+                                        if (dark) GlassTokens.DownloadingDark else GlassTokens.OrangePrimaryLight
                                     } else {
                                         if (dark) Color.White.copy(alpha = 0.30f) else GlassTokens.OrangePrimaryLight.copy(alpha = 0.28f)
                                     }
@@ -289,7 +289,7 @@ private fun SkillRow(
                     imageVector = icon,
                     contentDescription = null,
                     modifier = Modifier.size(23.dp),
-                    tint = if (dark) Color(0xFFFFB066) else GlassTokens.OrangeTextDeep
+                    tint = if (dark) GlassTokens.DownloadingDark else GlassTokens.OrangeTextDeep
                 )
             }
             Spacer(Modifier.width(14.dp))
@@ -366,7 +366,7 @@ private fun PermRow(
                 imageVector = icon,
                 contentDescription = null,
                 modifier = Modifier.size(22.dp),
-                tint = if (dark) Color(0xFFFFB066) else GlassTokens.OrangeTextDeep
+                tint = if (dark) GlassTokens.DownloadingDark else GlassTokens.OrangeTextDeep
             )
             Spacer(Modifier.width(12.dp))
             Column {
