@@ -453,7 +453,7 @@ private fun ActiveCard(
                 Text(text = "图文笔记下载前可先挑选；重新下载将下载全部内容", color = ts, fontSize = 12.5.sp)
                 Spacer(Modifier.height(18.dp))
                 GlassPrimaryWrap(Modifier.fillMaxWidth().height(48.dp), cornerRadius = 24.dp) {
-                    Button(onClick = onRedownload, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColorsPrimary()) {
+                    Button(onClick = onRedownload, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White)) {
                         Text("重新下载全部", color = fg, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
                 }
@@ -496,7 +496,7 @@ private fun ActiveCard(
                 }
                 Spacer(Modifier.height(20.dp))
                 GlassPrimaryWrap(Modifier.fillMaxWidth().height(48.dp), cornerRadius = 24.dp) {
-                    Button(onClick = onStop, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColorsPrimary()) {
+                    Button(onClick = onStop, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White)) {
                         Text("停止下载", color = fg, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
                 }
@@ -545,12 +545,12 @@ private fun CompletedCard(
             if (task.filePaths.isNotEmpty()) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     GlassPrimaryWrap(Modifier.weight(1f).height(46.dp), cornerRadius = 23.dp) {
-                        Button(onClick = onOpenFirst, modifier = Modifier.fillMaxWidth().height(46.dp), colors = ButtonDefaults.buttonColorsPrimary()) {
+                        Button(onClick = onOpenFirst, modifier = Modifier.fillMaxWidth().height(46.dp), colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White)) {
                             Text("打开", color = fg, fontSize = 14.5.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                     GlassPrimaryWrap(Modifier.weight(1f).height(46.dp), cornerRadius = 23.dp) {
-                        Button(onClick = onBrowseFiles, modifier = Modifier.fillMaxWidth().height(46.dp), colors = ButtonDefaults.buttonColorsPrimary()) {
+                        Button(onClick = onBrowseFiles, modifier = Modifier.fillMaxWidth().height(46.dp), colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White)) {
                             Text("查看文件", color = fg, fontSize = 14.5.sp, fontWeight = FontWeight.Medium)
                         }
                     }

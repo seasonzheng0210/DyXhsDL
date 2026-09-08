@@ -399,7 +399,8 @@ internal fun SettingsScreen(
                 )
                 .background(MiuixTheme.colorScheme.surface)
                 .padding(padding),
-            contentPadding = PaddingValues(bottom = 20.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
+            // embedded=内嵌「我的」tab：dock overlay 浮层，预留 dock 高防末项被遮
+            contentPadding = PaddingValues(bottom = 20.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (embedded) 64.dp else 0.dp),
 //            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {

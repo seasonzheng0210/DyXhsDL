@@ -16,17 +16,19 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * 液态玻璃主操作按钮装饰（v3.0：橙→珊瑚粉渐变扫光 + 折射描边 + 顶部高光）。
+ * 液态玻璃主操作按钮装饰（v3.0.2 修正：渐变底在内容层之下）。
  *
- * 用法：包裹任意主操作（FAB Card / Miuix primary Button / 对话框确认钮），
- * 子组件负责底色与点击；本层只加：
- *  - 轻投影（亮色可见，暗色压低，符合深底不投影惯例）；
- *  - **液态渐变扫光**：右下→左上对角叠加「珊瑚粉→透明」低透明渐变 + 顶部白高光，
- *    与半透明 primary 底 + 高饱和壁纸共同形成橙→粉渐变感知（不遮文字/按压反馈）；
- *  - 1px 半透折射描边（水珠边缘光）；
- *  - 统一裁切圆角（内容自身的圆角不必与本层一致，本层裁切会收敛视觉）。
+ * v3.0.2 排版验收发现的两个问题（截图实证）：
+ *  1. 扫光 Canvas 原先叠在 content 之上 → 34% 粉扫光 + 50% 白高光把白色按钮文字冲糊；
+ *  2. FAB 的内容是裸 Box（无底色）→ 渐变层又只在 enabled 叠加 → FAB 实际没底色，浅得隐形。
  *
- * @param enabled 是否启用态；false 时隐藏渐变扫光/高光并压低投影（供 FAB 禁用态用）。
+ * 现结构（对齐 mockup .btn-mini.grad / .fab 的完整渐变实底）：
+ *  - enabled 时先画「全量液态渐变底」（120° #FF8A3C→#FF5F6D）+ 顶部高光 + 1px 折射描边；
+ *  - content() 画在渐变之上 → 白字永远清晰；
+ *  - 调用方的 Button/Box 底色应透明（ContainerColor=Transparent）让渐变透出。
+ *  - disabled 时渐变层整体不画 → 露出调用方灰化底（FAB 禁用态）。
+ *
+ * @param enabled 是否启用态；false 时隐藏渐变底/高光（供 FAB 禁用态用）。
  */
 @Composable
 fun GlassPrimaryWrap(
@@ -46,19 +48,15 @@ fun GlassPrimaryWrap(
             )
             .clip(RoundedCornerShape(cornerRadius))
     ) {
-        content()
-        // 液态渐变扫光 + 折射描边（enabled 才叠加，禁用态露出灰化底）
+        // 液态渐变底 + 高光 + 折射描边（在内容层之下，文字不被盖）
         if (enabled) {
             Canvas(modifier = Modifier.matchParentSize()) {
-                // 右下珊瑚粉扫光（对角，模拟玻璃对壁纸色的折射透出）
+                // 全量渐变底（mockup: linear-gradient(120deg,#FF8A3C,#FF5F6D)）
                 drawRect(
                     brush = Brush.linearGradient(
-                        colors = listOf(
-                            GlassTokens.GradientEnd.copy(alpha = if (dark) 0.26f else 0.34f),
-                            Color.Transparent
-                        ),
-                        start = Offset(size.width, size.height),
-                        end = Offset(0f, 0f)
+                        colors = listOf(GlassTokens.GradientStart, GlassTokens.GradientEnd),
+                        start = Offset(0f, 0f),
+                        end = Offset(size.width * 0.85f, size.height)
                     )
                 )
                 // 顶部 1.5px 高光（暗色压低）
@@ -86,5 +84,6 @@ fun GlassPrimaryWrap(
                 )
             }
         }
+        content()
     }
 }

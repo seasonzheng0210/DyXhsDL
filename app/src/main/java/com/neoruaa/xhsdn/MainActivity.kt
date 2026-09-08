@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -66,6 +67,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -1314,335 +1316,37 @@ private fun MainScreen(
             // 玻璃态：容器底色透明，让最底 WallpaperLayer 透出
             containerColor = Color.Transparent,
             topBar = {
-                // UI v2：顶栏标题统一显示 app 名「抖快红下载」（不再随主标签切换）
-                val title = "抖快红下载"
-                TopAppBar(
-                    title = title,
-                    largeTitle = title,
-                    scrollBehavior = miuixScrollBehavior,
-                    actions = {
-                        Box(
-                            modifier = Modifier
-                                .padding(end = 20.dp)
-//                                .size(48.dp)
-                                .clickable { menuExpanded = !menuExpanded },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = MiuixIcons.MoreCircle,
-                                contentDescription = "更多",
-//                                modifier = Modifier.size(24.dp)
-                            )
-
-                            val menuItems = listOf(stringResource(R.string.copy_description), stringResource(R.string.clear_history), stringResource(R.string.menu_failure_log), stringResource(R.string.menu_normal_log), stringResource(R.string.menu_package_log), stringResource(R.string.menu_events_log))
-
-                            WindowListPopup(
-                                show = menuExpanded && !uiState.isDownloading,
-                                popupPositionProvider = rememberOffsetPopupPositionProvider(x = (-60).dp),
-                                alignment = PopupPositionProvider.Align.TopEnd,
-                                onDismissRequest = { menuExpanded = false }
-                            ) {
-                                ListPopupColumn {
-                                    menuItems.forEachIndexed { index, item ->
-                                        DropdownImpl(
-                                            text = item,
-                                            optionSize = menuItems.size,
-                                            isSelected = false,
-                                            onSelectedIndexChange = {
-                                                menuExpanded = false
-                                                when (index) {
-                                                    0 -> {
-                                                        onCopyText()
-                                                    }
-                                                    1 -> {
-                                                        showClearHistoryDialog = true
-                                                    }
-                                                    2 -> {
-                                                        EventTracker.track(ctx, "logs_view", mapOf("type" to "failure"))
-                                                        showFailureLogDialog = true
-                                                    }
-                                                    3 -> {
-                                                        EventTracker.track(ctx, "logs_view", mapOf("type" to "normal"))
-                                                        showNormalLogDialog = true
-                                                    }
-                                                    4 -> {
-                                                        EventTracker.track(ctx, "logs_view", mapOf("type" to "package"))
-                                                        // 打包日志：压缩 正常日志 + 失败日志，并通过分享面板导出
-                                                        val zip = DownloadLogger.packageLogs(ctx)
-                                                        if (zip == null) {
-                                                            android.widget.Toast.makeText(
-                                                                ctx,
-                                                                ctx.getString(R.string.package_log_failed),
-                                                                android.widget.Toast.LENGTH_SHORT
-                                                            ).show()
-                                                        } else {
-                                                            val uri = androidx.core.content.FileProvider.getUriForFile(
-                                                                ctx,
-                                                                "${ctx.packageName}.fileprovider",
-                                                                zip
-                                                            )
-                                                            val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                                                type = "application/zip"
-                                                                putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                                                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                            }
-                                                            ctx.startActivity(
-                                                                android.content.Intent.createChooser(
-                                                                    shareIntent,
-                                                                    ctx.getString(R.string.package_log_share)
-                                                                )
-                                                            )
-                                                            android.widget.Toast.makeText(
-                                                                ctx,
-                                                                ctx.getString(R.string.package_log_success, zip.absolutePath),
-                                                                android.widget.Toast.LENGTH_LONG
-                                                            ).show()
-                                                        }
-                                                    }
-                                                    5 -> {
-                                                        EventTracker.track(ctx, "logs_view", mapOf("type" to "events"))
-                                                        showEventsLogDialog = true
-                                                    }
-                                                }
-                                            },
-                                            index = index,
-//                                            enabled = !uiState.isDownloading
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        // 清除历史记录确认对话框
-                        if (showClearHistoryDialog) {
-                            WindowDialog(
-                                title = stringResource(R.string.clear_history_dialog_title),
-                                summary = stringResource(R.string.clear_history_dialog_message),
-                                show = true,
-                                onDismissRequest = { showClearHistoryDialog = false }
-                            ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.padding(top = 8.dp)
-                                ) {
-                                    TextButton(
-                                        text = stringResource(R.string.cancel),
-                                        onClick = { showClearHistoryDialog = false },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Spacer(Modifier.width(12.dp))
-                                    TextButton(
-                                        text = stringResource(R.string.apply),
-                                        onClick = {
-                                            onClearHistory()
-                                            showClearHistoryDialog = false
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.textButtonColorsPrimary()
-                                    )
-                                }
-                            }
-                        }
-
-                        // 下载失败日志查看对话框（无需文件管理器即可查看）
-                        if (showFailureLogDialog) {
-                            val logCtx = LocalContext.current
-                            var failureLogVersion by remember { mutableStateOf(0) }
-                            val logContent = remember(failureLogVersion) { DownloadLogger.getLogContent(logCtx) }
-                            WindowDialog(
-                                title = stringResource(R.string.failure_log_title),
-                                show = true,
-                                onDismissRequest = { showFailureLogDialog = false }
-                            ) {
-                                Column(modifier = Modifier.padding(top = 8.dp)) {
-                                    if (logContent.isBlank()) {
-                                        Text(
-                                            text = stringResource(R.string.failure_log_empty),
-                                            fontSize = 14.sp,
-                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                        )
-                                    } else {
-                                        Text(
-                                            text = logContent,
-                                            fontSize = 12.sp,
-                                            fontFamily = FontFamily.Monospace,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(max = 320.dp)
-                                                .verticalScroll(rememberScrollState())
-                                        )
-                                    }
-                                    Spacer(Modifier.height(12.dp))
-                                    Row(
-                                        horizontalArrangement = Arrangement.End,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        TextButton(
-                                            text = stringResource(R.string.clear_failure_log),
-                                            onClick = {
-                                                DownloadLogger.clearFailureLog(logCtx)
-                                                failureLogVersion++
-                                                android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.failure_log_cleared), android.widget.Toast.LENGTH_SHORT).show()
-                                            }
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        TextButton(
-                                            text = stringResource(R.string.cancel),
-                                            onClick = { showFailureLogDialog = false }
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        TextButton(
-                                            text = stringResource(R.string.copy_log),
-                                            onClick = {
-                                                val cm = logCtx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                                cm.setPrimaryClip(android.content.ClipData.newPlainText("failure_log", logContent))
-                                                android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // 正常日志查看对话框（与失败日志对称，便于对照排查）
-                        if (showNormalLogDialog) {
-                            val logCtx = LocalContext.current
-                            var normalLogVersion by remember { mutableStateOf(0) }
-                            val logContent = remember(normalLogVersion) { DownloadLogger.getNormalLogContent(logCtx) }
-                            WindowDialog(
-                                title = stringResource(R.string.normal_log_title),
-                                show = true,
-                                onDismissRequest = { showNormalLogDialog = false }
-                            ) {
-                                Column(modifier = Modifier.padding(top = 8.dp)) {
-                                    if (logContent.isBlank()) {
-                                        Text(
-                                            text = stringResource(R.string.normal_log_empty),
-                                            fontSize = 14.sp,
-                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                        )
-                                    } else {
-                                        Text(
-                                            text = logContent,
-                                            fontSize = 12.sp,
-                                            fontFamily = FontFamily.Monospace,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(max = 320.dp)
-                                                .verticalScroll(rememberScrollState())
-                                        )
-                                    }
-                                    Spacer(Modifier.height(12.dp))
-                                    Row(
-                                        horizontalArrangement = Arrangement.End,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        TextButton(
-                                            text = stringResource(R.string.clear_normal_log),
-                                            onClick = {
-                                                DownloadLogger.clearNormalLog(logCtx)
-                                                normalLogVersion++
-                                                android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.normal_log_cleared), android.widget.Toast.LENGTH_SHORT).show()
-                                            }
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        TextButton(
-                                            text = stringResource(R.string.cancel),
-                                            onClick = { showNormalLogDialog = false }
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        TextButton(
-                                            text = stringResource(R.string.copy_log),
-                                            onClick = {
-                                                val cm = logCtx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                                cm.setPrimaryClip(android.content.ClipData.newPlainText("normal_log", logContent))
-                                                android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // 埋码（功能使用）日志查看对话框：复制给开发者分析哪些功能用得少
-                        if (showEventsLogDialog) {
-                            val evCtx = LocalContext.current
-                            var eventsLogVersion by remember { mutableStateOf(0) }
-                            val eventsContent = remember(eventsLogVersion) { EventTracker.getEventsLogContent(evCtx) }
-                            WindowDialog(
-                                title = stringResource(R.string.events_log_title),
-                                show = true,
-                                onDismissRequest = { showEventsLogDialog = false }
-                            ) {
-                                Column(modifier = Modifier.padding(top = 8.dp)) {
-                                    Text(
-                                        text = stringResource(R.string.events_log_desc),
-                                        fontSize = 12.sp,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                    )
-                                    Spacer(Modifier.height(8.dp))
-                                    if (eventsContent.isBlank()) {
-                                        Text(
-                                            text = stringResource(R.string.events_log_empty),
-                                            fontSize = 14.sp,
-                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                        )
-                                    } else {
-                                        Text(
-                                            text = eventsContent,
-                                            fontSize = 11.sp,
-                                            fontFamily = FontFamily.Monospace,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(max = 320.dp)
-                                                .verticalScroll(rememberScrollState())
-                                        )
-                                    }
-                                    Spacer(Modifier.height(12.dp))
-                                    Row(
-                                        horizontalArrangement = Arrangement.End,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        TextButton(
-                                            text = stringResource(R.string.clear_events_log),
-                                            onClick = {
-                                                EventTracker.clear(evCtx)
-                                                eventsLogVersion++
-                                                android.widget.Toast.makeText(evCtx, evCtx.getString(R.string.events_log_cleared), android.widget.Toast.LENGTH_SHORT).show()
-                                            }
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        TextButton(
-                                            text = stringResource(R.string.cancel),
-                                            onClick = { showEventsLogDialog = false }
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        TextButton(
-                                            text = stringResource(R.string.copy_log),
-                                            onClick = {
-                                                val cm = evCtx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                                cm.setPrimaryClip(android.content.ClipData.newPlainText("events_log", eventsContent))
-                                                android.widget.Toast.makeText(evCtx, evCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // UI v2：设置入口已并入底部「我的」tab（原顶栏齿轮移除）
-                    }
-                )
+                // v3.0.2 mockup .appnm：顶部居中标题「抖快红下载」（16.5/700 近黑，玻璃面板上居中）
+                val darkT = isSystemInDarkTheme()
+                val appTitle = "抖快红下载"
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.Transparent)
+                        .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout))
+                        .padding(top = 10.dp, bottom = 6.dp),
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = appTitle,
+                        color = if (darkT) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight,
+                        fontSize = 16.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.3.sp
+                    )
+                }
             }
         ) { padding ->
-            Column(
+            // v3.0.2 mockup .nav：底部 dock 绝对定位浮在整个背景（壁纸/内容）上，
+            // 内容区延伸到屏幕底部，可滚到 dock 下方（被 dock 遮住是设计态，非截断）
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
             ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    when (mainTab) {
-                        // 1=任务（默认入口）：我的下载任务列表
-                        1 -> HistoryPage(
+                when (mainTab) {
+                    // 1=任务（默认入口）：我的下载任务列表
+                    1 -> HistoryPage(
                             uiState = uiState,
                             manualInputLinks = manualInputLinks,
                             showInputDialog = showInputDialog,
@@ -1678,7 +1382,7 @@ private fun MainScreen(
                             modifier = Modifier.fillMaxSize()
                         )
                         // 2=我的：内嵌设置页（UI v2 S3 分组；原 SettingsActivity 保留独立入口）
-                        else -> {
+                    else -> {
                             // 设置数据全量落在 SharedPreferences：remember 持 VM 实例即可，无需 lifecycle-viewmodel-compose 依赖
                             val settingsContext = LocalContext.current
                             val settingsPrefs = remember { settingsContext.getSharedPreferences("XHSDownloaderPrefs", Context.MODE_PRIVATE) }
@@ -1702,10 +1406,13 @@ private fun MainScreen(
                                 topBarState = rememberTopAppBarState()
                             )
                         }
-                    }
                 }
-                // 底部主标签栏：首页 / 任务 / 我的（UI v2）
-                MainTabBar(mainTab, onMainTabSelected)
+                // 底部主标签 dock（浮层，叠在内容上）
+                MainTabBar(
+                    selected = mainTab,
+                    onSelected = onMainTabSelected,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
             }
         }
 
@@ -1896,13 +1603,11 @@ private fun HistoryPage(
     // 主按钮前景字：暗色启用态按令牌用浅橙字（#FFC9A3），亮色/禁用态保持白
     val primaryButtonFg = if (dark) GlassTokens.OrangeOnDark else Color.White
     Box(modifier = modifier) {
-        Card(
-            modifier = Modifier.fillMaxSize(),
-            cornerRadius = 18.dp,
-            colors = CardDefaults.defaultColors(
-                // 玻璃态：页面级 Chrome 面板（亮 70% 白 / 暗 12% 白，壁纸透出）
-                color = if (dark) GlassTokens.ChromeDark else GlassTokens.ChromeLight
-            )
+        // v3.0.2 mockup：任务卡/页签直接浮在壁纸上——去掉页面级 Chrome 底色，壁纸全透
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Transparent)
         ) {
             Column(
                 modifier = Modifier.fillMaxSize()
@@ -1924,21 +1629,20 @@ private fun HistoryPage(
                 TabRowWithContour(
                     tabs = filterLabels,
                     selectedTabIndex = selectedTab,
-                    fontSize = 14.sp,
-                    height = 40.dp,
-                    // v3 规格「分段 22」：选中块 = 满圆胶囊（容器 40dp - 内衬 5×2 = 高 30dp，半径 22 > 半高 → 胶囊库自动钳制为全圆）
-                    cornerRadius = 22.dp,
+                    fontSize = 11.5.sp,
+                    height = 36.dp,
+                    // v3.0.2 mockup .tabs: 轨道 r22(pad3 gap3 白22%/暗6%)，内胶囊 r18
+                    cornerRadius = 18.dp,
                     colors = TabRowDefaults.tabRowColors(
-                        // 液态玻璃分段：轨道透明融入面板；选中块 = 橙→珊瑚粉渐变胶囊（v3）
-                        backgroundColor = Color.Transparent,
-                        selectedBackgroundColor = if (dark) Color(0x66FFFFFF) else Color(0xE6FFFFFF),
+                        backgroundColor = if (dark) Color(0x10FFFFFF) else Color(0x38FFFFFF),
+                        selectedBackgroundColor = Color.Transparent,
                         selectedBackgroundBrush = androidx.compose.ui.graphics.Brush.linearGradient(
                             colors = listOf(GlassTokens.GradientStart, GlassTokens.GradientEnd)
                         ),
                         contentColor = if (dark) GlassTokens.TextSecondaryDark else GlassTokens.TextSecondaryLight,
-                        selectedContentColor = GlassTokens.OrangeOnLight
+                        selectedContentColor = Color.White
                     ),
-                    itemSpacing = 2.dp,
+                    itemSpacing = 3.dp,
                     onTabSelected = onTabSelected,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1984,33 +1688,31 @@ private fun HistoryPage(
                         }
                     }
                 }
-                // 「清除已完成」入口：当前页签有已完成任务时展示（页签栏下沿右对齐小胶囊）
-                if (completedInTab > 0) {
-                    Row(
+                // v3.0.2 mockup .clear: 页签下方右对齐玻璃小胶囊（completedInTab>0 且有列表时）
+                if (completedInTab > 0 && filteredTasks.isNotEmpty()) {
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 16.dp, end = 16.dp, top = 2.dp),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(horizontal = 18.dp, vertical = 2.dp),
+                        contentAlignment = Alignment.CenterEnd
                     ) {
-                        Card(
-                            modifier = Modifier.clickable { showClearCompletedDialog = true },
-                            cornerRadius = 14.dp,
-                            colors = CardDefaults.defaultColors(
-                                color = MiuixTheme.colorScheme.surfaceVariant
-                            )
+                        Row(
+                            modifier = Modifier
+                                .clip(ContinuousRoundedRectangle(999.dp))
+                                .background(if (dark) Color(0x1AFFFFFF) else Color(0x66FFFFFF))
+                                .border(1.dp, if (dark) Color(0x29FFFFFF) else Color(0x99FFFFFF), ContinuousRoundedRectangle(999.dp))
+                                .clickable { showClearCompletedDialog = true }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = "清除已完成 $completedInTab",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (dark) GlassTokens.TextSecondaryDark else GlassTokens.TextSecondaryLight
                             )
                         }
                     }
-                    // 与下方任务列表之间留出呼吸间距，避免按钮紧贴卡片
-                    Spacer(Modifier.height(6.dp))
                 }
                 if (filteredTasks.isEmpty()) {
                     // ===== UI v2 S6 空态双场景 =====
@@ -2099,9 +1801,9 @@ private fun HistoryPage(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(48.dp),
-                                    colors = ButtonDefaults.buttonColorsPrimary()
+                                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White)
                                 ) {
-                                    Text("去下载一个试试", color = primaryButtonFg, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                    Text("去下载一个试试", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                                 }
                             }
                             Spacer(Modifier.height(14.dp))
@@ -2179,9 +1881,9 @@ private fun HistoryPage(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(48.dp),
-                                    colors = ButtonDefaults.buttonColorsPrimary()
+                                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White)
                                 ) {
-                                    Text("粘贴链接", color = primaryButtonFg, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                    Text("粘贴链接", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                                 }
                             }
                             Spacer(Modifier.height(12.dp))
@@ -2301,60 +2003,35 @@ private fun HistoryPage(
             }
         }
 
-        // 悬停在页面底部的下载按钮
-        // 右下角紧凑 FAB：避免遮挡任务卡片列表（替代原先的底部宽栏）
+        // v3.0.2 FAB：mockup 46×46 圆形胶囊 icon-only（.fab r999 h46 渐变，right16 bottom66）
         GlassPrimaryWrap(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = navPadding + 12.dp),
-            cornerRadius = 22.dp,
+                .padding(end = 16.dp, bottom = navPadding + 66.dp),
+            cornerRadius = 23.dp,
             enabled = !uiState.isDownloading
         ) {
-            Card(
-                modifier = Modifier.clickable(enabled = !uiState.isDownloading) {
-                    if (manualInputLinks) {
-                        onShowInputDialogChange(true)
-                    } else {
-                        onDownload()
-                    }
-                },
-                cornerRadius = 22.dp,
-                colors = CardDefaults.defaultColors(
-                    color = if (uiState.isDownloading) MiuixTheme.colorScheme.disabledPrimaryButton else MiuixTheme.colorScheme.primary
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(ContinuousRoundedRectangle(23.dp))
+                    // mockup .fab：橙→珊瑚渐变实底 + 白图标
+                    .background(
+                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                            colors = listOf(GlassTokens.GradientStart, GlassTokens.GradientEnd)
+                        )
+                    )
+                    .clickable(enabled = !uiState.isDownloading) {
+                        if (manualInputLinks) onShowInputDialogChange(true) else onDownload()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (manualInputLinks) MiuixIcons.Link else MiuixIcons.File,
+                    contentDescription = if (uiState.isDownloading) "下载中" else if (manualInputLinks) "手动输入链接" else "粘贴下载",
+                    modifier = Modifier.size(20.dp),
+                    tint = Color.White
                 )
-            ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-//                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = if (manualInputLinks) MiuixIcons.Link else MiuixIcons.File,
-                        contentDescription = stringResource(R.string.github_link),
-                        modifier = Modifier.padding(end = 8.dp),
-                        tint = primaryButtonFg
-                    )
-                    Text(
-                        text = if (uiState.isDownloading) stringResource(R.string.downloading_files) else if (manualInputLinks) stringResource(R.string.manual_input_links) else stringResource(R.string.start_download_from_clipboard),
-                        color = primaryButtonFg,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                if (uiState.isDownloading) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = activeTask?.noteTitle ?: activeTask?.noteUrl ?: " ",
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
-                }
-            }
             }
         }
 
@@ -2600,14 +2277,15 @@ private fun TaskCell(
                 .fillMaxWidth()
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
                 .clip(ContinuousRoundedRectangle(24.dp))
-                .background(MiuixTheme.colorScheme.surfaceVariant)
+                // v3.0.2 mockup .lg：卡底=玻璃白（亮 55% / 暗 15%），非实色 surfaceVariant
+                .background(if (dark) GlassTokens.CardDark else GlassTokens.CardLight)
                 // v3.0 液态折射描边：1px 半透白边缘光（明暗两态 token）
                 .border(
                     width = 1.dp,
                     color = if (dark) GlassTokens.BorderDark else GlassTokens.BorderLight,
                     shape = ContinuousRoundedRectangle(24.dp)
                 )
-                .padding(12.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp)
                 .combinedClickable(
                     onClick = { onClick?.invoke() },
                     onLongClick = { showTaskMenu = true }
@@ -2637,8 +2315,9 @@ private fun TaskCell(
         ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 2.dp, vertical = 1.dp),
+                .fillMaxWidth(),
+            // v3.0.2 mockup：卡片内子项间距统一 gap:7px（无额外 Spacer）
+            verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             // ── R1 平台行：平台点标（左）+ 状态胶囊（右） ──
             Row(
@@ -2648,52 +2327,54 @@ private fun TaskCell(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)  // mockup .plat gap:5px
                 ) {
-                    // 平台色点（8dp 圆点，替代整块彩底胶囊，去噪）
+                    // 平台色点（8dp 圆点 + 1.5dp 白环折射光，mockup .dot box-shadow ring）
                     Box(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(ContinuousRoundedRectangle(999.dp))
                             .background(sourceColor)
+                            .border(1.5.dp, Color.White.copy(alpha = 0.85f), ContinuousRoundedRectangle(999.dp))
                     )
+                    // mockup .plat span: 字号 11.5/650，颜色=正文近黑(非平台色，平台色只给点)
                     Text(
                         text = sourceLabel,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = sourceColor
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = tPrimary
                     )
                 }
 
-                // 状态胶囊
+                // 状态胶囊（v3.0.2 mockup .stat: 浅底+同色系深字，非实色底白字）
+                //   st-f 红字#E23145+底rgba(255,77,94,.14) / st-ok 绿#00895C+底.15 / st-dl 橙#E2560E+橙渐变淡底
+                //   dark 用高亮变体：底 alpha .16-.2 + 亮字（如 #FF9AA6 / #7AE0B8 / #FFB37A）
+                val statBgAlpha = if (dark) 0.18f else 0.14f
                 Box(
                     modifier = Modifier
                         .clip(ContinuousRoundedRectangle(999.dp))
-                        .background(statusColor.copy(alpha = 0.16f))
+                        .background(statusColor.copy(alpha = statBgAlpha))
                         .padding(horizontal = 9.dp, vertical = 2.5.dp)
                 ) {
                     Text(
                         text = statusText,
-                        fontSize = 11.sp,
+                        fontSize = 10.5.sp,
                         color = statusColor,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(9.dp))
-
-            // ── R2 主标题（Semibold 主文字，最重信息层） ──
+            // ── R2 主标题（mockup .title: 13.5/650/lh1.4/clamp2，间距 gap:7） ──
             Text(
                 text = task.noteTitle ?: task.noteUrl,
-                fontSize = 15.sp,
+                fontSize = 13.5.sp,
+                lineHeight = 18.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = tPrimary,
                 maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
-
-            Spacer(modifier = Modifier.height(5.dp))
 
             // ── R3 元信息行：类型·数量（左）+ 时间（右，次级灰） ──
             Row(
@@ -2707,64 +2388,52 @@ private fun TaskCell(
                 ) {
                     Text(
                         text = stringResource(R.string.task_info_format, typeText, task.totalFiles),
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         color = tSecondary
                     )
 
                     if (task.failedFiles > 0) {
                         Text(
                             text = stringResource(R.string.failed_files_format, task.failedFiles),
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             color = if (dark) GlassTokens.FailRedDark else GlassTokens.FailRed
                         )
                     }
                 }
                 Text(
                     text = formatTime(task.createdAt),
-                    fontSize = 11.5.sp,
+                    fontSize = 10.5.sp,
                     color = tSecondary
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 进度条（仅下载中显示）
+            // 进度条（仅下载中显示；mockup .prog: h5/r3/浅灰底+橙→珊瑚渐变，无文本行）
             if (task.totalFiles > 0 && task.status == com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING) {
-                Column {
-                    // 进度文本
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = stringResource(R.string.files_completed_format, task.completedFiles, task.totalFiles),
-                            fontSize = 11.sp,
-                            color = tSecondary
-                        )
-                        Text(
-                            text = stringResource(R.string.progress_format, (task.progress * 100).toInt()),
-                            fontSize = 11.sp,
-                            color = tSecondary
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(5.dp))
-                    // 进度条（玻璃橙，轨底透玻璃卡）
-                    LinearProgressIndicator(
-                        progress = task.progress,
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(5.dp)
+                        .clip(ContinuousRoundedRectangle(3.dp))
+                        .background(tPrimary.copy(alpha = 0.10f))
+                ) {
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(ContinuousRoundedRectangle(3.dp))
+                            .fillMaxHeight()
+                            .fillMaxWidth(task.progress.coerceIn(0f, 1f))
+                            .background(
+                                brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                    colors = listOf(GlassTokens.GradientStart, GlassTokens.GradientEnd)
+                                )
+                            )
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            // 媒体预览网格（最后一个任务显示）
+            // 媒体预览网格（mockup .thumbs: gap6, 52dp/radius14/白描边折射）
             if (mediaItems.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
@@ -2772,8 +2441,14 @@ private fun TaskCell(
                     mediaItems.forEach { item ->
                         Box(
                             modifier = Modifier
-                                .size(56.dp)
-                                .background(MiuixTheme.colorScheme.surface, shape = ContinuousRoundedRectangle(14.dp))
+                                .size(52.dp)
+                                .clip(ContinuousRoundedRectangle(14.dp))
+                                .background(MiuixTheme.colorScheme.surface)
+                                .border(
+                                    1.dp,
+                                    if (dark) Color(0x24FFFFFF) else Color(0x99FFFFFF),
+                                    ContinuousRoundedRectangle(14.dp)
+                                )
                                 .clickable { onMediaClick(item) }
                         ) {
                             val bitmap = rememberThumbnail(item)
@@ -2792,29 +2467,27 @@ private fun TaskCell(
             }
         }
 
-        if (task.status != com.neoruaa.xhsdn.data.TaskStatus.COMPLETED) {
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        // 操作按钮行
+        // 操作按钮行（mockup .btns gap:7；已完成无按钮=无此段）
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             val isDownloading = task.status == com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING ||
                                 task.status == com.neoruaa.xhsdn.data.TaskStatus.QUEUED
 
             if (isDownloading) {
+                 // v3.0.2 mockup .btn-mini: h32 / radius999 / 11.5-12sp / 650
                  GlassPrimaryWrap(
-                     modifier = Modifier.weight(1f),
-                     cornerRadius = 20.dp
+                     modifier = Modifier.weight(1f).height(32.dp),
+                     cornerRadius = 16.dp
                  ) {
                      Button(
                          onClick = onStop,
                          modifier = Modifier.fillMaxWidth(),
-                         colors = ButtonDefaults.buttonColorsPrimary()
+                         colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
+                         insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
                      ) {
-                         Text("停止", color = MiuixTheme.colorScheme.onPrimary)
+                         Text("停止", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                      }
                  }
             } else {
@@ -2841,9 +2514,9 @@ private fun TaskCell(
                                 Button(
                                     onClick = onContinue,
                                     modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColorsPrimary()
+                                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White)
                                 ) {
-                                    Text("坚持下载", color = MiuixTheme.colorScheme.onPrimary)
+                                    Text("坚持下载", color = Color.White)
                                 }
                             }
                             Button(
@@ -2859,20 +2532,23 @@ private fun TaskCell(
                         }
                     }
                 } else {
-                    // 重试按钮（仅失败任务显示）
+                    // 重试按钮（仅失败任务显示）mockup .btn-mini.grad h32 胶囊
                     if (task.status == com.neoruaa.xhsdn.data.TaskStatus.FAILED) {
                         GlassPrimaryWrap(
-                            modifier = Modifier.weight(1f),
-                            cornerRadius = 20.dp
+                            modifier = Modifier.weight(1f).height(32.dp),
+                            cornerRadius = 16.dp
                         ) {
                             Button(
                                 onClick = onRetry,
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.buttonColorsPrimary()
+                                colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
+                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
                             ) {
                                 Text(
                                     text = stringResource(R.string.retry),
-                                    color = MiuixTheme.colorScheme.onPrimary
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
                         }
@@ -3034,33 +2710,51 @@ private fun isKuaishouVideoUrl(url: String): Boolean {
 @Composable
 private fun MainTabBar(
     selected: Int,
-    onSelected: (Int) -> Unit
+    onSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    // UI v2：底部主标签 首页下载 / 任务 / 设置
+    // v3.0.2 mockup .nav：底部浮起玻璃胶囊 dock（radius26 / pad6 4），选中项 .nv.on 玻璃胶囊+橙字
     val items = listOf("首页下载", "任务", "设置")
     val dark = isSystemInDarkTheme()
+    val navBg = if (dark) Color(0x21FFFFFF) else Color(0x80FFFFFF)          // .lg 玻璃底 13% / 50%
+    val navBorder = if (dark) Color(0x33FFFFFF) else Color(0xB8FFFFFF)      // 折射描边
+    val navOnBg = if (dark) Color(0x40FFFFFF) else Color(0xB3FFFFFF)        // .nv.on 白70%/25%（navBg 同白系须拉开对比）
+    val navOnFg = if (dark) Color(0xFFFFB37A) else Color(0xFFE04E10)        // .nv.on 橙字
+    val navFg = if (dark) Color(0xFFC6CBD8) else Color(0xFF241F18)          // 未选：近黑/灰白
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            // 玻璃态：底栏 Chrome 玻璃（亮 70% 白 / 暗 12% 白）
-            .background(if (dark) GlassTokens.ChromeDark else GlassTokens.ChromeLight)
-            .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+            .background(Color.Transparent)
+            .padding(
+                start = 13.dp, end = 13.dp,
+                top = 6.dp,
+                bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 10.dp
+            )
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(ContinuousRoundedRectangle(26.dp))
+                .background(navBg)
+                .border(1.dp, navBorder, ContinuousRoundedRectangle(26.dp))
+                .padding(4.dp)
+        ) {
             items.forEachIndexed { index, label ->
                 val selectedNow = index == selected
                 Box(
                     modifier = Modifier
                         .weight(1f)
+                        .clip(ContinuousRoundedRectangle(999.dp))
+                        .background(if (selectedNow) navOnBg else Color.Transparent)
                         .clickable { onSelected(index) }
-                        .padding(vertical = 12.dp),
+                        .padding(vertical = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = label,
-                        color = if (selectedNow) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurfaceSecondary,
-                        fontWeight = if (selectedNow) FontWeight.Medium else FontWeight.Normal,
-                        fontSize = 14.sp
+                        color = if (selectedNow) navOnFg else navFg,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 11.sp
                     )
                 }
             }
@@ -3134,7 +2828,7 @@ private fun HomepagePage(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
-            .padding(top = 4.dp, bottom = 56.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+            .padding(top = 4.dp, bottom = 96.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
     ) {
         Spacer(modifier = Modifier.height(8.dp))
         TextField(
@@ -3165,9 +2859,10 @@ private fun HomepagePage(
             ) {
                 Text(stringResource(R.string.homepage_paste_clipboard))
             }
+            // v3.0.2 mockup 36dp 胶囊
             GlassPrimaryWrap(
-                modifier = Modifier.weight(1f),
-                cornerRadius = 20.dp
+                modifier = Modifier.weight(1f).height(36.dp),
+                cornerRadius = 18.dp
             ) {
                 Button(
                     onClick = {
@@ -3178,9 +2873,9 @@ private fun HomepagePage(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColorsPrimary()
+                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White)
                 ) {
-                    Text(stringResource(R.string.home_preview_parse), color = MiuixTheme.colorScheme.onPrimary)
+                    Text(stringResource(R.string.home_preview_parse), color = Color.White)
                 }
             }
         }
@@ -3338,9 +3033,9 @@ private fun HomepagePage(
                         Button(
                             onClick = { onConfirm(selectedRange, limitN, includeImages, skipDownloaded) },
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColorsPrimary()
+                            colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White)
                         ) {
-                            Text(stringResource(R.string.home_preview_confirm), color = MiuixTheme.colorScheme.onPrimary)
+                            Text(stringResource(R.string.home_preview_confirm), color = Color.White)
                         }
                     }
                 }
