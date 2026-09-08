@@ -1313,8 +1313,8 @@ private fun MainScreen(
             // 玻璃态：容器底色透明，让最底 WallpaperLayer 透出
             containerColor = Color.Transparent,
             topBar = {
-                // UI v2：顶栏标题随主标签切换（0 首页=主页批量 / 1 任务=我的下载 / 2 我的）
-                val title = when (mainTab) { 0 -> "主页下载"; 1 -> "我的下载"; else -> "我的" }
+                // UI v2：顶栏标题统一显示 app 名「抖快红下载」（不再随主标签切换）
+                val title = "抖快红下载"
                 TopAppBar(
                     title = title,
                     largeTitle = title,
@@ -1920,18 +1920,17 @@ private fun HistoryPage(
                     tasks.count { it.status == com.neoruaa.xhsdn.data.TaskStatus.FAILED }
                 )
                 val filterLabels = listOf("抖音", "小红书", "快手", "失败").mapIndexed { i, label -> "$label ${counts[i]}" }
-                val configuration = LocalConfiguration.current
                 TabRowWithContour(
                     tabs = filterLabels,
                     selectedTabIndex = selectedTab,
                     fontSize = 14.sp,
                     height = 40.dp,
                     colors = TabRowDefaults.tabRowColors(
-                       selectedBackgroundColor = if (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES) {
-                           Color(0xFF434343)
-                       } else {
-                           Color(0xFFFFFFFF)
-                       }
+                        // 玻璃分段：轨道融入页面面板（透明），选中块浮起高光玻璃，文字层级区分
+                        backgroundColor = Color.Transparent,
+                        selectedBackgroundColor = if (dark) GlassTokens.ChromeHighlightDark else GlassTokens.ChromeHighlightLight,
+                        contentColor = if (dark) GlassTokens.TextSecondaryDark else GlassTokens.TextSecondaryLight,
+                        selectedContentColor = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight
                     ),
                     itemSpacing = 2.dp,
                     onTabSelected = onTabSelected,
@@ -2518,12 +2517,26 @@ private fun TaskCell(
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    // 玻璃语汇语义色（明/暗两态；暗色取高亮变体，保证半透玻璃卡上可读）
+    val dark = isSystemInDarkTheme()
     val statusColor = when (task.status) {
-        com.neoruaa.xhsdn.data.TaskStatus.QUEUED -> Color(0xFF9E9E9E)       // 灰色
-        com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING -> Color(0xFF2196F3)  // 蓝色
-        com.neoruaa.xhsdn.data.TaskStatus.COMPLETED -> Color(0xFF4CAF50)    // 绿色
-        com.neoruaa.xhsdn.data.TaskStatus.FAILED -> Color(0xFFF44336)       // 红色
-        com.neoruaa.xhsdn.data.TaskStatus.WAITING_FOR_USER -> Color(0xFFFF9800) // 橙色
+        com.neoruaa.xhsdn.data.TaskStatus.QUEUED -> if (dark) Color(0xFFADADAD) else Color(0xFF757575)
+        com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING -> if (dark) Color(0xFFFFC9A3) else GlassTokens.OrangeTextDeep
+        com.neoruaa.xhsdn.data.TaskStatus.COMPLETED -> if (dark) Color(0xFF7ED9AE) else GlassTokens.SuccessGreen
+        com.neoruaa.xhsdn.data.TaskStatus.FAILED -> if (dark) Color(0xFFFF9A8F) else Color(0xFFD64545)
+        com.neoruaa.xhsdn.data.TaskStatus.WAITING_FOR_USER -> if (dark) Color(0xFFFFC77D) else Color(0xFFC26A00)
+    }
+    // 玻璃文本 token（标题/元信息）
+    val tPrimary = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight
+    val tSecondary = if (dark) GlassTokens.TextSecondaryDark else GlassTokens.TextSecondaryLight
+    // 平台点标（来源标识：抖音近黑 / 快手橙红 / 小红书珊瑚，明暗两态）
+    val isDy = task.source == "douyin" || task.source == "douyin_home"
+    val isKs = task.source == "kuaishou"
+    val sourceLabel = when { isKs -> "快手"; isDy -> "抖音"; else -> "小红书" }
+    val sourceColor = when {
+        isKs -> if (dark) Color(0xFFFF7A3D) else Color(0xFFFE5000)
+        isDy -> if (dark) Color(0xFFE8EAEF) else Color(0xFF26292F)
+        else -> if (dark) Color(0xFFFF6B81) else Color(0xFFFE2C55)
     }
     
     val statusText = when (task.status) {
@@ -2611,103 +2624,95 @@ private fun TaskCell(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(4.dp),
+                .padding(horizontal = 2.dp, vertical = 1.dp),
         ) {
-            // 顶部：时间 + 状态标签
+            // ── R1 平台行：平台点标（左）+ 状态胶囊（右） ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 创建时间
-                Text(
-                    text = formatTime(task.createdAt),
-                    fontSize = MiuixTheme.textStyles.body2.fontSize,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.Gray,
-                    modifier = Modifier.padding(start = 2.dp)
-                )
-
-                // 右侧：来源 + 状态标签
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // 来源标识（快手/抖音/小红书）
-                    val sourceLabel = when (task.source) {
-                        "kuaishou" -> "快手"
-                        "douyin" -> "抖音"
-                        else -> "小红书"
-                    }
-                    val sourceColor = when (task.source) {
-                        "kuaishou" -> Color(0xFFFE5000)
-                        "douyin" -> Color(0xFF25F4EE)
-                        else -> Color(0xFFFE2C55)
-                    }
+                    // 平台色点（8dp 圆点，替代整块彩底胶囊，去噪）
                     Box(
                         modifier = Modifier
+                            .size(8.dp)
                             .clip(ContinuousRoundedRectangle(999.dp))
-                            .background(sourceColor.copy(alpha = 0.15f))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = sourceLabel,
-                            fontSize = 11.sp,
-                            color = sourceColor,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-
-                    // 状态标签
-                    Box(
-                        modifier = Modifier
-                            .clip(ContinuousRoundedRectangle(999.dp))
-                            .background(statusColor.copy(alpha = 0.15f))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = statusText,
-                            fontSize = 11.sp,
-                            color = statusColor,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 标题（最多两行）
-            Text(
-                text = task.noteTitle ?: task.noteUrl,
-                fontSize = MiuixTheme.textStyles.body2.fontSize,
-                fontWeight = FontWeight.Medium,
-                maxLines = 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // 类型 + 文件数量
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.task_info_format, typeText, task.totalFiles),
-                    fontSize = MiuixTheme.textStyles.body2.fontSize,
-                    color = Color.Gray
-                )
-
-                if (task.failedFiles > 0) {
+                            .background(sourceColor)
+                    )
                     Text(
-                        text = stringResource(R.string.failed_files_format, task.failedFiles),
-                        fontSize = MiuixTheme.textStyles.body2.fontSize,
-                        color = Color(0xFFF44336)
+                        text = sourceLabel,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = sourceColor
+                    )
+                }
+
+                // 状态胶囊
+                Box(
+                    modifier = Modifier
+                        .clip(ContinuousRoundedRectangle(999.dp))
+                        .background(statusColor.copy(alpha = 0.16f))
+                        .padding(horizontal = 9.dp, vertical = 2.5.dp)
+                ) {
+                    Text(
+                        text = statusText,
+                        fontSize = 11.sp,
+                        color = statusColor,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(9.dp))
+
+            // ── R2 主标题（Semibold 主文字，最重信息层） ──
+            Text(
+                text = task.noteTitle ?: task.noteUrl,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = tPrimary,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(5.dp))
+
+            // ── R3 元信息行：类型·数量（左）+ 时间（右，次级灰） ──
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.task_info_format, typeText, task.totalFiles),
+                        fontSize = 12.sp,
+                        color = tSecondary
+                    )
+
+                    if (task.failedFiles > 0) {
+                        Text(
+                            text = stringResource(R.string.failed_files_format, task.failedFiles),
+                            fontSize = 12.sp,
+                            color = if (dark) Color(0xFFFF9A8F) else Color(0xFFD64545)
+                        )
+                    }
+                }
+                Text(
+                    text = formatTime(task.createdAt),
+                    fontSize = 11.5.sp,
+                    color = tSecondary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             // 进度条（仅下载中显示）
             if (task.totalFiles > 0 && task.status == com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING) {
@@ -2720,16 +2725,16 @@ private fun TaskCell(
                         Text(
                             text = stringResource(R.string.files_completed_format, task.completedFiles, task.totalFiles),
                             fontSize = 11.sp,
-                            color = Color.Gray
+                            color = tSecondary
                         )
                         Text(
                             text = stringResource(R.string.progress_format, (task.progress * 100).toInt()),
                             fontSize = 11.sp,
-                            color = Color.Gray
+                            color = tSecondary
                         )
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    // 进度条
+                    Spacer(modifier = Modifier.height(5.dp))
+                    // 进度条（玻璃橙，轨底透玻璃卡）
                     LinearProgressIndicator(
                         progress = task.progress,
                         modifier = Modifier
@@ -3017,8 +3022,8 @@ private fun MainTabBar(
     selected: Int,
     onSelected: (Int) -> Unit
 ) {
-    // UI v2：底部主标签 首页 / 任务 / 我的
-    val items = listOf("首页", "任务", "我的")
+    // UI v2：底部主标签 首页下载 / 任务 / 设置
+    val items = listOf("首页下载", "任务", "设置")
     val dark = isSystemInDarkTheme()
     Column(
         modifier = Modifier
