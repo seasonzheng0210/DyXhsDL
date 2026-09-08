@@ -20,6 +20,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -1925,6 +1926,8 @@ private fun HistoryPage(
                     selectedTabIndex = selectedTab,
                     fontSize = 14.sp,
                     height = 40.dp,
+                    // v3 规格「分段 22」：选中块 = 满圆胶囊（容器 40dp - 内衬 5×2 = 高 30dp，半径 22 > 半高 → 胶囊库自动钳制为全圆）
+                    cornerRadius = 22.dp,
                     colors = TabRowDefaults.tabRowColors(
                         // 液态玻璃分段：轨道透明融入面板；选中块 = 橙→珊瑚粉渐变胶囊（v3）
                         backgroundColor = Color.Transparent,
@@ -2372,7 +2375,7 @@ private fun HistoryPage(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onClipboardBubbleActivate() },
-                    cornerRadius = 18.dp,
+                    cornerRadius = 24.dp,
                     colors = CardDefaults.defaultColors(
                         // 液态：玻璃卡底 + 翠绿语义（v3）
                         color = if (dark) GlassTokens.CardDark else GlassTokens.CardLight
@@ -2571,7 +2574,7 @@ private fun TaskCell(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(ContinuousRoundedRectangle(18.dp))
+            .clip(ContinuousRoundedRectangle(24.dp))
     ) {
         // 删除按钮（满铺红层，α=左滑进度；静止 α=0 → 不透过玻璃卡底色显形，根治珊瑚/粉穿帮）
         val deleteProgress = (-offsetX.value / REVEAL).coerceIn(0f, 1f)
@@ -2596,8 +2599,14 @@ private fun TaskCell(
             modifier = modifier
                 .fillMaxWidth()
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                .clip(ContinuousRoundedRectangle(18.dp))
+                .clip(ContinuousRoundedRectangle(24.dp))
                 .background(MiuixTheme.colorScheme.surfaceVariant)
+                // v3.0 液态折射描边：1px 半透白边缘光（明暗两态 token）
+                .border(
+                    width = 1.dp,
+                    color = if (dark) GlassTokens.BorderDark else GlassTokens.BorderLight,
+                    shape = ContinuousRoundedRectangle(24.dp)
+                )
                 .padding(12.dp)
                 .combinedClickable(
                     onClick = { onClick?.invoke() },
@@ -2763,8 +2772,8 @@ private fun TaskCell(
                     mediaItems.forEach { item ->
                         Box(
                             modifier = Modifier
-                                .size(60.dp)
-                                .background(MiuixTheme.colorScheme.surface, shape = ContinuousRoundedRectangle(8.dp))
+                                .size(56.dp)
+                                .background(MiuixTheme.colorScheme.surface, shape = ContinuousRoundedRectangle(14.dp))
                                 .clickable { onMediaClick(item) }
                         ) {
                             val bitmap = rememberThumbnail(item)
@@ -2774,7 +2783,7 @@ private fun TaskCell(
                                     contentDescription = null,
                                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize()
-                                        .clip(ContinuousRoundedRectangle(8.dp))
+                                        .clip(ContinuousRoundedRectangle(14.dp))
                                 )
                             }
                         }

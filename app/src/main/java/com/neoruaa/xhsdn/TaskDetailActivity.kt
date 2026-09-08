@@ -341,7 +341,7 @@ private fun TaskDetailScreen(
 private fun HeaderCard(task: DownloadTask, tp: Color, ts: Color, cardBg: Color) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 22.dp,
+        cornerRadius = 24.dp,
         colors = CardDefaults.defaultColors(color = cardBg)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(18.dp)) {
@@ -443,7 +443,7 @@ private fun ActiveCard(
     val fg = if (dark) GlassTokens.OrangeOnDark else Color.White
     Card(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 22.dp,
+        cornerRadius = 24.dp,
         colors = CardDefaults.defaultColors(color = cardBg)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
@@ -520,7 +520,7 @@ private fun CompletedCard(
     val folder = task.filePaths.firstOrNull()?.let { runCatching { File(it).parentFile?.absolutePath }.getOrNull() }
     Card(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 22.dp,
+        cornerRadius = 24.dp,
         colors = CardDefaults.defaultColors(color = cardBg)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
@@ -580,7 +580,7 @@ private fun FailedCard(
     val fg = if (dark) GlassTokens.OrangeOnDark else Color.White
     Card(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 22.dp,
+        cornerRadius = 24.dp,
         colors = CardDefaults.defaultColors(color = cardBg)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
