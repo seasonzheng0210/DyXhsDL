@@ -1801,7 +1801,8 @@ private fun HistoryPage(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(48.dp),
-                                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White)
+                                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
+                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
                                     Text("去下载一个试试", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                                 }
@@ -1881,7 +1882,8 @@ private fun HistoryPage(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(48.dp),
-                                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White)
+                                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
+                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
                                     Text("粘贴链接", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                                 }
@@ -2514,7 +2516,8 @@ private fun TaskCell(
                                 Button(
                                     onClick = onContinue,
                                     modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White)
+                                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
+                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
                                     Text("坚持下载", color = Color.White)
                                 }
@@ -2873,7 +2876,8 @@ private fun HomepagePage(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White)
+                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
+                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(stringResource(R.string.home_preview_parse), color = Color.White)
                 }
@@ -3033,7 +3037,8 @@ private fun HomepagePage(
                         Button(
                             onClick = { onConfirm(selectedRange, limitN, includeImages, skipDownloaded) },
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White)
+                            colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
+                        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             Text(stringResource(R.string.home_preview_confirm), color = Color.White)
                         }
