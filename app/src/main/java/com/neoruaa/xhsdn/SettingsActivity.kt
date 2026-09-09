@@ -400,7 +400,9 @@ internal fun SettingsScreen(
                 .background(MiuixTheme.colorScheme.surface)
                 .padding(padding),
             // embedded=内嵌「我的」tab：dock overlay 浮层，预留 dock 高防末项被遮
-            contentPadding = PaddingValues(bottom = 20.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (embedded) 110.dp else 0.dp),
+            // v3.0.7（P3-9）：实测 110dp 仍不够——「项目主页」末项（y≈2194）压在 dock 内不可见
+            // → 提到 150dp（dock 高约 96 + 描述行高 24 + 视觉安全间距 30）
+            contentPadding = PaddingValues(bottom = 20.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (embedded) 150.dp else 0.dp),
 //            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {

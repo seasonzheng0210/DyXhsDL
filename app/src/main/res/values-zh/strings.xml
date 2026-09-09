@@ -266,4 +266,5 @@
     <string name="project_home_desc">在浏览器中打开 GitHub 仓库</string>
     <string name="normal_log_title">下载正常日志</string>
     <string name="normal_log_empty">暂无正常日志记录</string>
+    <string name="redownload">重新下载</string>
 </resources>

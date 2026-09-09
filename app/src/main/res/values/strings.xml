@@ -271,4 +271,5 @@
     <string name="package_log_failed">打包日志失败</string>
     <string name="package_log_share">分享日志</string>
     <string name="package_log_success">日志已打包：%1$s</string>
+    <string name="redownload">重新下载</string>
 </resources>

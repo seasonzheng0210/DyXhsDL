@@ -2008,8 +2008,12 @@ private fun HistoryPage(
                             TaskCell(
                                 task = task,
                                 // 只有正在下载的任务才使用 uiState.mediaItems
+                                // v3.0.7（P2-7）：filePaths 先过滤掉磁盘上已不存在的文件（数据迁移/用户清理），
+                                // 避免完成卡渲染空白缩略格；全删则下方不渲染缩略图行。
                                 mediaItems = if (task.filePaths.isNotEmpty()) {
-                                    task.filePaths.map { MediaItem(it, detectMediaType(it)) }
+                                    task.filePaths
+                                        .filter { java.io.File(it).exists() }
+                                        .map { MediaItem(it, detectMediaType(it)) }
                                 } else if (task.status == com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING && uiState.mediaItems.isNotEmpty()) {
                                     uiState.mediaItems
                                 } else {
@@ -2521,6 +2525,28 @@ private fun TaskCell(
                                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize()
                                         .clip(ContinuousRoundedRectangle(14.dp))
+                                )
+                            }
+                        }
+                    }
+                    // v3.0.7（P2-6，mockup .thumbs 行末）：已完成卡缩略图行末位橙渐变圆钮 = 重新下载
+                    // （复用 onRetry 语义；仅完成卡且行内有媒体时显示，避免与下载中/失败卡的状态混淆）
+                    if (task.status == com.neoruaa.xhsdn.data.TaskStatus.COMPLETED && mediaItems.isNotEmpty()) {
+                        GlassPrimaryWrap(
+                            modifier = Modifier.size(52.dp),
+                            cornerRadius = 26.dp
+                        ) {
+                            Button(
+                                onClick = onRetry,
+                                modifier = Modifier.size(52.dp),
+                                colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
+                                insideMargin = PaddingValues(0.dp)
+                            ) {
+                                Icon(
+                                    imageVector = MiuixIcons.Download,
+                                    contentDescription = stringResource(R.string.redownload),
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
