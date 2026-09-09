@@ -12,6 +12,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -31,7 +32,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -42,7 +45,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,13 +70,9 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Play
@@ -279,8 +281,6 @@ private fun TaskDetailScreen(
     onBrowseFiles: () -> Unit,
     onShowFailureLog: () -> Unit
 ) {
-    val topBarState = rememberTopAppBarState()
-    val scrollBehavior = MiuixScrollBehavior(state = topBarState)
     val dark = isSystemInDarkTheme()
     val tp = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight
     val ts = if (dark) GlassTokens.TextSecondaryDark else GlassTokens.TextSecondaryLight
@@ -290,19 +290,44 @@ private fun TaskDetailScreen(
         contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.displayCutout),
         containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                title = "任务详情",
-                navigationIcon = {
+            // v3.0.6（2026-09-10 真机 vs 设计稿 P1-5）：Miuix TopAppBar（左大标题）→
+            // mockup 样式：圆形玻璃返回钮（左上）+ 居中「任务详情」标题
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.Transparent)
+                    .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .height(48.dp)
+            ) {
+                // 圆形玻璃返回钮（r = 48/2）
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .align(Alignment.CenterStart)
+                        .clip(CircleShape)
+                        .background(if (dark) Color(0x33FFFFFF) else Color(0x80FFFFFF))
+                        .border(1.dp, if (dark) Color(0x2EFFFFFF) else Color(0x99FFFFFF), CircleShape)
+                        .clickable { onBack() },
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
                         imageVector = MiuixIcons.Back,
                         contentDescription = "返回",
-                        modifier = Modifier
-                            .padding(start = 12.dp)
-                            .clickable { onBack() }
+                        tint = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight,
+                        modifier = Modifier.size(22.dp)
                     )
-                },
-                scrollBehavior = scrollBehavior
-            )
+                }
+                // 居中标题
+                Text(
+                    text = "任务详情",
+                    color = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight,
+                    fontSize = 16.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.3.sp,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
         }
     ) { padding ->
         if (task == null) {
@@ -460,9 +485,16 @@ private fun ActiveCard(
                 }
             } else {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                    // v3.0.6（P1-3）：大数字进度 mockup 为液态渐变橙红字（GradientStart→End，120°）
                     Text(
                         text = "${(task.progress * 100).toInt()}%",
-                        color = if (dark) GlassTokens.DownloadingDark else GlassTokens.OrangeTextDeep,
+                        style = TextStyle(
+                            brush = Brush.linearGradient(
+                                colors = listOf(GlassTokens.GradientStart, GlassTokens.GradientEnd),
+                                start = Offset(0f, 0f),
+                                end = Offset(90f, 32f)  // 近似 120°
+                            )
+                        ),
                         fontSize = 40.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -475,10 +507,33 @@ private fun ActiveCard(
                     )
                 }
                 Spacer(Modifier.height(14.dp))
-                LinearProgressIndicator(
-                    progress = task.progress,
-                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
+                // v3.0.6（P1-4）：mockup 全宽橙红渐变进度条（h8/r4）；单色进度条 → 自绘渐变
+                // 进度动画：用 animateFloatAsState 让条平滑（进程内 progress 跳跃更新）
+                val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
+                    targetValue = task.progress.coerceIn(0f, 1f),
+                    animationSpec = androidx.compose.animation.core.tween(400)
                 )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (dark) Color(0x24FFFFFF) else Color(0x2A241F18))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(animatedProgress)
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(GlassTokens.GradientStart, GlassTokens.GradientEnd),
+                                    start = Offset(0f, 0f),
+                                    end = Offset(120f, 8f)
+                                )
+                            )
+                    )
+                }
                 Spacer(Modifier.height(10.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(

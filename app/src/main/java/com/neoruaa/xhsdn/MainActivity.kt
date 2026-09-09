@@ -2150,39 +2150,61 @@ private fun HistoryPage(
         }
 
         // 输入分享链接对话框（放在 HistoryPage 内，避免键盘偏移异常）
+        // v3.0.6（2026-09-10 真机 vs 设计稿 P0）：WindowDialog 底弹无玻璃面板、标题直浮列表 →
+        // 改居中自绘玻璃卡（与清除确认弹窗同语言：r22 玻璃底 + 折射描边 + 渐变确认钮 + 原生 Dialog dim）
         if (showInputDialog) {
             val context = LocalContext.current
+            val inputDark = isSystemInDarkTheme()
             val manualInputTitle = stringResource(R.string.manual_input_links)
-            val enterXhsUrl = stringResource(R.string.enter_xhs_url)
+            val enterXhsUrl = stringResource(R.string.enter_share_url)
             val cancelText = stringResource(R.string.cancel)
             val downloadButtonText = stringResource(R.string.download_button)
             val pleaseEnterUrl = stringResource(R.string.please_enter_url)
 
             var inputLink by remember { mutableStateOf("") }
 
-            WindowDialog(
-                title = manualInputTitle,
-                show = showInputDialog,
-                summary = enterXhsUrl,
+            androidx.compose.ui.window.Dialog(
                 onDismissRequest = {
                     onShowInputDialogChange(false)
                     inputLink = ""
-                }
+                },
+                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
             ) {
-                Column {
+                Column(
+                    modifier = Modifier
+                        .padding(horizontal = 44.dp)
+                        .fillMaxWidth()
+                        .shadow(12.dp, RoundedCornerShape(22.dp))
+                        .clip(ContinuousRoundedRectangle(22.dp))
+                        .background(if (inputDark) Color(0xF21E1B28) else Color(0xF7FFFFFF))
+                        .border(1.dp, if (inputDark) GlassTokens.BorderDark else GlassTokens.BorderLight, RoundedCornerShape(22.dp))
+                        .padding(20.dp)
+                ) {
+                    Text(
+                        text = manualInputTitle,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (inputDark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = enterXhsUrl,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        color = if (inputDark) GlassTokens.TextSecondaryDark else GlassTokens.TextSecondaryLight
+                    )
+                    Spacer(Modifier.height(14.dp))
                     TextField(
                         value = inputLink,
                         onValueChange = { inputLink = it },
-                        label = "http://xhslink.com/o/...",
+                        label = stringResource(R.string.share_url_hint),
                         useLabelAsPlaceholder = true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(ContinuousRoundedRectangle(16.dp)),
                     )
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.padding(top = 16.dp)
-                    ) {
+                    Spacer(Modifier.height(14.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         TextButton(
                             text = cancelText,
                             onClick = {
@@ -2191,24 +2213,30 @@ private fun HistoryPage(
                             },
                             modifier = Modifier.weight(1f)
                         )
-                        Spacer(Modifier.width(12.dp))
-                        TextButton(
-                            text = downloadButtonText,
-                            onClick = {
-                                if (inputLink.isNotEmpty()) {
-                                    // 执行手动输入下载
-                                    onManualInputDownload(inputLink)
+                        GlassPrimaryWrap(
+                            modifier = Modifier.weight(1f).height(40.dp),
+                            cornerRadius = 20.dp
+                        ) {
+                            Button(
+                                onClick = {
+                                    if (inputLink.isNotEmpty()) {
+                                        // 执行手动输入下载
+                                        onManualInputDownload(inputLink)
 
-                                    // 关闭对话框并清空输入
-                                    onShowInputDialogChange(false)
-                                    inputLink = ""
-                                } else {
-                                    Toast.makeText(context, pleaseEnterUrl, Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.textButtonColorsPrimary()
-                        )
+                                        // 关闭对话框并清空输入
+                                        onShowInputDialogChange(false)
+                                        inputLink = ""
+                                    } else {
+                                        Toast.makeText(context, pleaseEnterUrl, Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
+                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
+                            ) {
+                                Text(downloadButtonText, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
                     }
                 }
             }
@@ -2776,7 +2804,7 @@ private fun MainTabBar(
     val dark = isSystemInDarkTheme()
     val navBg = if (dark) Color(0x21FFFFFF) else Color(0x80FFFFFF)          // .lg 玻璃底 13% / 50%
     val navBorder = if (dark) Color(0x33FFFFFF) else Color(0xB8FFFFFF)      // 折射描边
-    val navOnBg = if (dark) Color(0x40FFFFFF) else Color(0xB3FFFFFF)        // .nv.on 白70%/25%（navBg 同白系须拉开对比）
+    val navOnBg = if (dark) Color(0x29FFFFFF) else Color(0x8CFFFFFF)        // .nv.on 白 16% / 55%（对齐 CSS，2026-09-10）
     val navOnFg = if (dark) Color(0xFFFFB37A) else Color(0xFFE04E10)        // .nv.on 橙字
     val navFg = if (dark) Color(0xFFC6CBD8) else Color(0xFF241F18)          // 未选：近黑/灰白
     Column(

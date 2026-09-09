@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">抖快红下载</string>
-    <string name="enter_xhs_url">输入小红书帖子分享链接</string>
+    <string name="enter_share_url">输入抖音 / 快手 / 小红书分享链接</string>
+    <string name="share_url_hint">https://v.douyin.com/... 或 xhslink.com/...</string>
     <string name="download_button">下载媒体</string>
     <string name="ready_to_download">点击底部按钮开始下载</string>
     <string name="please_enter_url">请输入链接</string>
