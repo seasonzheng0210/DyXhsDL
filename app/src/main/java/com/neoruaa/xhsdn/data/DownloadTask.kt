@@ -156,6 +156,14 @@ object TaskManager {
             } catch (e: Exception) {
                 _tasks.value = emptyList()
             }
+            // 防御：next_id 与任务列表不同步（prefs 丢字段 / 外部注入测试数据）时，
+            // 收敛 nextId 到现有最大 id + 1，否则新建任务与历史任务撞 id，
+            // LazyColumn 的 key = task.id 会抛 "Key was already used" 直接崩溃（2026-09-09 E2E 实证）。
+            val maxExistingId = _tasks.value.maxOfOrNull { it.id } ?: 0L
+            if (nextId <= maxExistingId) {
+                nextId = maxExistingId + 1
+                prefs?.edit()?.putLong(KEY_NEXT_ID, nextId)?.apply()
+            }
             // 进程启动清扫：上一次进程崩溃/被杀前遗留的「活跃态」任务收编为失败，
             // 避免重启后 UI 出现永远转圈的「卡在停止」僵尸卡（重启后下载链路已断，不可能再续传）。
             reapStaleActiveTasks()
