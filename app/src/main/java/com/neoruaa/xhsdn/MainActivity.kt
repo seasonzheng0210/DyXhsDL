@@ -31,6 +31,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
@@ -59,6 +62,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
@@ -1659,32 +1663,60 @@ private fun HistoryPage(
                         0 -> "douyin"; 1 -> "xhs"; 2 -> "kuaishou"; else -> "failed"
                     }
                     val clearCtx = LocalContext.current
-                    WindowDialog(
-                        title = "清除已完成任务",
-                        summary = "确定清除当前页签的 $completedInTab 条已成功下载的任务？\n（失败 / 下载中的任务会保留，可继续重试）",
-                        show = true,
-                        onDismissRequest = { showClearCompletedDialog = false }
+                    // v3.0.4：WindowDialog 底弹样式按钮贴 nav 且无 dim → 改居中自绘玻璃卡
+                    // （与长按菜单同语言：圆角22 + 近实玻璃底 + 折射描边 + 渐变确认钮；原生 Dialog 自带 dim）
+                    androidx.compose.ui.window.Dialog(
+                        onDismissRequest = { showClearCompletedDialog = false },
+                        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.padding(top = 8.dp)
+                        Column(
+                            modifier = Modifier
+                                .padding(horizontal = 44.dp)
+                                .fillMaxWidth()
+                                .shadow(12.dp, RoundedCornerShape(22.dp))
+                                .clip(ContinuousRoundedRectangle(22.dp))
+                                .background(if (dark) Color(0xF21E1B28) else Color(0xF7FFFFFF))
+                                .border(1.dp, if (dark) GlassTokens.BorderDark else GlassTokens.BorderLight, RoundedCornerShape(22.dp))
+                                .padding(20.dp)
                         ) {
-                            TextButton(
-                                text = stringResource(R.string.cancel),
-                                onClick = { showClearCompletedDialog = false },
-                                modifier = Modifier.weight(1f)
+                            Text(
+                                text = "清除已完成任务",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight
                             )
-                            Spacer(Modifier.width(12.dp))
-                            TextButton(
-                                text = "清除",
-                                onClick = {
-                                    EventTracker.track(clearCtx, "clear_completed", mapOf("tab" to clearTabLabel, "n" to completedInTab.toString()))
-                                    com.neoruaa.xhsdn.data.TaskManager.clearCompletedTasks(tabScope)
-                                    showClearCompletedDialog = false
-                                },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.textButtonColorsPrimary()
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "确定清除当前页签的 $completedInTab 条已成功下载的任务？\n（失败 / 下载中的任务会保留，可继续重试）",
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
+                                color = if (dark) GlassTokens.TextSecondaryDark else GlassTokens.TextSecondaryLight
                             )
+                            Spacer(Modifier.height(18.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                TextButton(
+                                    text = stringResource(R.string.cancel),
+                                    onClick = { showClearCompletedDialog = false },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                GlassPrimaryWrap(
+                                    modifier = Modifier.weight(1f).height(40.dp),
+                                    cornerRadius = 20.dp
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            EventTracker.track(clearCtx, "clear_completed", mapOf("tab" to clearTabLabel, "n" to completedInTab.toString()))
+                                            com.neoruaa.xhsdn.data.TaskManager.clearCompletedTasks(tabScope)
+                                            showClearCompletedDialog = false
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
+                                        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("清除", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -2570,33 +2602,56 @@ private fun TaskCell(
                 add("delete")
             }
         }
-        WindowListPopup(
-            show = showTaskMenu,
-            popupPositionProvider = rememberOffsetPopupPositionProvider(x = 0.dp),
-            alignment = PopupPositionProvider.Align.TopEnd,
-            onDismissRequest = { showTaskMenu = false }
-        ) {
-            ListPopupColumn {
-                menuActions.forEachIndexed { index, action ->
-                    val text = when (action) {
-                        "homepage" -> stringResource(R.string.homepage_download)
-                        "copy" -> stringResource(R.string.copy_link)
-                        else -> stringResource(R.string.delete_task_menu)
+        // v3.0.4 长按菜单玻璃化：自绘圆角浮层（近实玻璃底 + 折射描边 + 删除项 danger 红），
+        // 替换 Miuix WindowListPopup 的白底直角样式；Popup focusable 提供点外关闭
+        if (showTaskMenu) {
+            Popup(
+                alignment = Alignment.TopEnd,
+                onDismissRequest = { showTaskMenu = false },
+                properties = PopupProperties(focusable = true)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(top = 4.dp, end = 4.dp)
+                        .widthIn(min = 176.dp)
+                        .shadow(8.dp, RoundedCornerShape(20.dp))
+                        .clip(ContinuousRoundedRectangle(20.dp))
+                        .background(if (dark) Color(0xF21E1B28) else Color(0xF2FFFFFF))
+                        .border(1.dp, if (dark) GlassTokens.BorderDark else GlassTokens.BorderLight, RoundedCornerShape(20.dp))
+                        .padding(vertical = 6.dp)
+                ) {
+                    menuActions.forEachIndexed { index, action ->
+                        val text = when (action) {
+                            "homepage" -> stringResource(R.string.homepage_download)
+                            "copy" -> stringResource(R.string.copy_link)
+                            else -> stringResource(R.string.delete_task_menu)
+                        }
+                        val isDelete = action == "delete"
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showTaskMenu = false
+                                    when (action) {
+                                        "homepage" -> onHomepageDownload()
+                                        "copy" -> onCopyUrl()
+                                        else -> onDelete()
+                                    }
+                                }
+                                .padding(horizontal = 18.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = text,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = when {
+                                    isDelete -> if (dark) GlassTokens.FailRedDark else GlassTokens.FailRed
+                                    else -> if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight
+                                }
+                            )
+                        }
                     }
-                    DropdownImpl(
-                        text = text,
-                        optionSize = menuActions.size,
-                        isSelected = false,
-                        onSelectedIndexChange = {
-                            showTaskMenu = false
-                            when (action) {
-                                "homepage" -> onHomepageDownload()
-                                "copy" -> onCopyUrl()
-                                else -> onDelete()
-                            }
-                        },
-                        index = index
-                    )
                 }
             }
         }
