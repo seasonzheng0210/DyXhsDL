@@ -400,7 +400,14 @@ internal fun SettingsScreen(
                     if (!embedded) Modifier.nestedScroll(scrollBehavior.nestedScrollConnection) else Modifier
                 )
                 .background(MiuixTheme.colorScheme.surface)
-                .padding(padding),
+                .padding(padding)
+                // v3.0.9：embedded 时列表在 dock 上缘截断（与 MainActivity 任务列表同款处理）——
+                // 无 backdrop-blur，内容穿透 dock 会直接堆在 dock 下方手势区
+                .then(
+                    if (embedded) Modifier.padding(
+                        bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 56.dp
+                    ) else Modifier
+                ),
             // embedded=内嵌「我的」tab：dock overlay 浮层，预留 dock 高防末项被遮
             // v3.0.7（P3-9）：实测 110dp 仍不够——「项目主页」末项（y≈2194）压在 dock 内不可见
             // → 提到 150dp（dock 高约 96 + 描述行高 24 + 视觉安全间距 30）

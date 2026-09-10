@@ -2013,10 +2013,15 @@ private fun HistoryPage(
                             bottom = navPadding + 96.dp
                         ),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
+                        // v3.0.9：列表在 dock 上缘截断（padding 同时限制布局与绘制）。
+                        // 设计稿用 backdrop-blur 遮住滚进 dock 区的内容；本项目无 blur，
+                        // 穿透文字会直接堆在 dock 下方手势区（用户实测打回）→ 内容到 dock 上缘为止。
                         modifier = if (nestedScrollConnection != null) {
-                            Modifier.fillMaxSize().nestedScroll(nestedScrollConnection)
-                        } else {
                             Modifier.fillMaxSize()
+                                .padding(bottom = navPadding + 56.dp)
+                                .nestedScroll(nestedScrollConnection)
+                        } else {
+                            Modifier.fillMaxSize().padding(bottom = navPadding + 56.dp)
                         }
                     ) {
                         itemsIndexed(filteredTasks, key = { _, task -> task.id }) { _, task ->
@@ -2545,28 +2550,8 @@ private fun TaskCell(
                             }
                         }
                     }
-                    // v3.0.7（P2-6，mockup .thumbs 行末）：已完成卡缩略图行末位橙渐变圆钮 = 重新下载
-                    // （复用 onRetry 语义；仅完成卡且行内有媒体时显示，避免与下载中/失败卡的状态混淆）
-                    if (task.status == com.neoruaa.xhsdn.data.TaskStatus.COMPLETED && mediaItems.isNotEmpty()) {
-                        GlassPrimaryWrap(
-                            modifier = Modifier.size(52.dp),
-                            cornerRadius = 26.dp
-                        ) {
-                            Button(
-                                onClick = onRetry,
-                                modifier = Modifier.size(52.dp),
-                                colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                                insideMargin = PaddingValues(0.dp)
-                            ) {
-                                Icon(
-                                    imageVector = MiuixIcons.Download,
-                                    contentDescription = stringResource(R.string.redownload),
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
+                    // v3.0.9：移除完成卡缩略图行末位的橙色下载钮（v3.0.7 P2-6 按设计稿补的「重新下载」入口）。
+                    // 用户裁定：文件下载完已自动保存到系统相册，「下载」图标语义重复且误导 → 删除，列表更干净。
                 }
             }
         }
@@ -2858,11 +2843,14 @@ private fun MainTabBar(
     modifier: Modifier = Modifier
 ) {
     // v3.0.2 mockup .nav：底部浮起玻璃胶囊 dock（radius26 / pad6 4），选中项 .nv.on 玻璃胶囊+橙字
+    // v3.0.9：设计稿的玻璃=白50%+backdrop-blur(26px)（雾白磨砂）；Android 无 backdrop blur，
+    // 纯半透白会出现「内容滚过 dock 直接穿透」的丑象（用户实测打回）。
+    // 提实度到等效磨砂观感：亮≈白91% / 暗≈深灰紫90%，补顶内高光1.5dp+底部投影（对齐 .lg box-shadow）。
     val items = listOf("首页下载", "任务", "设置")
     val dark = isSystemInDarkTheme()
-    val navBg = if (dark) Color(0x21FFFFFF) else Color(0x80FFFFFF)          // .lg 玻璃底 13% / 50%
+    val navBg = if (dark) Color(0xE62E283E) else Color(0xE8FFFFFF)          // 等效 blur 后磨砂底
     val navBorder = if (dark) Color(0x33FFFFFF) else Color(0xB8FFFFFF)      // 折射描边
-    val navOnBg = if (dark) Color(0x29FFFFFF) else Color(0x8CFFFFFF)        // .nv.on 白 16% / 55%（对齐 CSS，2026-09-10）
+    val navOnBg = if (dark) Color(0x40FFFFFF) else Color(0x99FFFFFF)        // .nv.on 选中胶囊（在实底上再亮一档）
     val navOnFg = if (dark) Color(0xFFFFB37A) else Color(0xFFE04E10)        // .nv.on 橙字
     val navFg = if (dark) Color(0xFFC6CBD8) else Color(0xFF241F18)          // 未选：近黑/灰白
     Column(
@@ -2875,14 +2863,33 @@ private fun MainTabBar(
                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 10.dp
             )
     ) {
-        Row(
+        // Box 包裹：玻璃底 + 顶内高光浮层 + 内容行（高光不占 flex 槽）
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .shadow(
+                    elevation = 10.dp,
+                    shape = ContinuousRoundedRectangle(26.dp),
+                    ambientColor = Color(0x1E50287A),
+                    spotColor = Color(0x5950287A)   // mockup 0 10px 24px -10px rgba(80,40,120,.4)
+                )
                 .clip(ContinuousRoundedRectangle(26.dp))
                 .background(navBg)
                 .border(1.dp, navBorder, ContinuousRoundedRectangle(26.dp))
-                .padding(4.dp)
         ) {
+            // 顶内高光 1.5dp（mockup inset 0 1.5px 0 rgba(255,255,255,.95)）
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.5.dp)
+                    .align(Alignment.TopStart)
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            listOf(Color.White.copy(alpha = if (dark) 0.22f else 0.95f), Color.Transparent)
+                        )
+                    )
+            )
+            Row(modifier = Modifier.fillMaxWidth().padding(4.dp)) {
             items.forEachIndexed { index, label ->
                 val selectedNow = index == selected
                 Box(
@@ -2901,6 +2908,7 @@ private fun MainTabBar(
                         fontSize = 11.sp
                     )
                 }
+            }
             }
         }
     }
