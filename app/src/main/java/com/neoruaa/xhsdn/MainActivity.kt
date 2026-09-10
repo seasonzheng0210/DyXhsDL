@@ -1716,8 +1716,8 @@ private fun HistoryPage(
                                     modifier = Modifier.weight(1f)
                                 )
                                 GlassPrimaryWrap(
-                                    modifier = Modifier.weight(1f).height(40.dp),
-                                    cornerRadius = 20.dp
+                                    modifier = Modifier.weight(1f).height(52.dp),
+                                    cornerRadius = 26.dp
                                 ) {
                                     Button(
                                         onClick = {
@@ -2069,12 +2069,12 @@ private fun HistoryPage(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 16.dp, bottom = navPadding + 66.dp),
-            cornerRadius = 23.dp,
+            cornerRadius = 30.dp,
             enabled = !uiState.isDownloading
         ) {
             Box(
                 modifier = Modifier
-                    .size(46.dp)
+                    .size(60.dp)
                     .clip(ContinuousRoundedRectangle(23.dp))
                     // mockup .fab：橙→珊瑚渐变实底 + 白图标
                     .background(
@@ -2090,7 +2090,7 @@ private fun HistoryPage(
                 Icon(
                     imageVector = if (manualInputLinks) MiuixIcons.Link else MiuixIcons.File,
                     contentDescription = if (uiState.isDownloading) "下载中" else if (manualInputLinks) "手动输入链接" else "粘贴下载",
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(26.dp),
                     tint = Color.White
                 )
             }
@@ -2241,8 +2241,8 @@ private fun HistoryPage(
                             modifier = Modifier.weight(1f)
                         )
                         GlassPrimaryWrap(
-                            modifier = Modifier.weight(1f).height(40.dp),
-                            cornerRadius = 20.dp
+                            modifier = Modifier.weight(1f).height(52.dp),
+                            cornerRadius = 26.dp
                         ) {
                             Button(
                                 onClick = {
@@ -2570,8 +2570,8 @@ private fun TaskCell(
                  // v3.0.10：任务卡主操作按钮提到 mockup .btn-grad 大按钮标准 h38（原 .btn-mini h32
                  // 真机观感偏小，用户实测打回）；radius 19 对齐 h38 胶囊
                  GlassPrimaryWrap(
-                     modifier = Modifier.weight(1f).height(38.dp),
-                     cornerRadius = 19.dp
+                     modifier = Modifier.weight(1f).height(52.dp),
+                     cornerRadius = 26.dp
                  ) {
                      Button(
                          onClick = onStop,
@@ -2579,7 +2579,7 @@ private fun TaskCell(
                          colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
                          insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
                      ) {
-                         Text("停止", color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                         Text("停止", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                      }
                  }
             } else {
@@ -2600,8 +2600,8 @@ private fun TaskCell(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             GlassPrimaryWrap(
-                                modifier = Modifier.weight(1f).height(40.dp),
-                                cornerRadius = 20.dp
+                                modifier = Modifier.weight(1f).height(52.dp),
+                                cornerRadius = 26.dp
                             ) {
                                 Button(
                                     onClick = onContinue,
@@ -2609,19 +2609,19 @@ private fun TaskCell(
                                     colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
                                 insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
                                 ) {
-                                    Text("坚持下载", color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                                    Text("坚持下载", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                             Button(
                                 onClick = onWebCrawl,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(40.dp)
-                                    .clip(ContinuousRoundedRectangle(20.dp))
+                                    .height(52.dp)
+                                    .clip(ContinuousRoundedRectangle(26.dp))
                                     .border(
                                         1.dp,
                                         if (dark) GlassTokens.BorderDark else GlassTokens.BorderLight,
-                                        ContinuousRoundedRectangle(20.dp)
+                                        ContinuousRoundedRectangle(26.dp)
                                     ),
                                 colors = ButtonDefaults.buttonColors(
                                     // v3.0.8：原来用 MiuixTheme.colorScheme.surface（半透）→ 浮在玻璃卡上近乎隐形；
@@ -2644,8 +2644,8 @@ private fun TaskCell(
                     // 重试按钮（仅失败任务显示）v3.0.10：提到 .btn-grad 大按钮标准 h38（同「停止」）
                     if (task.status == com.neoruaa.xhsdn.data.TaskStatus.FAILED) {
                         GlassPrimaryWrap(
-                            modifier = Modifier.weight(1f).height(38.dp),
-                            cornerRadius = 19.dp
+                            modifier = Modifier.weight(1f).height(52.dp),
+                            cornerRadius = 26.dp
                         ) {
                             Button(
                                 onClick = onRetry,
@@ -2656,7 +2656,7 @@ private fun TaskCell(
                                 Text(
                                     text = stringResource(R.string.retry),
                                     color = Color.White,
-                                    fontSize = 12.5.sp,
+                                    fontSize = 15.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }

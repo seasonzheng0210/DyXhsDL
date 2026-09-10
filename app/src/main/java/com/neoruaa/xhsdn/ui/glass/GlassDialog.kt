@@ -118,8 +118,8 @@ fun GlassDialog(
                         GlassPrimaryWrap(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(40.dp),
-                            cornerRadius = 20.dp
+                                .height(52.dp),
+                            cornerRadius = 26.dp
                         ) {
                             Button(
                                 onClick = { onConfirm?.invoke() },
@@ -130,7 +130,7 @@ fun GlassDialog(
                                 Text(
                                     text = confirmText,
                                     color = Color.White,
-                                    fontSize = 14.sp,
+                                    fontSize = 15.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
