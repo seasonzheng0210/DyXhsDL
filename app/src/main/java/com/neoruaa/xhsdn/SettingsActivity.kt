@@ -87,6 +87,8 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 import top.yukonga.miuix.kmp.window.WindowDialog
 import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
+import com.neoruaa.xhsdn.ui.glass.GlassDialog
+import com.neoruaa.xhsdn.ui.glass.GlassLogBody
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
 import com.neoruaa.xhsdn.utils.DownloadLogger
 import com.neoruaa.xhsdn.utils.EventTracker
@@ -642,60 +644,45 @@ internal fun SettingsScreen(
     }
 
     // UI v2 S3 日志与诊断弹窗（与 MainActivity 顶部入口共用文案；数据同源）
+    // v3.0.8：WindowDialog 在自绘玻璃主题下无面板底（真机全透明）→ 统一改 GlassDialog
     if (showFailureLogDialog) {
         val logCtx = LocalContext.current
         val logContent = remember(failureLogVersion) { DownloadLogger.getLogContent(logCtx) }
-        WindowDialog(
+        GlassDialog(
             title = stringResource(R.string.failure_log_title),
-            show = true,
-            onDismissRequest = { showFailureLogDialog = false }
+            onDismiss = { showFailureLogDialog = false }
         ) {
-            Column(modifier = Modifier.padding(top = 8.dp)) {
-                if (logContent.isBlank()) {
-                    Text(
-                        text = stringResource(R.string.failure_log_empty),
-                        fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                } else {
-                    Text(
-                        text = logContent,
-                        fontSize = 12.sp,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 320.dp)
-                            .verticalScroll(rememberScrollState())
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    horizontalArrangement = Arrangement.End,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    TextButton(
-                        text = stringResource(R.string.clear_failure_log),
-                        onClick = {
-                            DownloadLogger.clearFailureLog(logCtx)
-                            failureLogVersion++
-                            android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.failure_log_cleared), android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(
-                        text = stringResource(R.string.cancel),
-                        onClick = { showFailureLogDialog = false }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(
-                        text = stringResource(R.string.copy_log),
-                        onClick = {
-                            val cm = logCtx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            cm.setPrimaryClip(android.content.ClipData.newPlainText("failure_log", logContent))
-                            android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                }
+            GlassLogBody(
+                text = logContent,
+                emptyText = stringResource(R.string.failure_log_empty)
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                horizontalArrangement = Arrangement.End,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                TextButton(
+                    text = stringResource(R.string.clear_failure_log),
+                    onClick = {
+                        DownloadLogger.clearFailureLog(logCtx)
+                        failureLogVersion++
+                        android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.failure_log_cleared), android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                )
+                Spacer(Modifier.width(8.dp))
+                TextButton(
+                    text = stringResource(R.string.copy_log),
+                    onClick = {
+                        val cm = logCtx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("failure_log", logContent))
+                        android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                )
+                Spacer(Modifier.width(8.dp))
+                TextButton(
+                    text = stringResource(R.string.cancel),
+                    onClick = { showFailureLogDialog = false }
+                )
             }
         }
     }
@@ -703,57 +690,41 @@ internal fun SettingsScreen(
     if (showNormalLogDialog) {
         val logCtx = LocalContext.current
         val logContent = remember(normalLogVersion) { DownloadLogger.getNormalLogContent(logCtx) }
-        WindowDialog(
+        GlassDialog(
             title = stringResource(R.string.normal_log_title),
-            show = true,
-            onDismissRequest = { showNormalLogDialog = false }
+            onDismiss = { showNormalLogDialog = false }
         ) {
-            Column(modifier = Modifier.padding(top = 8.dp)) {
-                if (logContent.isBlank()) {
-                    Text(
-                        text = stringResource(R.string.normal_log_empty),
-                        fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                } else {
-                    Text(
-                        text = logContent,
-                        fontSize = 12.sp,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 320.dp)
-                            .verticalScroll(rememberScrollState())
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    horizontalArrangement = Arrangement.End,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    TextButton(
-                        text = stringResource(R.string.clear_normal_log),
-                        onClick = {
-                            DownloadLogger.clearNormalLog(logCtx)
-                            normalLogVersion++
-                            android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.normal_log_cleared), android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(
-                        text = stringResource(R.string.cancel),
-                        onClick = { showNormalLogDialog = false }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(
-                        text = stringResource(R.string.copy_log),
-                        onClick = {
-                            val cm = logCtx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            cm.setPrimaryClip(android.content.ClipData.newPlainText("normal_log", logContent))
-                            android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                }
+            GlassLogBody(
+                text = logContent,
+                emptyText = stringResource(R.string.normal_log_empty)
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                horizontalArrangement = Arrangement.End,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                TextButton(
+                    text = stringResource(R.string.clear_normal_log),
+                    onClick = {
+                        DownloadLogger.clearNormalLog(logCtx)
+                        normalLogVersion++
+                        android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.normal_log_cleared), android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                )
+                Spacer(Modifier.width(8.dp))
+                TextButton(
+                    text = stringResource(R.string.copy_log),
+                    onClick = {
+                        val cm = logCtx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("normal_log", logContent))
+                        android.widget.Toast.makeText(logCtx, logCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                )
+                Spacer(Modifier.width(8.dp))
+                TextButton(
+                    text = stringResource(R.string.cancel),
+                    onClick = { showNormalLogDialog = false }
+                )
             }
         }
     }
@@ -761,63 +732,43 @@ internal fun SettingsScreen(
     if (showEventsLogDialog) {
         val evCtx = LocalContext.current
         val eventsContent = remember(eventsLogVersion) { EventTracker.getEventsLogContent(evCtx) }
-        WindowDialog(
+        GlassDialog(
             title = stringResource(R.string.events_log_title),
-            show = true,
-            onDismissRequest = { showEventsLogDialog = false }
+            summary = stringResource(R.string.events_log_desc),
+            onDismiss = { showEventsLogDialog = false }
         ) {
-            Column(modifier = Modifier.padding(top = 8.dp)) {
-                Text(
-                    text = stringResource(R.string.events_log_desc),
-                    fontSize = 12.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            GlassLogBody(
+                text = eventsContent,
+                emptyText = stringResource(R.string.events_log_empty),
+                fontSize = 11.sp
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                horizontalArrangement = Arrangement.End,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                TextButton(
+                    text = stringResource(R.string.clear_events_log),
+                    onClick = {
+                        EventTracker.clear(evCtx)
+                        eventsLogVersion++
+                        android.widget.Toast.makeText(evCtx, evCtx.getString(R.string.events_log_cleared), android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 )
-                Spacer(Modifier.height(8.dp))
-                if (eventsContent.isBlank()) {
-                    Text(
-                        text = stringResource(R.string.events_log_empty),
-                        fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                } else {
-                    Text(
-                        text = eventsContent,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 320.dp)
-                            .verticalScroll(rememberScrollState())
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    horizontalArrangement = Arrangement.End,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    TextButton(
-                        text = stringResource(R.string.clear_events_log),
-                        onClick = {
-                            EventTracker.clear(evCtx)
-                            eventsLogVersion++
-                            android.widget.Toast.makeText(evCtx, evCtx.getString(R.string.events_log_cleared), android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(
-                        text = stringResource(R.string.cancel),
-                        onClick = { showEventsLogDialog = false }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(
-                        text = stringResource(R.string.copy_log),
-                        onClick = {
-                            val cm = evCtx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            cm.setPrimaryClip(android.content.ClipData.newPlainText("events_log", eventsContent))
-                            android.widget.Toast.makeText(evCtx, evCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                }
+                Spacer(Modifier.width(8.dp))
+                TextButton(
+                    text = stringResource(R.string.copy_log),
+                    onClick = {
+                        val cm = evCtx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("events_log", eventsContent))
+                        android.widget.Toast.makeText(evCtx, evCtx.getString(R.string.log_copied), android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                )
+                Spacer(Modifier.width(8.dp))
+                TextButton(
+                    text = stringResource(R.string.cancel),
+                    onClick = { showEventsLogDialog = false }
+                )
             }
         }
     }

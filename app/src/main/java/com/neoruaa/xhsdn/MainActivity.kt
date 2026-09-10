@@ -135,6 +135,8 @@ import com.neoruaa.xhsdn.ui.TabRowDefaults
 import com.neoruaa.xhsdn.ui.TabRowWithContour
 import com.neoruaa.xhsdn.ui.SelectableMediaWaterfall
 import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
+import com.neoruaa.xhsdn.ui.glass.GlassDialog
+import com.neoruaa.xhsdn.ui.glass.GlassLogBody
 import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
 import com.neoruaa.xhsdn.ui.glass.GlassTokens
 import com.neoruaa.xhsdn.ui.OnboardingScreen
@@ -736,39 +738,24 @@ class MainActivity : ComponentActivity() {
                 // 检测到"重试同一链接但解析数量不一致"时，提示是否导出诊断日志
                 val inconsistentRetry = uiState.inconsistentRetry
                 if (inconsistentRetry.show) {
-                    WindowDialog(
+                    // v3.0.8：WindowDialog → GlassDialog（自绘玻璃卡，真机不再透明）
+                    GlassDialog(
                         title = stringResource(R.string.retry_inconsistent_dialog_title),
                         summary = stringResource(
                             R.string.retry_inconsistent_dialog_message,
                             inconsistentRetry.previousCount,
                             inconsistentRetry.currentCount
                         ),
-                        show = true,
-                        onDismissRequest = { viewModel.dismissInconsistentRetryDialog() }
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.padding(top = 8.dp)
-                        ) {
-                            TextButton(
-                                text = stringResource(R.string.cancel),
-                                onClick = { viewModel.dismissInconsistentRetryDialog() },
-                                modifier = Modifier.weight(1f)
+                        confirmText = stringResource(R.string.retry_inconsistent_save_button),
+                        cancelText = stringResource(R.string.cancel),
+                        onConfirm = {
+                            viewModel.saveInconsistentRetryLogs(
+                                onResult = { showToast(it) },
+                                onError = { showToast(it) }
                             )
-                            Spacer(Modifier.width(12.dp))
-                            TextButton(
-                                text = stringResource(R.string.retry_inconsistent_save_button),
-                                onClick = {
-                                    viewModel.saveInconsistentRetryLogs(
-                                        onResult = { showToast(it) },
-                                        onError = { showToast(it) }
-                                    )
-                                },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.textButtonColorsPrimary()
-                            )
-                        }
-                    }
+                        },
+                        onDismiss = { viewModel.dismissInconsistentRetryDialog() }
+                    )
                 }
 
                 // UI v2 S5：引导页浮于主界面之上（首启仅一次；完成后进入主界面）
@@ -1291,8 +1278,6 @@ private fun MainScreen(
     onSaveSelectedMedia: () -> Unit,
     onToggleSelectiveItem: (String) -> Unit
 ) {
-    val topBarState = rememberTopAppBarState()
-    val miuixScrollBehavior = MiuixScrollBehavior(state = topBarState)
     val statusListState = rememberLazyListState()
     var menuExpanded by remember { mutableStateOf(false) }
     var overflowButtonBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
@@ -1305,6 +1290,8 @@ private fun MainScreen(
     var showClearHistoryDialog by remember { mutableStateOf(false) }
     // 下载失败日志查看对话框状态
     var showFailureLogDialog by remember { mutableStateOf(false) }
+    // 失败日志内容版本号：清除后自增触发重读
+    var failureLogVersion by remember { mutableStateOf(0) }
     // 正常日志查看对话框状态
     var showNormalLogDialog by remember { mutableStateOf(false) }
     // 埋码（功能使用）日志查看对话框状态
@@ -1376,7 +1363,9 @@ private fun MainScreen(
                             onOpenFailureLog = { showFailureLogDialog = true },
                             onDismissPrompt = onDismissPrompt,
                             modifier = Modifier.fillMaxSize(),
-                            nestedScrollConnection = miuixScrollBehavior.nestedScrollConnection
+                            // v3.0.8：不再传 miuixScrollBehavior.nestedScrollConnection —— 顶栏 v3.0.2 已改自绘、
+                            // 不再消费滚动偏移，此 connection 挂在 LazyColumn 上只会吞掉滚动手势（任务页滑不动）。
+                            nestedScrollConnection = null
                         )
                         // 0=首页：主页批量下载三步流程
                         0 -> HomepagePage(
@@ -1426,6 +1415,48 @@ private fun MainScreen(
             onSave = onSaveSelectedMedia,
             onToggleItem = onToggleSelectiveItem
         )
+
+        // v3.0.8：失败日志弹窗此前只置位 showFailureLogDialog 却无处渲染（点了没反应）→ 补上玻璃弹窗
+        if (showFailureLogDialog) {
+            val logContent = remember(failureLogVersion) { DownloadLogger.getLogContent(ctx) }
+            GlassDialog(
+                title = stringResource(R.string.failure_log_title),
+                onDismiss = { showFailureLogDialog = false }
+            ) {
+                GlassLogBody(
+                    text = logContent,
+                    emptyText = stringResource(R.string.failure_log_empty)
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TextButton(
+                        text = stringResource(R.string.clear_failure_log),
+                        onClick = {
+                            DownloadLogger.clearFailureLog(ctx)
+                            failureLogVersion++
+                            Toast.makeText(ctx, ctx.getString(R.string.failure_log_cleared), Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        text = stringResource(R.string.copy_log),
+                        onClick = {
+                            val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("failure_log", logContent))
+                            Toast.makeText(ctx, ctx.getString(R.string.log_copied), Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        text = stringResource(R.string.cancel),
+                        onClick = { showFailureLogDialog = false }
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -1574,33 +1605,18 @@ private fun HistoryPage(
     var taskToDelete by remember { mutableStateOf<com.neoruaa.xhsdn.data.DownloadTask?>(null) }
 
     if (taskToDelete != null) {
-        WindowDialog(
+        // v3.0.8：WindowDialog → GlassDialog（自绘玻璃卡，真机不再透明）
+        GlassDialog(
             title = stringResource(R.string.delete_task_dialog_title),
             summary = stringResource(R.string.delete_task_dialog_message),
-            show = taskToDelete != null,
-            onDismissRequest = { taskToDelete = null }
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.padding(top = 8.dp)
-            ) {
-                TextButton(
-                    text = stringResource(R.string.cancel),
-                    onClick = { taskToDelete = null },
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(Modifier.width(12.dp))
-                TextButton(
-                    text = stringResource(R.string.apply),
-                    onClick = {
-                        taskToDelete?.let { onDeleteTask(it) }
-                        taskToDelete = null
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.textButtonColorsPrimary()
-                )
-            }
-        }
+            confirmText = stringResource(R.string.apply),
+            cancelText = stringResource(R.string.cancel),
+            onConfirm = {
+                taskToDelete?.let { onDeleteTask(it) }
+                taskToDelete = null
+            },
+            onDismiss = { taskToDelete = null }
+        )
     }
 
     val dark = isSystemInDarkTheme()
@@ -2610,13 +2626,29 @@ private fun TaskCell(
                             }
                             Button(
                                 onClick = onWebCrawl,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(40.dp)
+                                    .clip(ContinuousRoundedRectangle(20.dp))
+                                    .border(
+                                        1.dp,
+                                        if (dark) GlassTokens.BorderDark else GlassTokens.BorderLight,
+                                        ContinuousRoundedRectangle(20.dp)
+                                    ),
                                 colors = ButtonDefaults.buttonColors(
-                                    MiuixTheme.colorScheme.surface,
-                                    MiuixTheme.colorScheme.onSurface
-                                )
+                                    // v3.0.8：原来用 MiuixTheme.colorScheme.surface（半透）→ 浮在玻璃卡上近乎隐形；
+                                    // 改玻璃次级底（亮 45% 白 / 暗 10% 白）+ 折射描边，与主按钮形成主次对比
+                                    if (dark) Color(0x1AFFFFFF) else Color(0x73FFFFFF),
+                                    if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight
+                                ),
+                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
                             ) {
-                                Text(stringResource(R.string.web_crawl_option), color = MiuixTheme.colorScheme.onSurface)
+                                Text(
+                                    text = stringResource(R.string.web_crawl_option),
+                                    color = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
                     }
