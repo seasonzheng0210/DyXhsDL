@@ -1737,11 +1737,13 @@ private fun HistoryPage(
                     }
                 }
                 // v3.0.2 mockup .clear: 页签下方右对齐玻璃小胶囊（completedInTab>0 且有列表时）
+                // v3.0.10：mockup 页面主体 .bdy 是 gap:8px 统一节奏——胶囊与下方列表间距对齐 8dp
+                //（此前 vertical=2dp 且列表无顶部 padding，胶囊几乎贴死第一张卡，用户实测打回）
                 if (completedInTab > 0 && filteredTasks.isNotEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 2.dp),
+                            .padding(start = 18.dp, end = 18.dp, top = 2.dp, bottom = 8.dp),
                         contentAlignment = Alignment.CenterEnd
                     ) {
                         Row(
@@ -2565,10 +2567,11 @@ private fun TaskCell(
                                 task.status == com.neoruaa.xhsdn.data.TaskStatus.QUEUED
 
             if (isDownloading) {
-                 // v3.0.2 mockup .btn-mini: h32 / radius999 / 11.5-12sp / 650
+                 // v3.0.10：任务卡主操作按钮提到 mockup .btn-grad 大按钮标准 h38（原 .btn-mini h32
+                 // 真机观感偏小，用户实测打回）；radius 19 对齐 h38 胶囊
                  GlassPrimaryWrap(
-                     modifier = Modifier.weight(1f).height(32.dp),
-                     cornerRadius = 16.dp
+                     modifier = Modifier.weight(1f).height(38.dp),
+                     cornerRadius = 19.dp
                  ) {
                      Button(
                          onClick = onStop,
@@ -2576,7 +2579,7 @@ private fun TaskCell(
                          colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
                          insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
                      ) {
-                         Text("停止", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                         Text("停止", color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
                      }
                  }
             } else {
@@ -2597,16 +2600,16 @@ private fun TaskCell(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             GlassPrimaryWrap(
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).height(40.dp),
                                 cornerRadius = 20.dp
                             ) {
                                 Button(
                                     onClick = onContinue,
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
                                 ) {
-                                    Text("坚持下载", color = Color.White)
+                                    Text("坚持下载", color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                             Button(
@@ -2638,11 +2641,11 @@ private fun TaskCell(
                         }
                     }
                 } else {
-                    // 重试按钮（仅失败任务显示）mockup .btn-mini.grad h32 胶囊
+                    // 重试按钮（仅失败任务显示）v3.0.10：提到 .btn-grad 大按钮标准 h38（同「停止」）
                     if (task.status == com.neoruaa.xhsdn.data.TaskStatus.FAILED) {
                         GlassPrimaryWrap(
-                            modifier = Modifier.weight(1f).height(32.dp),
-                            cornerRadius = 16.dp
+                            modifier = Modifier.weight(1f).height(38.dp),
+                            cornerRadius = 19.dp
                         ) {
                             Button(
                                 onClick = onRetry,
@@ -2653,7 +2656,7 @@ private fun TaskCell(
                                 Text(
                                     text = stringResource(R.string.retry),
                                     color = Color.White,
-                                    fontSize = 12.sp,
+                                    fontSize = 12.5.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
