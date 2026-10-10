@@ -46,7 +46,13 @@ data class DownloadTask(
     val errorMessage: String? = null, // 错误信息
     val filePaths: List<String> = emptyList(), // 下载的文件路径列表
     val noteContent: String? = null, // 笔记内容
-    val source: String = "xhs" // 来源平台: "xhs"(小红书) / "douyin"(抖音)
+    val source: String = "xhs", // 来源平台: "xhs"(小红书) / "douyin"(抖音)
+    /**
+     * 作者主页 sec_uid（抖音/快手单作品任务解析时落库）。
+     * 任务详情页「下载该作者的主页」入口用它零网络开销直达作者主页；
+     * 老任务为 null，入口退化为按 noteUrl 反查作者（多一次网络跳转，但可用）。
+     */
+    val authorSecUid: String? = null
 ) {
     val progress: Float
         get() = if (totalFiles > 0) {
@@ -78,6 +84,7 @@ data class DownloadTask(
             put("filePaths", JSONArray(filePaths))
             put("noteContent", noteContent ?: "")
             put("source", source)
+            put("authorSecUid", authorSecUid ?: "")
         }
     }
 
@@ -100,7 +107,8 @@ data class DownloadTask(
                     (0 until array.length()).map { array.getString(it) }
                 } ?: emptyList(),
                 noteContent = json.optString("noteContent").takeIf { it.isNotEmpty() },
-                source = json.optString("source").takeIf { it.isNotEmpty() } ?: "xhs"
+                source = json.optString("source").takeIf { it.isNotEmpty() } ?: "xhs",
+                authorSecUid = json.optString("authorSecUid").takeIf { it.isNotEmpty() }
             )
         }
     }
@@ -507,6 +515,11 @@ object TaskManager {
      */
     fun updateTaskType(taskId: Long, noteType: NoteType) {
         updateTask(taskId) { it.copy(noteType = noteType) }
+    }
+    /** 回填作者 sec_uid（任务详情页「下载该作者的主页」入口零网络直达用）。 */
+    fun updateAuthorSecUid(taskId: Long, secUid: String) {
+        if (secUid.isBlank()) return
+        updateTask(taskId) { it.copy(authorSecUid = secUid) }
     }
 
     /**

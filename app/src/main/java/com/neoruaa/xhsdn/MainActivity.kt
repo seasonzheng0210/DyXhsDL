@@ -66,6 +66,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -174,12 +175,19 @@ private val thumbnailCache = object : LruCache<String, ImageBitmap>(50) {}
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
     private val _autoDownloadIntentUrl = mutableStateOf<String?>(null)
+    /**
+     * 外部（TaskDetailActivity 的「下载该作者的主页」）请求打开主页下载。
+     * Pair(link, from)。在 setContent 内由 LaunchedEffect 消费 —— 避免在 onCreate
+     * 阶段（composition 未就绪）直接发起解析。
+     */
+    private val _pendingHomepage = mutableStateOf<Pair<String, String>?>(null)
     private var context: Context =  this
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         _autoDownloadIntentUrl.value = intent.getStringExtra("auto_download_url")
         intent.removeExtra("auto_download_url")
+        consumeHomepageIntent(intent)
 
         if (Build.VERSION.SDK_INT >= 33) { // Android 13
             val permission = Manifest.permission.POST_NOTIFICATIONS
@@ -254,12 +262,21 @@ class MainActivity : ComponentActivity() {
             var detectedPlatform by remember { mutableStateOf<String?>(null) }
             // 任务栏当前平台页签：0=抖音 / 1=小红书 / 2=快手；识别到链接自动跳转
             var taskTab by remember { mutableStateOf(0) }
-            // 底部主标签栏：0=首页(主页批量三步) / 1=任务(我的下载列表) / 2=我的(设置页内嵌)；默认进任务
-            var mainTab by remember { mutableStateOf(1) }
+            // 底部主标签栏：mainTab 已提升为 Activity 级状态（见类字段），此处不再 remember
             // 已处理过的剪贴板链接（去重用），相同链接不再重复读取/下载
             var lastHandledUrl by remember { mutableStateOf<String?>(null) }
             var manualInputLinks by remember { mutableStateOf(prefs.getBoolean("manual_input_links", false)) }
             var selectiveDownload by remember { mutableStateOf(prefs.getBoolean("selective_download", false)) }
+
+            // 外部导航消费：TaskDetailActivity「下载该作者的主页」→ EXTRA_OPEN_HOMEPAGE。
+            // 放在 composition 内（而非 onCreate）以确保 setContent 已完成、状态可安全写入。
+            val pendingHome = _pendingHomepage.value
+            LaunchedEffect(pendingHome) {
+                if (pendingHome != null) {
+                    _pendingHomepage.value = null
+                    openHomepage(pendingHome.first, pendingHome.second)
+                }
+            }
 
             // 监听SharedPreferences变化，确保UI能够实时响应设置更改
             LaunchedEffect(Unit) {
@@ -321,7 +338,8 @@ class MainActivity : ComponentActivity() {
                         // 0. 主页链接优先：抖音主页分享文案 / /user/{sec_uid} → 直接下载主页全部视频
                         if (UrlUtils.isDouyinHomepageLink(clipText)) {
                             lastHandledUrl = dedupeKey
-                            fetchHomepagePreview(clipText)
+                            // ★入口层修复：先切到首页下载 tab 再解析，否则解析白跑且用户看不到
+                            openHomepage(clipText, HOMEPAGE_FROM_CLIPBOARD)
                             // 读取后清空剪贴板，避免同链接被反复读取
                             clipboard.setPrimaryClip(android.content.ClipData.newPlainText("", ""))
                             detectedXhsLink = null
@@ -463,8 +481,15 @@ class MainActivity : ComponentActivity() {
                         trackEvent("main_tab_switch", mapOf("tab" to tabLabel))
                         mainTab = it
                     },
-                    onHomepageDownload = { link -> fetchHomepagePreview(link) },
+                    onHomepageDownload = { link -> openHomepage(link, HOMEPAGE_FROM_TASK_CARD) },
+                    onHomepageManualPreview = { link -> fetchHomepagePreview(link) },
                     homePreview = homePreview,
+                    homepageEntry = homepageEntry,
+                    homepageReturnVisible = homepageReturnVisible,
+                    onHomepageReturn = { homeBackToOrigin() },
+                    parseStage = homeParseStage,
+                    onCancelPreview = { cancelHomepagePreview() },
+                    activeLink = homeActiveLink,
                     onHomepageConfirm = { range, n, includeImages, skipDownloaded, selectedIds ->
                         (homePreview as? HomePreviewState.Ready)?.let {
                             confirmHomepageDownload(it, range, n, includeImages, skipDownloaded, selectedIds)
@@ -482,7 +507,7 @@ class MainActivity : ComponentActivity() {
                                 val clipText = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
                                 // 主页链接：走主页下载，反查作者并批量下载
                                 if (UrlUtils.isDouyinHomepageLink(clipText)) {
-                                    fetchHomepagePreview(clipText)
+                                    openHomepage(clipText, HOMEPAGE_FROM_CLIPBOARD)
                                     return@ensureStoragePermission
                                 }
                                 // 提取有效链接
@@ -536,7 +561,7 @@ class MainActivity : ComponentActivity() {
                             if (cleanUrl != null) {
                                 // 主页链接：走主页下载，反查作者并批量下载
                                 if (UrlUtils.isDouyinHomepageLink(clipText)) {
-                                    fetchHomepagePreview(clipText)
+                                    openHomepage(clipText, HOMEPAGE_FROM_BUBBLE)
                                     detectedXhsLink = null
                                     return@homepageGuard
                                 }
@@ -603,7 +628,7 @@ class MainActivity : ComponentActivity() {
                             "douyin_home" -> {
                                 // 主页批次重试：重新反查作者并爬取（旧失败记录不再复用，直接删除避免僵尸）
                                 com.neoruaa.xhsdn.data.TaskManager.deleteTask(task.id)
-                                fetchHomepagePreview(task.noteUrl)
+                                openHomepage(task.noteUrl, HOMEPAGE_FROM_TASK_CARD)
                             }
                             else -> ensureStoragePermission {
                                 when (task.source) {
@@ -652,7 +677,7 @@ class MainActivity : ComponentActivity() {
                     onManualInputDownload = homepageGuard@{ inputLink ->
                         // 抖音主页链接（分享文案 / /user/{sec_uid}）：走主页下载，反查作者并批量下载
                         if (UrlUtils.isDouyinHomepageLink(inputLink)) {
-                            fetchHomepagePreview(inputLink)
+                            openHomepage(inputLink, HOMEPAGE_FROM_MANUAL)
                             return@homepageGuard
                         }
                         ensureStoragePermission {
@@ -699,7 +724,7 @@ class MainActivity : ComponentActivity() {
                                 trackEvent("entry_bubble", mapOf("platform" to bubblePlatform))
                                 // 主页链接：走主页下载，反查作者并批量下载
                                 if (UrlUtils.isDouyinHomepageLink(link)) {
-                                    fetchHomepagePreview(link)
+                                    openHomepage(link, HOMEPAGE_FROM_BUBBLE)
                                     detectedXhsLink = null
                                     detectedPlatform = null
                                     return@homepageGuard
@@ -839,7 +864,7 @@ class MainActivity : ComponentActivity() {
                 }
                 // share/user/{sec_uid} → www.douyin.com/user/{sec_uid}（主页爬取标准形态）
                 val homeUrl = "https://www.douyin.com/user/${userMatch.groupValues[1]}"
-                fetchHomepagePreview(homeUrl)
+                openHomepage(homeUrl, HOMEPAGE_FROM_SHORTLINK)
             } else {
                 DownloadService.startDownload(this@MainActivity, cleanUrl, "douyin", taskId)
             }
@@ -894,19 +919,84 @@ class MainActivity : ComponentActivity() {
     private var homePreview by mutableStateOf<HomePreviewState>(HomePreviewState.Idle)
 
     /**
+     * 底部主标签栏当前页：0=首页下载 / 1=任务 / 2=我的。
+     * 提升为 Activity 级状态（原为 composable 内 remember）：入口层需要在
+     * [openHomepage] 里"先导航再解析"，Activity 方法必须能直接改它。
+     */
+    private var mainTab by mutableStateOf(1)
+
+    /** 进入首页下载前的页签，供来源条「返回」还原（0/1/2）。 */
+    private var homepageReturnTab by mutableStateOf(1)
+
+    /** 当前主页下载会话的入口来源（clipboard/bubble/taskCard/taskDetail/shortlink/manual/recent）。 */
+    private var homepageEntry by mutableStateOf("manual")
+
+    /** 是否显示来源条 + 返回按钮（manual/recent 两类不显示）。 */
+    private var homepageReturnVisible by mutableStateOf(false)
+
+    /** 解析阶段（0 定位作者主页 / 1 解析作者主页 / 2 读取作品列表），驱动三阶段进度条。 */
+    private var homeParseStage by mutableStateOf(0)
+
+    /**
+     * 当前正在解析的链接（回填到主页页输入框）。
+     * 美工/可用性：外部入口（剪贴板 / 任务详情…）触发解析时，输入框原来是空的 ——
+     * 来源条只说了"从哪来"，没说"在解析谁"，用户无法核对。现回填实际链接。
+     */
+    private var homeActiveLink by mutableStateOf("")
+
+    /** 当前解析协程，供「取消」中断（取消后保留已填链接）。 */
+    private var homeParseJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * 主页下载**统一入口通道**。所有入口（剪贴板识别 / 悬浮球 / 任务卡 / 任务详情 /
+     * 单作品短链 302 / 主动粘贴 / 最近作者）都必须走这里，不得直接调 [fetchHomepagePreview]。
+     *
+     * 核心语义 —— **先导航，再解析**：
+     * 1) 若不在首页下载 tab → 记 `homepageReturnTab` 并切到 tab 0（用户必然看到解析进度）；
+     * 2) 置来源（驱动来源条文案 + 返回去向）；
+     * 3) 解析（三阶段、可取消）→ Ready。
+     *
+     * 这一条修复了此前最严重的隐性缺陷：`fetchHomepagePreview` 只写数据不导航，
+     * 导致"识别到了但屏幕上什么都没发生"（解析白跑 11~14s）。
+     *
+     * @param from 入口来源，见 [HOMEPAGE_FROM_*]
+     */
+    private fun openHomepage(link: String, from: String) {
+        if (mainTab != 0) {
+            homepageReturnTab = mainTab
+            mainTab = 0
+        }
+        homepageEntry = from
+        homepageReturnVisible = from != HOMEPAGE_FROM_MANUAL && from != HOMEPAGE_FROM_RECENT
+        // 入口维度埋码：定位"哪个入口最常用 / 哪个入口转化差"
+        trackEvent("homepage_entry", mapOf("from" to from))
+        fetchHomepagePreview(link)
+    }
+
+    /** 来源条「返回」：还原到进入前的页签（成本 1 次点击；替代"先弹确认条"方案）。 */
+    private fun homeBackToOrigin() {
+        mainTab = homepageReturnTab
+        homepageReturnVisible = false
+    }
+
+    /**
      * 主页下载 v2 入口：输入主页链接/视频链接 → post API 拉作品列表 → 预览卡（昵称/总数/新增）。
      * L1 直取 403 → BgWebViewParser 预热一次重试；仍风控 → 提示先登录。
      */
     private fun fetchHomepagePreview(input: String) {
         trackEvent("homepage_preview")
+        // 回填输入框：让用户看到"正在解析的是哪条链接"
+        homeActiveLink = input
         val cleanUrl = UrlUtils.extractFirstUrl(input)
         if (cleanUrl == null) {
             showToast(getString(R.string.invalid_link_please_reenter))
             return
         }
         ensureStoragePermission {
+            homeParseJob?.cancel()
+            homeParseStage = 0
             homePreview = HomePreviewState.Loading
-            lifecycleScope.launch {
+            homeParseJob = lifecycleScope.launch {
                 try {
                     val secUid = withContext(Dispatchers.IO) {
                         // 先归一化短链：主页分享短链（v.douyin.com/x → share/user/{sec_uid}）须识别为主页
@@ -938,6 +1028,8 @@ class MainActivity : ComponentActivity() {
                         homePreview = HomePreviewState.Error(getString(R.string.home_preview_bad_link), false)
                         return@launch
                     }
+                    // 已定位到作者 → 进入「解析作者主页」阶段
+                    homeParseStage = 1
                     val homepageUrl = "https://www.douyin.com/user/$secUid"
                     val items = mutableListOf<DouyinPostItem>()
                     var nickname: String? = HomeRepo.nickname(this@MainActivity, secUid)
@@ -1006,10 +1098,14 @@ class MainActivity : ComponentActivity() {
                     val newItems = HomeRepo.filterNew(this@MainActivity, secUid, items)
                     // 记录最近作者，供「上次解析」快捷卡（nickname 为空时仍记录 secUid 级）
                     HomeRepo.touch(this@MainActivity, secUid, nickname.orEmpty())
+                    homeParseStage = 2
                     homePreview = HomePreviewState.Ready(
                         secUid, nickname ?: getString(R.string.home_preview_default_author),
                         homepageUrl, items, newItems, totalCount, lastSync
                     )
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // 用户主动取消：不得落到下面的 Exception 分支被误报为「解析失败」
+                    throw e
                 } catch (e: WebDetailBlockedException) {
                     homePreview = HomePreviewState.Error(getString(R.string.home_preview_need_login), true)
                 } catch (e: Exception) {
@@ -1019,6 +1115,17 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * 取消解析：立即回 Idle 并中断协程。**保留已填链接**（用户可微调后重试），
+     * 这是「不弹确认条」方案成立的关键 —— 误触的成本从"白等 14 秒"降到"点一下取消"。
+     */
+    private fun cancelHomepagePreview() {
+        homeParseJob?.cancel()
+        homeParseJob = null
+        homeParseStage = 0
+        homePreview = HomePreviewState.Idle
     }
 
     /** 预览确认：按范围+开关选条 → HomepageBatchStore 暂存 → Service 批量下载。 */
@@ -1045,6 +1152,8 @@ class MainActivity : ComponentActivity() {
         com.neoruaa.xhsdn.DownloadService.startHomepageBatch(this, token)
         showToast(getString(R.string.home_preview_started, chosen.size))
         homePreview = HomePreviewState.Idle
+        // 批次已派出，来源条使命结束（避免返回按钮把用户带回一个已无关的页签）
+        homepageReturnVisible = false
     }
 
     /**
@@ -1095,6 +1204,16 @@ class MainActivity : ComponentActivity() {
             _autoDownloadIntentUrl.value = it
             intent.removeExtra("auto_download_url")
         }
+        consumeHomepageIntent(intent)
+    }
+
+    /** 解析外部导航 extra → 落到 [_pendingHomepage]，由 setContent 内 LaunchedEffect 消费。 */
+    private fun consumeHomepageIntent(intent: Intent?) {
+        val link = intent?.getStringExtra(EXTRA_OPEN_HOMEPAGE) ?: return
+        if (link.isBlank()) return
+        val from = intent.getStringExtra(EXTRA_HOMEPAGE_FROM) ?: HOMEPAGE_FROM_TASK_DETAIL
+        intent.removeExtra(EXTRA_OPEN_HOMEPAGE)
+        _pendingHomepage.value = link to from
     }
 
     private fun showToast(message: String) {
@@ -1299,6 +1418,21 @@ class MainActivity : ComponentActivity() {
         private const val TAG = "MainActivity"
         /** 预览拉取翻页上限（防异常账号无限翻页拖垮 Service）。 */
         private const val HOMEPAGE_MAX_PAGES = 20
+
+        // ── 主页下载跨 Activity 导航（TaskDetailActivity → 本页主页下载承载面）──
+        /** 外部请求打开主页下载：值为主页链接或作品链接。 */
+        const val EXTRA_OPEN_HOMEPAGE = "extra_open_homepage"
+        /** 配合 [EXTRA_OPEN_HOMEPAGE] 的入口来源标识。 */
+        const val EXTRA_HOMEPAGE_FROM = "extra_homepage_from"
+
+        // ── 主页下载入口来源（驱动来源条文案 + 返回去向）──
+        const val HOMEPAGE_FROM_CLIPBOARD = "clipboard"
+        const val HOMEPAGE_FROM_BUBBLE = "bubble"
+        const val HOMEPAGE_FROM_TASK_CARD = "taskCard"
+        const val HOMEPAGE_FROM_TASK_DETAIL = "taskDetail"
+        const val HOMEPAGE_FROM_SHORTLINK = "shortlink"
+        const val HOMEPAGE_FROM_MANUAL = "manual"
+        const val HOMEPAGE_FROM_RECENT = "recent"
     }
 }
 
@@ -1331,7 +1465,21 @@ private fun MainScreen(
     mainTab: Int = 0,
     onMainTabSelected: (Int) -> Unit = {},
     onHomepageDownload: (String) -> Unit = {},
+    /** 主页下载 tab 内「主动粘贴」解析：不导航（用户已在承载面），语义区别于 [onHomepageDownload]。 */
+    onHomepageManualPreview: (String) -> Unit = {},
     homePreview: HomePreviewState = HomePreviewState.Idle,
+    /** 当前主页下载会话入口来源（clipboard/taskCard/manual/…），驱动来源条文案。 */
+    homepageEntry: String = "manual",
+    /** 是否显示来源条 + 返回按钮（manual/recent 不显示）。 */
+    homepageReturnVisible: Boolean = false,
+    /** 来源条「返回」：还原到进入前的页签。 */
+    onHomepageReturn: () -> Unit = {},
+    /** 解析阶段（0 定位作者 / 1 解析主页 / 2 读取作品）。 */
+    parseStage: Int = 0,
+    /** 取消解析（保留已填链接）。 */
+    onCancelPreview: () -> Unit = {},
+    /** 当前正在解析的链接（回填输入框，让用户核对"在解析谁"）。 */
+    activeLink: String = "",
     onHomepageConfirm: (HomepageBatchStore.Range, Int, Boolean, Boolean, Set<String>) -> Unit = { _, _, _, _, _ -> },
     onFallbackCrawl: (String) -> Unit = {},
     onClipboardBubbleActivate: () -> Unit = {},
@@ -1432,9 +1580,16 @@ private fun MainScreen(
                         // 0=首页：主页批量下载三步流程
                         0 -> HomepagePage(
                             preview = homePreview,
-                            onPreview = onHomepageDownload,
+                            // 主动粘贴：不导航（用户已在承载面），故走 manual 通道而非 onHomepageDownload
+                            onPreview = onHomepageManualPreview,
                             onConfirm = onHomepageConfirm,
                             onFallbackCrawl = onFallbackCrawl,
+                            entryFrom = homepageEntry,
+                            showSourceBar = homepageReturnVisible,
+                            onReturn = onHomepageReturn,
+                            parseStage = parseStage,
+                            onCancelPreview = onCancelPreview,
+                            activeLink = activeLink,
                             modifier = Modifier.fillMaxSize()
                         )
                         // 2=我的：内嵌设置页（UI v2 S3 分组；原 SettingsActivity 保留独立入口）
@@ -2562,11 +2717,37 @@ private fun TaskCell(
                         )
                     }
                 }
-                Text(
-                    text = formatTime(task.createdAt),
-                    fontSize = 10.5.sp,
-                    color = tSecondary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    Text(
+                        text = formatTime(task.createdAt),
+                        fontSize = 10.5.sp,
+                        color = tSecondary
+                    )
+                    // v3.1 入口层重构（§6.1-7）：长按菜单里的「主页下载」**不可发现** →
+                    // 抖音/快手任务卡在时间右侧补一个常驻小胶囊，点击直接切 tab 并解析该作者。
+                    // 内联在元信息行（而非单起一行）—— 避免每张卡多出 26dp 垂直空白。
+                    if (isDy || isKs) {
+                        Box(
+                            modifier = Modifier
+                                .clip(ContinuousRoundedRectangle(999.dp))
+                                .background(
+                                    MiuixTheme.colorScheme.primary.copy(alpha = if (dark) 0.22f else 0.13f)
+                                )
+                                .clickable { onHomepageDownload() }
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.task_card_homepage_cd),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MiuixTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
             }
 
             // 进度条（仅下载中显示；mockup .prog: h5/r3/浅灰底+橙→珊瑚渐变，无文本行）
@@ -3057,27 +3238,71 @@ private fun HomepagePage(
     onPreview: (String) -> Unit,
     onConfirm: (HomepageBatchStore.Range, Int, Boolean, Boolean, Set<String>) -> Unit,
     onFallbackCrawl: (String) -> Unit = {},
+    /** 入口来源（clipboard/taskCard/…），驱动来源条文案。 */
+    entryFrom: String = "manual",
+    /** 是否显示来源条 + 返回按钮。 */
+    showSourceBar: Boolean = false,
+    /** 来源条「返回」：还原到进入前的页签。 */
+    onReturn: () -> Unit = {},
+    /** 解析阶段（0 连接作者主页 / 1 解析页面环境 / 2 读取作品列表）。 */
+    parseStage: Int = 0,
+    /** 取消解析：立即回 Idle，保留已填链接。 */
+    onCancelPreview: () -> Unit = {},
+    /** 当前正在解析的链接（回填输入框）。 */
+    activeLink: String = "",
     modifier: Modifier = Modifier
 ) {
     val ctx = LocalContext.current
     var link by remember { mutableStateOf("") }
+    // 外部入口（剪贴板/任务详情/任务卡）触发的解析：把实际链接回填进输入框，
+    // 否则来源条说了"从哪来"却没说"在解析谁"，用户无从核对。
+    LaunchedEffect(activeLink) {
+        if (activeLink.isNotBlank()) link = activeLink
+    }
+    val parsing = preview is HomePreviewState.Loading
     var selectedRange by remember { mutableStateOf(HomepageBatchStore.Range.ONLY_NEW) }
     var limitN by remember { mutableStateOf(HOMEPAGE_DEFAULT_LIMIT) }
     var includeImages by remember { mutableStateOf(true) }
     var skipDownloaded by remember { mutableStateOf(true) }
+
+    // ── 提到分支外：常驻操作条需要读取这些值（原实现把主按钮放在滚动流末尾，要滑 5 次才找到）──
+    val ready = preview as? HomePreviewState.Ready
+    // 勾选集：默认勾选=全部新增；随作者变化重置
+    val newIdSet = remember(ready?.secUid) {
+        ready?.newItems?.map { it.id }?.toSet() ?: emptySet()
+    }
+    val selectedIds = remember(ready?.secUid) {
+        mutableStateOf(ready?.newItems?.map { it.id }?.toSet() ?: emptySet())
+    }
+    // 本次实际将下载条数（操作条左侧与确认共用同一计算，保证所见即所得）
+    val selCount = ready?.let {
+        scopeHomepageItems(it, selectedRange, limitN, includeImages, skipDownloaded, selectedIds.value).size
+    } ?: 0
+
+    // dock 浮层避让：96dp + 导航栏；操作条再垫在 dock 之上
+    val dockPad = 96.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    Box(modifier = modifier.fillMaxSize()) {
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
-            .padding(top = 4.dp, bottom = 96.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+            .padding(top = 4.dp, bottom = dockPad + 76.dp)
     ) {
+        // ── 来源条：仅"被打断"型入口显示（manual/recent 两个原地入口不显示）──
+        if (showSourceBar) {
+            Spacer(modifier = Modifier.height(8.dp))
+            HomepageSourceBar(entryFrom = entryFrom, onReturn = onReturn)
+        }
         Spacer(modifier = Modifier.height(8.dp))
         TextField(
             value = link,
             onValueChange = { link = it },
             label = stringResource(R.string.homepage_input_hint),
             singleLine = true,
+            // 解析中不禁用输入框：禁用会让回填的链接变灰不可读（用户反而核对不了）。
+            // 解析已捕获入参，此处编辑不影响进行中的任务；重复触发由下方按钮禁用拦住。
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(ContinuousRoundedRectangle(16.dp))
@@ -3099,6 +3324,8 @@ private fun HomepagePage(
                         Toast.makeText(ctx, ctx.getString(R.string.no_valid_link_found), Toast.LENGTH_SHORT).show()
                     }
                 },
+                // 解析中禁用：避免与进行中的解析抢占（复制粘贴会改变 link 语义）
+                enabled = !parsing,
                 modifier = Modifier.weight(1f),
                 // v3.1：与右侧「解析作品」统一 h52 胶囊（此前用 Miuix 默认圆角矩形，
                 // 与 36dp 的解析钮一大一小且底边不齐，真机截图实证）
@@ -3107,34 +3334,44 @@ private fun HomepagePage(
                 Text(stringResource(R.string.homepage_paste_clipboard))
             }
             // v3.1：h36 → h52 胶囊，与左侧粘贴钮等高对齐（全 App 主/次按钮统一 h52 标准）
-            GlassPrimaryWrap(
-                modifier = Modifier.weight(1f).height(52.dp),
-                cornerRadius = 26.dp
-            ) {
+            // 美工：解析中不再用「渐变 + alpha」降级 —— alpha 会把白色按钮字一起打掉，
+            // 视觉上只剩一团淡粉，看不出是按钮。改为换成真正的禁用态实心胶囊 + 「正在解析…」文案。
+            if (parsing) {
                 Button(
-                    onClick = {
-                        if (link.isNotBlank()) {
-                            onPreview(link)
-                        } else {
-                            Toast.makeText(ctx, ctx.getString(R.string.please_enter_url), Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    onClick = { },
+                    enabled = false,
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    cornerRadius = 26.dp
                 ) {
-                    Text(stringResource(R.string.home_preview_parse), color = Color.White)
+                    Text(stringResource(R.string.home_preview_parsing_short))
+                }
+            } else {
+                GlassPrimaryWrap(
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    cornerRadius = 26.dp
+                ) {
+                    Button(
+                        onClick = {
+                            if (link.isNotBlank()) {
+                                onPreview(link)
+                            } else {
+                                Toast.makeText(ctx, ctx.getString(R.string.please_enter_url), Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
+                        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(stringResource(R.string.home_preview_parse), color = Color.White)
+                    }
                 }
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
         when (val p = preview) {
             is HomePreviewState.Loading -> {
-                Text(
-                    text = stringResource(R.string.home_preview_loading),
-                    fontSize = 14.sp,
-                    color = Color.Gray
-                )
+                // 三阶段真实进度（替代原「正在解析…」无信息量单行）：长任务必须让用户看到在动
+                HomepageParseStages(activeStage = parseStage)
             }
             is HomePreviewState.Error -> {
                 Card(
@@ -3172,13 +3409,8 @@ private fun HomepagePage(
             is HomePreviewState.Ready -> {
                 val p = preview as HomePreviewState.Ready
                 val downloadedCount = (p.allItems.size - p.newItems.size).coerceAtLeast(0)
-                // 勾选状态：默认勾选=全部新增；网格点击切换并自动切「按勾选下载」档
-                val newIdSet = remember(p.secUid) { p.newItems.map { it.id }.toSet() }
-                val selectedIds = remember(p.secUid) {
-                    mutableStateOf(p.newItems.map { it.id }.toSet())
-                }
+                // 勾选集 / 计数 / selCount 已提到函数头部（供常驻操作条读取）
                 var showAllItems by remember(p.secUid) { mutableStateOf(false) }
-                val selCount = scopeHomepageItems(p, selectedRange, limitN, includeImages, skipDownloaded, selectedIds.value).size
                 Column(modifier = Modifier.fillMaxWidth()) {
                     // 作者卡 + 三格统计
                     Card(
@@ -3346,31 +3578,14 @@ private fun HomepagePage(
                         }
                     }
                     Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = stringResource(R.string.home_preview_estimate_fmt, selCount),
-                        fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    GlassPrimaryWrap(
-                        modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 22.dp
-                    ) {
-                        Button(
-                            onClick = { onConfirm(selectedRange, limitN, includeImages, skipDownloaded, selectedIds.value) },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Text(stringResource(R.string.home_preview_confirm), color = Color.White)
-                        }
-                    }
+                    // 主按钮已移入常驻操作条（不再放滚动流末尾——原实现要上滑 5 次才够得着）
                 }
             }
             HomePreviewState.Idle -> {
-                // 「上次解析」快捷卡：最近一位作者，点击重新解析
-                val recent = remember { HomeRepo.recentAuthor(ctx) }
+                // 「本次会话已解析过」→ 回访是主页下载的主场景，最近作者给横滑条常驻（而非只留一位）
+                val recents = remember { HomeRepo.recentAuthors(ctx, limit = 8) }
+                // 最近一位：完整卡（昵称 + 已下载数 + 重新解析）
+                val recent = recents.firstOrNull()
                 if (recent != null) {
                     val (recentSecUid, rec) = recent
                     Card(
@@ -3424,14 +3639,387 @@ private fun HomepagePage(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                 }
+                // 其余最近作者：横滑小胶囊（回访场景一眼可选，避免重新粘贴链接）
+                if (recents.size > 1) {
+                    Text(
+                        text = stringResource(R.string.home_recent_authors_title),
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        recents.drop(1).forEach { (secUid, rec2) ->
+                            val name = rec2.nickname.ifBlank { ctx.getString(R.string.home_preview_default_author) }
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.7f))
+                                    .clickable {
+                                        link = "https://www.douyin.com/user/$secUid"
+                                        onPreview(link)
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.18f)),
+                                    contentAlignment = androidx.compose.ui.Alignment.Center
+                                ) {
+                                    Text(
+                                        text = name.take(1),
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MiuixTheme.colorScheme.primary
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = name,
+                                    fontSize = 12.5.sp,
+                                    color = MiuixTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
+        // ── 空态引导（美工）──
+        // 原 Idle 态只有 3 行灰字（对比度不足）+ 中下部一大片留白，既不像"完成态"也没告诉
+        // 用户下一步做什么。补一张三步「怎么用」卡，把留白变成有效信息。
+        if (preview is HomePreviewState.Idle) {
+            HomepageHowToCard()
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+        // 支持范围：折叠为一行（完整说明收进「怎么用」卡），并把 Color.Gray 换成
+        // 主题次级字色 —— 灰字压在暖色壁纸上对比度只有 ~2.5:1，暗光下看不清
         Text(
-            text = stringResource(R.string.homepage_supported),
-            fontSize = 12.sp,
-            color = Color.Gray
+            text = stringResource(R.string.homepage_supported_short),
+            fontSize = 11.5.sp,
+            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.48f),
+            modifier = Modifier.padding(horizontal = 4.dp)
         )
+    }
+        // ══ 常驻操作条（sticky）：位置稳定 > 省 72px 空间 ══
+        // Parsing：可取消；Ready：唯一路径推进流程（按钮位置永不因滚动/状态变化而消失）
+        // 外层"渐隐托盘"：从操作条顶边渐隐到屏幕底 —— 否则操作条与底部 dock 之间的缝隙
+        // 会露出滚动内容（网格缩略图），视觉上像"条断成两截"
+        if (preview is HomePreviewState.Loading || ready != null) {
+            val scrim = if (isSystemInDarkTheme()) Color(0xF2151518) else Color(0xF2F7F0E7)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.26f to scrim.copy(alpha = 0.90f),
+                            1f to scrim
+                        )
+                    )
+                    .padding(bottom = dockPad)
+            ) {
+                when {
+                    preview is HomePreviewState.Loading -> HomepageActionBar(
+                        label = stringResource(R.string.home_preview_parsing_short),
+                        primaryText = stringResource(R.string.cancel),
+                        enabled = true,
+                        onPrimary = { onCancelPreview() }
+                    )
+                    ready != null -> {
+                        val isSelectedMode = selectedRange == HomepageBatchStore.Range.SELECTED
+                        HomepageActionBar(
+                            label = if (isSelectedMode)
+                                stringResource(R.string.home_bar_selected_fmt, selCount)
+                            else
+                                stringResource(R.string.home_bar_plan_fmt, selCount),
+                            primaryText = if (isSelectedMode)
+                                stringResource(R.string.home_bar_download_selected)
+                            else
+                                stringResource(R.string.home_preview_confirm),
+                            // 无可下内容时禁用但**保留**（避免按钮忽隐忽现导致误触）
+                            enabled = selCount > 0,
+                            onPrimary = {
+                                onConfirm(selectedRange, limitN, includeImages, skipDownloaded, selectedIds.value)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 空态三步「怎么用」卡（美工）。
+ * 原来的空态只有三行灰字，页面中下部一大片留白，既不好看也没回答"我该做什么"。
+ * 这里把留白换成三步指引 + 支持范围，一次性把「入口在哪 / 怎么触发 / 结果在哪」讲清。
+ */
+@Composable
+private fun HomepageHowToCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        // 与页内其它卡（作者卡 / 范围卡 / 开关卡）统一 14dp 圆角
+        cornerRadius = 14.dp,
+        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                text = stringResource(R.string.home_howto_title),
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            listOf(
+                stringResource(R.string.home_howto_1),
+                stringResource(R.string.home_howto_2),
+                stringResource(R.string.home_howto_3)
+            ).forEachIndexed { i, step ->
+                Row(
+                    modifier = Modifier.padding(vertical = 3.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.Top
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                        contentAlignment = androidx.compose.ui.Alignment.Center
+                    ) {
+                        Text(
+                            text = (i + 1).toString(),
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MiuixTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(9.dp))
+                    Text(
+                        text = step,
+                        fontSize = 12.5.sp,
+                        lineHeight = 17.sp,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.78f)
+                    )
+                }
+            }
+            // 完整支持范围不在此重复：页面底部已有一行短版说明（原实现在两处都放 →
+            // 空态下一长一短两段"支持：…"叠着出现，看起来像出错）
+        }
+    }
+}
+
+/**
+ * 主页下载来源条：告知「这次解析是怎么被触发的」，并提供**一键返回**。
+ * 识别会打断用户当前在做的事 —— 没有返回，被弹到首页下载后想回去要多点几次；
+ * 有返回，成本降到 1 次点击。这也是「不弹确认条」方案成立的前提（用返回兜住 5% 误触）。
+ */
+@Composable
+private fun HomepageSourceBar(entryFrom: String, onReturn: () -> Unit) {
+    val ctx = LocalContext.current
+    val text = when (entryFrom) {
+        "clipboard" -> ctx.getString(R.string.home_src_clipboard)
+        "bubble" -> ctx.getString(R.string.home_src_bubble)
+        "taskCard" -> ctx.getString(R.string.home_src_task_card)
+        "taskDetail" -> ctx.getString(R.string.home_src_task_detail)
+        "shortlink" -> ctx.getString(R.string.home_src_shortlink)
+        else -> ctx.getString(R.string.home_src_clipboard)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.10f))
+            .padding(start = 12.dp, end = 6.dp, top = 9.dp, bottom = 9.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = MiuixIcons.Link,
+            contentDescription = null,
+            tint = MiuixTheme.colorScheme.primary,
+            modifier = Modifier.size(15.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = text,
+            fontSize = 12.5.sp,
+            color = MiuixTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = stringResource(R.string.home_src_return),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = MiuixTheme.colorScheme.primary,
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .clickable { onReturn() }
+                .padding(horizontal = 10.dp, vertical = 5.dp)
+        )
+    }
+}
+
+/**
+ * 常驻操作条（sticky）：左侧状态文案 + 右侧主按钮。
+ * 位置**永不随滚动或状态变化消失** —— 原实现把「确认下载」放在滚动流末尾，
+ * 实测要上滑 5 次才够得着，属阻断性问题（位置稳定 > 省 72px 空间）。
+ */
+@Composable
+private fun HomepageActionBar(
+    label: String,
+    primaryText: String,
+    enabled: Boolean,
+    onPrimary: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(ContinuousRoundedRectangle(20.dp))
+            .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.94f))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        if (label.isNotEmpty()) {
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = MiuixTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+        } else {
+            Spacer(modifier = Modifier.weight(1f))
+        }
+        // 禁用态不用 alpha 降级（会把白色按钮字一起打掉）→ 换成真正的禁用态胶囊，
+        // 尺寸完全一致，保证"位置稳定 > 省空间"这一原则在禁用态也成立。
+        if (enabled) {
+            GlassPrimaryWrap(
+                modifier = Modifier
+                    .height(46.dp)
+                    .width(124.dp),
+                cornerRadius = 23.dp
+            ) {
+                Button(
+                    onClick = onPrimary,
+                    modifier = Modifier.fillMaxWidth().height(46.dp),
+                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
+                    insideMargin = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = primaryText,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
+                    )
+                }
+            }
+        } else {
+            Button(
+                onClick = { },
+                enabled = false,
+                modifier = Modifier
+                    .height(46.dp)
+                    .width(124.dp),
+                cornerRadius = 23.dp
+            ) {
+                Text(text = primaryText, fontSize = 14.sp, maxLines = 1)
+            }
+        }
+    }
+}
+
+/**
+ * 解析三阶段进度（真实回调驱动，非假动画）。
+ * 长任务必须让用户看到「在动 + 动到哪一步」；配合操作条的「取消」，
+ * 把原来 11~14 秒的黑盒等待变成可控操作。
+ */
+@Composable
+private fun HomepageParseStages(activeStage: Int) {
+    val stages = listOf(
+        stringResource(R.string.home_stage_1),
+        stringResource(R.string.home_stage_2),
+        stringResource(R.string.home_stage_3)
+    )
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 14.dp,
+        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            stages.forEachIndexed { idx, name ->
+                val done = idx < activeStage
+                val active = idx == activeStage
+                Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(
+                                when {
+                                    done -> MiuixTheme.colorScheme.primary
+                                    active -> MiuixTheme.colorScheme.primary.copy(alpha = 0.28f)
+                                    else -> MiuixTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                                }
+                            ),
+                        contentAlignment = androidx.compose.ui.Alignment.Center
+                    ) {
+                        if (done) {
+                            Icon(
+                                imageVector = MiuixIcons.Ok,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(11.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = name,
+                        fontSize = 13.sp,
+                        fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
+                        color = when {
+                            done -> MiuixTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                            active -> MiuixTheme.colorScheme.onSurface
+                            else -> MiuixTheme.colorScheme.onSurface.copy(alpha = 0.40f)
+                        }
+                    )
+                    if (active) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = "…", fontSize = 13.sp, color = MiuixTheme.colorScheme.primary)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.home_parse_hint),
+                fontSize = 11.5.sp,
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.50f)
+            )
+        }
     }
 }
 

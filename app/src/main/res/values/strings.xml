@@ -260,6 +260,33 @@
     <string name="home_preview_estimate_fmt">预计下载 %1$d 个</string>
     <string name="home_preview_recent_hint">上次解析 · %1$s</string>
     <string name="home_preview_recent_sub">%1$d 个已下载 · 点击重新解析</string>
+    <string name="home_recent_authors_title">最近作者</string>
+    <string name="homepage_supported_short">支持：抖音作品链接 / 主页分享文案 / www.douyin.com/user/xxx</string>
+    <string name="home_howto_title">怎么用</string>
+    <string name="home_howto_1">在抖音复制作品链接，或博主主页的分享文案</string>
+    <string name="home_howto_2">回到本 App 会自动识别；也可以在此页直接粘贴</string>
+    <string name="home_howto_3">核对要下载的作品 → 一键批量保存到本机</string>
+    <!-- ══ 入口层（v2 交互重构）：来源条 + 常驻操作条 + 三阶段解析 ══ -->
+    <string name="home_src_clipboard">已识别剪贴板的主页链接</string>
+    <string name="home_src_bubble">来自剪贴板悬浮球</string>
+    <string name="home_src_task_card">来自任务卡「主页下载」</string>
+    <string name="home_src_task_detail">来自任务详情「下载该作者的主页」</string>
+    <string name="home_src_shortlink">这是作者主页，已转为批量下载</string>
+    <string name="home_src_return">返回 ›</string>
+    <string name="home_preview_parsing_short">正在解析…</string>
+    <string name="home_bar_plan_fmt">将下载 %1$d 个</string>
+    <string name="home_bar_selected_fmt">已选 %1$d 个</string>
+    <string name="home_bar_download_selected">下载已选</string>
+    <string name="home_stage_1">定位作者主页</string>
+    <string name="home_stage_2">解析作者主页</string>
+    <string name="home_stage_3">读取作品列表</string>
+    <string name="home_parse_hint">解析约需 10 秒，可随时取消；取消后不会清空已填链接。</string>
+    <!-- 任务详情页入口：把"作品"这个点反向扩成"作者"这个面 -->
+    <string name="task_detail_author_home">下载该作者的主页</string>
+    <string name="task_detail_author_home_sub">还可下载该博主全部作品</string>
+    <string name="task_detail_author_home_rescan">重新检查新作品</string>
+    <string name="task_detail_author_home_rescan_sub">该任务为主页批量，检查作者是否有更新</string>
+    <string name="task_card_homepage_cd">该作者主页</string>
     <string name="notification_group_title">通知</string>
     <string name="download_complete_notification">下载完成通知</string>
     <string name="download_complete_notification_desc">下载完成或失败时在通知栏提醒你</string>

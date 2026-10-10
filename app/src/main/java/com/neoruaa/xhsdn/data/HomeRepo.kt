@@ -132,6 +132,20 @@ object HomeRepo {
     }
 
     /**
+     * 最近 N 位作者（按 lastUsed 倒序），供主页页「最近作者」常驻横滑条。
+     * 回访是主页下载的主场景之一 —— 只留一位作者会强迫用户重新粘贴链接。
+     */
+    @Synchronized
+    fun recentAuthors(ctx: Context, limit: Int = 6): List<Pair<String, AuthorRecord>> {
+        ensureLoaded(ctx)
+        if (limit <= 0) return emptyList()
+        return authors.entries
+            .sortedByDescending { it.value.lastUsed }
+            .take(limit)
+            .map { it.key to it.value }
+    }
+
+    /**
      * 批量入账：整个 batch 成功结束后调用（成功条 id + 昵称 + 本次同步时间）。
      */
     @Synchronized

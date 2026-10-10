@@ -100,7 +100,9 @@ fun OnboardingScreen(
                             .size(24.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .clickable { page -= 1 },
-                        tint = textSecondary
+                        // 美工：原用 textSecondary（次级灰）→ 压在暖色壁纸上对比度仅 ≈2.5:1，
+                        // 真机/模拟器上都几乎看不见。改用主字色。
+                        tint = textPrimary
                     )
                 }
                 Spacer(Modifier.weight(1f))
@@ -113,7 +115,10 @@ fun OnboardingScreen(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    // 美工：原内容区无水平内边距 → 标题（"能做什么"/"开始前"…）贴屏幕左边缘，
+                    // 真机上视觉呈现为"首位截字"。与底部按钮列统一 28dp 边距。
+                    .padding(horizontal = 28.dp),
                 contentAlignment = Alignment.Center
             ) {
                 when (page) {

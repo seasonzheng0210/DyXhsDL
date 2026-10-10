@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.res.stringResource
 import com.neoruaa.xhsdn.data.DownloadTask
 import com.neoruaa.xhsdn.data.NoteType
 import com.neoruaa.xhsdn.data.TaskManager
@@ -77,6 +78,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.ContactsCircle
 import top.yukonga.miuix.kmp.icon.extended.Play
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -164,7 +166,8 @@ class TaskDetailActivity : ComponentActivity() {
                         },
                         onOpenFirst = { task?.filePaths?.firstOrNull()?.let { openFile(File(it)) } },
                         onBrowseFiles = { task?.let { openFilesBrowser(it) } },
-                        onShowFailureLog = { showLogDialog = true }
+                        onShowFailureLog = { showLogDialog = true },
+                        onOpenAuthorHome = { openAuthorHomepage(it) }
                     )
                     // 失败日志弹窗（同一 Composition 内状态驱动，避免二次 setContent）
                     // v3.1：WindowDialog → GlassDialog（v3.0.8 已把其余弹窗迁移到自绘玻璃卡，
@@ -204,14 +207,32 @@ class TaskDetailActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * E7：跳到 MainActivity 的主页下载承载面（唯一承载面 + 唯一入口通道）。
+     * 有 authorSecUid 就零网络开销直达作者主页；没有（老任务 / 快手）退化为按 noteUrl
+     * 反查作者 —— 反查耗时正好被解析第一阶段「定位作者主页」掩盖。
+     */
+    private fun openAuthorHomepage(task: DownloadTask) {
+        val link = task.authorSecUid?.takeIf { it.isNotBlank() }
+            ?.let { "https://www.douyin.com/user/$it" }
+            ?: task.noteUrl
+        val intent = Intent(this, MainActivity::class.java).apply {
+            // singleTop + CLEAR_TOP：复用已有 MainActivity 实例，避免叠出第二份
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            putExtra(MainActivity.EXTRA_OPEN_HOMEPAGE, link)
+            putExtra(MainActivity.EXTRA_HOMEPAGE_FROM, MainActivity.HOMEPAGE_FROM_TASK_DETAIL)
+        }
+        startActivity(intent)
+        finish()
+    }
+
     /** 重试：与 MainActivity 语义一致（抖音/快手/小红书走服务内 HTTP+隐 WebView 兜底解析）。 */
     private fun retryTask(context: Context, task: DownloadTask) {
         when (task.source) {
             "douyin_home" -> {
-                // 主页批量是整批爬取任务，单卡重试会丢批次上下文：删旧卡，引导去「首页」重新解析
-                TaskManager.deleteTask(task.id)
-                Toast.makeText(context, "主页批量请在「首页」重新解析该主页", Toast.LENGTH_LONG).show()
-                finish()
+                // 主页批量是整批爬取任务，单卡重试会丢批次上下文 → 直接跳到主页下载承载面重新解析。
+                // （原实现删卡 + toast「请在「首页」重新解析该主页」，把用户赶去手工操作；现改为真入口）
+                openAuthorHomepage(task)
             }
             else -> {
                 TaskManager.resetTask(task.id)
@@ -272,7 +293,9 @@ private fun TaskDetailScreen(
     onDelete: () -> Unit,
     onOpenFirst: () -> Unit,
     onBrowseFiles: () -> Unit,
-    onShowFailureLog: () -> Unit
+    onShowFailureLog: () -> Unit,
+    /** E7 入口：从"单个作品"跳到"该作者主页批量"（仅抖音/快手，小红书本期不支持）。 */
+    onOpenAuthorHome: (DownloadTask) -> Unit = {}
 ) {
     val dark = isSystemInDarkTheme()
     val tp = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight
@@ -350,13 +373,86 @@ private fun TaskDetailScreen(
                 TaskStatus.COMPLETED -> CompletedCard(task, tp, ts, cardBg, dark, onOpenFirst, onBrowseFiles, onCopyUrl, onDelete)
                 TaskStatus.FAILED -> FailedCard(task, tp, ts, cardBg, dark, onRetry, onCopyUrl, onShowFailureLog, onDelete)
             }
+            // E7：作者主页入口（三态通用）。原实现只有一句"请去首页重新解析"的 toast，
+            // 把用户赶去手工操作；这里给出真正可用的一键入口。
+            if (task.source == "douyin" || task.source == "douyin_home" || task.source == "kuaishou") {
+                Spacer(Modifier.height(12.dp))
+                AuthorHomeEntryCard(task, tp, ts, cardBg, dark, onOpenAuthorHome)
+            }
             Spacer(Modifier.height(24.dp))
         }
     }
 }
 
-/** 头部信息卡：来源/状态徽章 + 标题 + 元信息 */
+/**
+ * E7 作者主页入口卡（三态通用）：
+ * 一行「下载该作者的主页 / 还可下载该博主全部作品」→ 一键落到主页下载承载面。
+ * 主页批次任务（douyin_home）语义改为「重新检查新作品」——用户想要的是"看有没有更新"，
+ * 不是"把作者全部重下一遍"。
+ */
 @Composable
+private fun AuthorHomeEntryCard(
+    task: DownloadTask,
+    tp: Color,
+    ts: Color,
+    cardBg: Color,
+    dark: Boolean,
+    onOpenAuthorHome: (DownloadTask) -> Unit
+) {
+    val isBatch = task.source == "douyin_home"
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpenAuthorHome(task) },
+        cornerRadius = 24.dp,
+        colors = CardDefaults.defaultColors(color = cardBg)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    // 美工：原借用 Play（播放三角）表达"作者"，语义不符；换人物圆标
+                    imageVector = MiuixIcons.ContactsCircle,
+                    contentDescription = null,
+                    tint = MiuixTheme.colorScheme.primary,
+                    modifier = Modifier.size(19.dp)
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(
+                        if (isBatch) R.string.task_detail_author_home_rescan
+                        else R.string.task_detail_author_home
+                    ),
+                    color = tp,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = stringResource(
+                        if (isBatch) R.string.task_detail_author_home_rescan_sub
+                        else R.string.task_detail_author_home_sub
+                    ),
+                    color = ts,
+                    fontSize = 11.5.sp
+                )
+            }
+            Text(text = "›", color = ts, fontSize = 20.sp, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+/** 头部信息卡：来源/状态徽章 + 标题 + 元信息 */@Composable
 private fun HeaderCard(task: DownloadTask, tp: Color, ts: Color, cardBg: Color) {
     Card(
         modifier = Modifier.fillMaxWidth(),
