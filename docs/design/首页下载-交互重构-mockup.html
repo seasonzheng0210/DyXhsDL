@@ -235,6 +235,59 @@
   .wallnote th{color:#b9b2cc;font-weight:600;white-space:nowrap}
   .wallnote td{color:#a49db8}
   .wallnote td b{color:#ffb37a;font-weight:600}
+
+  /* ── 入口收敛对照板 ─────────────────────── */
+  .board{max-width:1320px;margin:0 auto 44px;display:flex;flex-wrap:wrap;gap:22px}
+  .panel{flex:1 1 420px;border-radius:20px;padding:20px 22px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04)}
+  .panel.bad{border-color:rgba(226,49,69,.3);background:rgba(226,49,69,.06)}
+  .panel.good{border-color:rgba(0,137,92,.32);background:rgba(0,137,92,.07)}
+  .panel h3{font-size:14px;font-weight:650;margin-bottom:4px;color:#f0edf7;display:flex;align-items:center;gap:9px}
+  .panel .pnote{font-size:12px;color:#a49db8;line-height:1.65;margin-bottom:14px}
+  .erow{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:9px 12px;border-radius:12px;background:rgba(255,255,255,.045);margin-bottom:7px;font-size:12.5px}
+  .erow .en{color:#dcd7e8}
+  .erow .en i{font-style:normal;color:#8c85a0;font-size:11px;margin-right:7px;font-weight:600}
+  .erow .arrow{color:#6c6480;font-size:13px}
+  .erow .st{font-size:11.5px;font-weight:650;padding:3px 10px;border-radius:999px;white-space:nowrap}
+  .erow .st.x{background:rgba(226,49,69,.18);color:#ff9aa6}
+  .erow .st.v{background:rgba(0,137,92,.18);color:#7ae0b8}
+  .erow .st.n{background:rgba(255,255,255,.09);color:#b9b2cc}
+  .converge{margin-top:14px;padding:16px;border-radius:16px;background:rgba(255,179,122,.09);border:1px dashed rgba(255,179,122,.4);text-align:center}
+  .converge .fn{font-family:ui-monospace,Consolas,monospace;font-size:13px;color:#ffb37a;font-weight:600}
+  .converge .dn{font-size:11.5px;color:#a49db8;margin-top:7px;line-height:1.7;text-align:left}
+  .converge .dn b{color:#dcd7e8;font-weight:600}
+
+  /* ── 来源条 ─────────────────────────────── */
+  .srcbar{display:flex;align-items:center;gap:9px;margin:0 0 12px;padding:9px 12px;border-radius:14px;background:var(--fill);border:1px solid var(--border);font-size:12px;color:var(--text)}
+  .srcbar .rt{margin-left:auto;font-size:11.5px;font-weight:650;color:var(--primaryText);white-space:nowrap}
+  .srcbar svg{flex:none}
+
+  /* ── 任务详情信息行 ─────────────────────── */
+  .inforow{display:flex;align-items:center;gap:10px;padding:11px 0;font-size:13px}
+  .inforow+.inforow{border-top:1px solid var(--track)}
+  .inforow .k{color:var(--text2);width:64px;flex:none}
+  .inforow .v{color:var(--text);font-weight:500}
+  .cta{display:flex;align-items:center;gap:11px;padding:13px 14px;border-radius:16px;background:var(--fill);border:1px solid rgba(255,106,46,.32)}
+  .cta .ic{width:30px;height:30px;border-radius:10px;background:var(--grad);display:grid;place-items:center;flex:none;color:#fff;font-size:14px;font-weight:700}
+  .cta .tx1{font-size:13.5px;font-weight:650}
+  .cta .tx2{font-size:11px;color:var(--text2);margin-top:2px}
+  .cta .go{margin-left:auto;color:var(--primaryText);font-weight:700;font-size:15px}
+
+  /* ── 长按菜单浮层 ───────────────────────── */
+  .menu{position:absolute;right:14px;top:190px;width:184px;z-index:4;border-radius:20px;background:var(--cardHi);backdrop-filter:blur(30px) saturate(1.9);-webkit-backdrop-filter:blur(30px) saturate(1.9);border:1px solid var(--border);box-shadow:0 12px 34px rgba(20,12,32,.34),inset 0 1px 0 var(--hi);padding:6px 0}
+  .menu .mi{padding:12px 18px;font-size:14px;font-weight:500}
+  .menu .mi.danger{color:var(--fail)}
+  .menu .mi.hi{color:var(--primaryText);font-weight:650}
+
+  .subhead{max-width:1320px;margin:0 auto 22px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .subhead h2{font-size:18px;font-weight:650;color:#f0edf7}
+  .subhead p{font-size:12.5px;color:#8c85a0}
+  .gallery+.subhead{margin-top:60px}
+
+  /* ── 屏内标注气泡 ───────────────────────── */
+  .callout{position:absolute;left:14px;right:14px;bottom:96px;z-index:7;border-radius:14px;padding:11px 14px;font-size:11.5px;line-height:1.65;color:#fff;background:rgba(206,38,56,.95);box-shadow:0 10px 26px rgba(0,0,0,.34)}
+  .callout.good{background:rgba(0,122,82,.95)}
+  .callout b{font-weight:700}
+  .callout code{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;opacity:.92}
 </style>
 </head>
 <body class="light">
@@ -242,18 +295,200 @@
 <div class="head">
   <h1>首页下载 · 交互重构</h1>
   <p class="sub">
-    功能已可用（v3.0.12），<b>问题在交互</b>：配置、内容、主操作三层被揉进同一条滚动流。
-    重构主张 —— 把主页页改成 <b>「一个常驻操作条 + 三层状态」</b>：解析结果只做摘要与确认，
-    真正的挑选下沉到二级页，<b>主按钮永远不动</b>。
+    要分两层看，<b>入口层的问题比页面层更严重</b>。页面层：配置、内容、主操作三层揉进同一条滚动流。
+    入口层：<b><code>fetchHomepagePreview</code> 只做「数据写入」，不做「导航」</b>——6 个入口共用它，
+    其中 <b>5 个不切换页面</b>，而 App 默认落地页恰恰是任务页。
+  </p>
+  <p class="sub" style="margin-top:10px">
+    核心决策：<b>主页下载只有一个承载面</b>（首页下载 tab 的同一状态机），<b>所有入口走同一条导航通道</b>
+    <code style="color:#ffb37a">openHomepage(link, from)</code>。
   </p>
   <div class="bar">
-    <span class="tag bad">现状：确认下载在最底部，实测要滑 5 次</span>
-    <span class="tag bad">现状：开关在「按勾选下载」档下被静默忽略</span>
-    <span class="tag bad">现状：解析 11~14s 只有一行灰字，不可取消</span>
-    <span class="tag good">新：主路径 3 步 0 滚动</span>
-    <span class="tag good">新：约束前置到计划里</span>
+    <span class="tag bad">E1 剪贴板识别后不切页 → 解析跑完 11~14s，屏幕上什么都没有</span>
+    <span class="tag bad">E3 任务卡长按「主页下载」已有，但点了看起来没反应</span>
+    <span class="tag bad">任务详情页没有入口，只弹「请去首页重新解析」</span>
+    <span class="tag good">新：7 个入口 → 唯一通道 → 唯一承载面</span>
     <button class="theme" id="themeBtn">切换暗色</button>
   </div>
+</div>
+
+<div class="board">
+  <div class="panel bad">
+    <h3>现状 · 6 个入口，只有 1 个能看见结果</h3>
+    <p class="pnote">全部调用同一个 <code>fetchHomepagePreview</code>，但它只写 <code>homePreview</code> 状态，<b>从不碰 mainTab</b>。而 <code>var mainTab by remember { mutableStateOf(1) }</code> —— 默认进任务页。</p>
+    <div class="erow"><span class="en"><i>E1</i>剪贴板自动识别（ON_RESUME）</span><span class="arrow">→</span><span class="st x">不导航 · 看不到</span></div>
+    <div class="erow"><span class="en"><i>E2</i>剪贴板悬浮球</span><span class="arrow">→</span><span class="st x">不导航 · 看不到</span></div>
+    <div class="erow"><span class="en"><i>E3</i>任务卡长按「主页下载」</span><span class="arrow">→</span><span class="st x">不导航 · 看不到</span></div>
+    <div class="erow"><span class="en"><i>E4</i>单作品短链 302 → /user/</span><span class="arrow">→</span><span class="st x">不导航 · 看不到</span></div>
+    <div class="erow"><span class="en"><i>E5</i>主页批次任务重试</span><span class="arrow">→</span><span class="st x">不导航 · 看不到</span></div>
+    <div class="erow"><span class="en"><i>E6</i>主动粘贴（首页下载 tab）</span><span class="arrow">→</span><span class="st v">原地渲染 · 正常</span></div>
+    <div class="erow"><span class="en"><i>—</i>任务<b>详情页</b></span><span class="arrow">→</span><span class="st n">无入口 · 只弹 toast</span></div>
+  </div>
+
+  <div class="panel good">
+    <h3>重构后 · 唯一通道 + 唯一承载面</h3>
+    <p class="pnote">入口函数只做一件事：<b>先导航，再解析</b>。<code>from</code> 只决定来源条文案与「返回」的去向，不改变承载面。</p>
+    <div class="erow"><span class="en"><i>E1</i>剪贴板自动识别</span><span class="arrow">→</span><span class="st v">切 tab + 立刻可见</span></div>
+    <div class="erow"><span class="en"><i>E2</i>剪贴板悬浮球</span><span class="arrow">→</span><span class="st v">切 tab + 立刻可见</span></div>
+    <div class="erow"><span class="en"><i>E3</i>任务卡「主页下载」</span><span class="arrow">→</span><span class="st v">切 tab + 立刻可见</span></div>
+    <div class="erow"><span class="en"><i>E4</i>单作品短链 302</span><span class="arrow">→</span><span class="st v">切 tab + 说明来源</span></div>
+    <div class="erow"><span class="en"><i>E5</i>主页批次任务重试</span><span class="arrow">→</span><span class="st v">切 tab + 立刻可见</span></div>
+    <div class="erow"><span class="en"><i>E6</i>主动粘贴 / 最近作者</span><span class="arrow">→</span><span class="st v">原地（已是承载面）</span></div>
+    <div class="erow"><span class="en"><i>E7</i>任务详情页 <b>新增</b>「下载该作者的主页」</span><span class="arrow">→</span><span class="st v">切 tab + 可返回该任务</span></div>
+    <div class="converge">
+      <div class="fn">openHomepage(link, from)</div>
+      <div class="dn">
+        1) <b>if (mainTab != 0) { returnTab = mainTab; mainTab = 0 }</b> ← 先导航<br>
+        2) <b>homePreview = Parsing(link)</b> ← 立刻可见，不再是"静默跑 11 秒"<br>
+        3) 解析（三阶段 / 可取消）→ 4) <b>Ready</b>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="subhead">
+  <h2>入口屏</h2>
+  <p>人是从哪儿进来的 —— 以及进来之后看到的第一个画面</p>
+</div>
+
+<div class="gallery">
+
+  <!-- ══ E1 剪贴板识别落屏 ══ -->
+  <figure>
+    <div class="phone" data-dock="1" data-title="抖快红下载">
+      <div class="body">
+        <div class="srcbar">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M10.5 13.5a4.5 4.5 0 0 0 6.4 0l2.6-2.6a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M13.5 10.5a4.5 4.5 0 0 0-6.4 0l-2.6 2.6a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg>
+          已识别剪贴板的主页链接
+          <span class="rt">返回 ›</span>
+        </div>
+        <div class="input">
+          <div class="ico clip"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M10.5 13.5a4.5 4.5 0 0 0 6.4 0l2.6-2.6a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M13.5 10.5a4.5 4.5 0 0 0-6.4 0l-2.6 2.6a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></div>
+          <div class="val">v.douyin.com/f1xouOxEGDw/</div>
+          <div class="ico close">✕</div>
+        </div>
+        <div class="card pad" style="margin-top:16px">
+          <div class="stage done"><div class="dot done">✓</div><div class="tx">打开作者主页</div></div>
+          <div class="stage now"><div class="dot now"></div><div class="tx">建立会话指纹</div></div>
+          <div class="stage wait"><div class="dot wait">·</div><div class="tx">读取作品列表</div></div>
+          <div class="hint" style="margin-top:6px">首次解析约需 10 秒 · 之后会快一些</div>
+        </div>
+      </div>
+      <div class="actionbar">
+        <div class="lbl">正在解析…<small>可随时取消</small></div>
+        <div class="btn ghost" style="min-width:96px">取消</div>
+      </div>
+    </div>
+    <figcaption>
+      <div class="cap"><span class="idx">E1</span>剪贴板识别 → 落屏（核心修复）</div>
+      <ul>
+        <li>识别后<b>先切到首页下载 tab</b>，再开始解析 —— 用户"跳到的"就是"标签页的主页下载"</li>
+        <li>来源条说明「为什么会在这里」+ 一键<b>返回</b>到识别前的 tab（并把剪贴板还原）</li>
+        <li>不插确认步骤：复制主页链接的意图是明确的，成本留给 5% 误触</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- ══ E2 任务卡长按菜单（现状坏了） ══ -->
+  <figure>
+    <div class="phone" data-dock="1" data-title="抖快红下载">
+      <div class="body">
+        <div class="seg" style="margin-top:0">
+          <span class="on">抖音 3</span><span>小红书 0</span><span>快手 0</span><span>失败 1</span>
+        </div>
+        <div class="card pad" style="margin-bottom:9px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:10.5px;color:var(--text2);border:1px solid var(--track);padding:2px 7px;border-radius:6px">抖音</span>
+            <span style="margin-left:auto;font-size:11px;color:var(--text3)">10-10 14:22</span>
+          </div>
+          <div style="font-size:13.5px;font-weight:600;margin-top:8px">奶霜莓莓的 JK 穿搭分享</div>
+          <div style="font-size:11.5px;color:var(--text2);margin-top:5px">视频 · 1 个文件 · 已完成</div>
+        </div>
+        <div class="card pad" style="margin-bottom:9px;opacity:.72">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:10.5px;color:var(--text2);border:1px solid var(--track);padding:2px 7px;border-radius:6px">抖音</span>
+            <span style="margin-left:auto;font-size:11px;color:var(--text3)">10-10 13:05</span>
+          </div>
+          <div style="font-size:13.5px;font-weight:600;margin-top:8px">pink穿搭 · 少女感 ootd</div>
+          <div style="font-size:11.5px;color:var(--text2);margin-top:5px">视频 · 1 个文件 · 已完成</div>
+        </div>
+        <div class="card pad" style="opacity:.5">
+          <div style="font-size:13.5px;font-weight:600">…</div>
+        </div>
+      </div>
+      <div class="menu">
+        <div class="mi hi">主页下载</div>
+        <div class="mi">复制链接</div>
+        <div class="mi danger">删除任务</div>
+      </div>
+      <div class="callout">
+        ⚠ <b>现状</b>：入口<b>是存在的</b>（长按任务卡）—— 但点了之后数据写进 <code>homePreview</code>
+        却不切页，用户盯着这张卡片，<b>看起来什么都没发生</b>
+      </div>
+    </div>
+    <figcaption>
+      <div class="cap"><span class="idx">E2</span>任务卡长按「主页下载」</div>
+      <ul>
+        <li>功能是好的，<b>坏在纯导航</b>：<code>onHomepageDownload(task.noteUrl)</code> 一路走到
+          <code>fetchHomepagePreview</code>，全程没有 <code>mainTab = 0</code></li>
+        <li>修复：改走 <code>openHomepage</code> → 切 tab + 来源条「来自任务：&lt;标题&gt;」+「返回该任务」</li>
+        <li>长按<b>不可发现</b>，任务卡右上补一个常驻小按钮（仅抖音/快手任务）</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- ══ E3 任务详情页（新增入口） ══ -->
+  <figure>
+    <div class="phone" data-title="← 任务详情">
+      <div class="body">
+        <div class="card pad" style="margin-top:4px">
+          <div style="display:flex;align-items:center;gap:9px">
+            <span style="font-size:10.5px;color:var(--text2);border:1px solid var(--track);padding:2px 7px;border-radius:6px">抖音</span>
+            <span style="margin-left:auto;font-size:11px;color:var(--text3)">10-10 14:22</span>
+          </div>
+          <div style="font-size:15px;font-weight:650;margin-top:9px;line-height:1.45">奶霜莓莓的 JK 穿搭分享</div>
+          <div style="font-size:11.5px;color:var(--ok);margin-top:6px">✓ 已完成 · 1 个文件</div>
+        </div>
+
+        <div class="sec" style="margin-top:16px"><span class="st">作品信息</span></div>
+        <div class="card pad" style="padding-top:4px;padding-bottom:4px">
+          <div class="inforow"><span class="k">作者</span><span class="v">奶霜莓莓</span></div>
+          <div class="inforow"><span class="k">内容类型</span><span class="v">视频</span></div>
+        </div>
+
+        <div style="height:14px"></div>
+        <div class="cta">
+          <div class="ic">⬇</div>
+          <div>
+            <div class="tx1">下载该作者的主页</div>
+            <div class="tx2">还可下载该博主全部作品</div>
+          </div>
+          <span class="go">›</span>
+        </div>
+
+        <div style="height:14px"></div>
+        <div class="card tight">
+          <div class="row" style="padding:11px 14px"><span class="lb">打开</span><span class="go">›</span></div>
+          <div class="row" style="padding:11px 14px"><span class="lb">查看文件</span><span class="go">›</span></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <div class="cap"><span class="idx">E3</span>任务详情页 · 新增入口</div>
+      <ul>
+        <li>用户真正会去的地方是<b>任务详情页</b>（点卡片进的那一屏），而它现在<b>没有入口</b></li>
+        <li>现在这里只有一句 toast「主页批量请在「首页」重新解析该主页」—— 把用户赶去手工操作</li>
+        <li>新增一行 CTA；点击带 <code>sourceTaskId</code>，解析完可<b>一键返回该任务</b></li>
+        <li>主页批次任务该行文案变为「重新检查新作品」</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+</div>
+
+<div class="subhead">
+  <h2>主流程屏</h2>
+  <p>从任一入口抵达同一承载面之后 —— 主页下载页自身的状态与操作</p>
 </div>
 
 <div class="gallery">
@@ -537,6 +772,17 @@
   <table>
     <tr><th>根因</th><th>现状</th><th>新设计</th></tr>
     <tr>
+      <td><b>E1-E5</b> 入口不导航</td>
+      <td>6 个入口共用 <code>fetchHomepagePreview</code>，它只写 <code>homePreview</code> 状态、
+        <b>从不碰 <code>mainTab</code></b>；而默认落地页是任务页 → 5 个入口"看起来什么都没发生"</td>
+      <td><b>唯一入口通道 <code>openHomepage(link, from)</code></b>：先导航（切 tab、记 <code>returnTab</code>）再解析</td>
+    </tr>
+    <tr>
+      <td><b>E7</b> 任务详情页无入口</td>
+      <td>详情页只弹 toast「主页批量请在「首页」重新解析该主页」，把用户赶去手工操作</td>
+      <td>新增「<b>下载该作者的主页</b>」行；删掉那句 toast</td>
+    </tr>
+    <tr>
       <td><b>R1</b> 主操作在滚动流里</td>
       <td>「确认下载」是 <code>Column.verticalScroll</code> 的最后一个节点，实测要上滑 5 次</td>
       <td>移入 <b>Scaffold 常驻操作条</b>，任何状态任何滚动位置都可见</td>
@@ -549,7 +795,7 @@
     <tr>
       <td><b>R3</b> 长任务零信息量</td>
       <td>11~14s 只有一行灰字，不可取消</td>
-      <td>三<b>阶段</b>进度（真实回调驱动）+ 可取消</td>
+      <td>三<b>阶段</b>进度（真实回调驱动）+ 可取消（取消后保留已填链接）</td>
     </tr>
     <tr>
       <td><b>R4</b> 硬约束事后解释</td>

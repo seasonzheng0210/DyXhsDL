@@ -48,3 +48,10 @@ scripts/selftest/tb_anon.html
 scripts/selftest/package-lock.json
 scripts/selftest/package.json
 selftest_douyin/
+
+# Local probe / scratch artifacts (transient)
+tmp/
+.scratch/
+_ck*.db
+_cookie*.txt
+_posturl*.txt
