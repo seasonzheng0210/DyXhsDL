@@ -61,6 +61,8 @@ import com.neoruaa.xhsdn.data.NoteType
 import com.neoruaa.xhsdn.data.TaskManager
 import com.neoruaa.xhsdn.data.TaskStatus
 import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
+import com.neoruaa.xhsdn.ui.glass.GlassDialog
+import com.neoruaa.xhsdn.ui.glass.GlassLogBody
 import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
 import com.neoruaa.xhsdn.ui.glass.GlassTokens
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
@@ -79,7 +81,6 @@ import top.yukonga.miuix.kmp.icon.extended.Play
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
-import top.yukonga.miuix.kmp.window.WindowDialog
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -166,31 +167,23 @@ class TaskDetailActivity : ComponentActivity() {
                         onShowFailureLog = { showLogDialog = true }
                     )
                     // 失败日志弹窗（同一 Composition 内状态驱动，避免二次 setContent）
+                    // v3.1：WindowDialog → GlassDialog（v3.0.8 已把其余弹窗迁移到自绘玻璃卡，
+                    // 本屏漏迁 → 真机上标题/日志直浮壁纸无底盘；改用 GlassLogBody 保持与
+                    // 设置页「失败日志」弹窗同款样式，避免样式漂移）
                     if (showLogDialog) {
-                        WindowDialog(
+                        GlassDialog(
                             title = "失败日志",
-                            summary = if (failureLogContent.isBlank()) "暂无日志" else "最近下载失败记录（含解析原因）",
-                            show = true,
-                            onDismissRequest = { showLogDialog = false }
+                            onDismiss = { showLogDialog = false }
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 320.dp)
-                                    .verticalScroll(rememberScrollState())
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(MiuixTheme.colorScheme.surfaceVariant)
-                                    .padding(12.dp)
-                            ) {
-                                Text(
-                                    text = if (failureLogContent.isBlank()) "暂无日志" else failureLogContent,
-                                    fontSize = 12.sp,
-                                    lineHeight = 17.sp,
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                )
-                            }
+                            GlassLogBody(
+                                text = failureLogContent,
+                                emptyText = "暂无日志"
+                            )
                             Spacer(Modifier.height(12.dp))
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
                                 TextButton(text = "关闭", onClick = { showLogDialog = false })
                                 Spacer(Modifier.width(12.dp))
                                 TextButton(

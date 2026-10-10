@@ -10,8 +10,8 @@ import com.neoruaa.xhsdn.douyin.DouyinPostItem
  * DownloadService 用 EXTRA_URL=token 取回。App 与 Service 同进程，直接引用安全。
  */
 object HomepageBatchStore {
-    /** 范围档：仅新增(默认) / 全部作品(含已下载,受 skipDownloaded 控制) / 指定数量 N 条。 */
-    enum class Range { ONLY_NEW, ALL, LATEST_N }
+    /** 范围档：仅新增(默认) / 全部作品(含已下载,受 skipDownloaded 控制) / 指定数量 N 条 / 网格手选。 */
+    enum class Range { ONLY_NEW, ALL, LATEST_N, SELECTED }
 
     data class Batch(
         val secUid: String,
