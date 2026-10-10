@@ -64,6 +64,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -118,7 +119,7 @@ import android.util.Size
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.layout.offset
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
@@ -320,7 +321,7 @@ class MainActivity : ComponentActivity() {
                         // 0. 主页链接优先：抖音主页分享文案 / /user/{sec_uid} → 直接下载主页全部视频
                         if (UrlUtils.isDouyinHomepageLink(clipText)) {
                             lastHandledUrl = dedupeKey
-                            launchDouyinHomepageDownload(clipText)
+                            fetchHomepagePreview(clipText)
                             // 读取后清空剪贴板，避免同链接被反复读取
                             clipboard.setPrimaryClip(android.content.ClipData.newPlainText("", ""))
                             detectedXhsLink = null
@@ -464,10 +465,14 @@ class MainActivity : ComponentActivity() {
                     },
                     onHomepageDownload = { link -> fetchHomepagePreview(link) },
                     homePreview = homePreview,
-                    onHomepageConfirm = { range, n, includeImages, skipDownloaded ->
+                    onHomepageConfirm = { range, n, includeImages, skipDownloaded, selectedIds ->
                         (homePreview as? HomePreviewState.Ready)?.let {
-                            confirmHomepageDownload(it, range, n, includeImages, skipDownloaded)
+                            confirmHomepageDownload(it, range, n, includeImages, skipDownloaded, selectedIds)
                         }
+                    },
+                    onFallbackCrawl = { link ->
+                        trackEvent("homepage_fallback_webcrawl")
+                        launchDouyinHomepageDownload(link)
                     },
                     onDownload = {
                         if (!manualInputLinks) {
@@ -477,7 +482,7 @@ class MainActivity : ComponentActivity() {
                                 val clipText = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
                                 // 主页链接：走主页下载，反查作者并批量下载
                                 if (UrlUtils.isDouyinHomepageLink(clipText)) {
-                                    launchDouyinHomepageDownload(clipText)
+                                    fetchHomepagePreview(clipText)
                                     return@ensureStoragePermission
                                 }
                                 // 提取有效链接
@@ -531,7 +536,7 @@ class MainActivity : ComponentActivity() {
                             if (cleanUrl != null) {
                                 // 主页链接：走主页下载，反查作者并批量下载
                                 if (UrlUtils.isDouyinHomepageLink(clipText)) {
-                                    launchDouyinHomepageDownload(clipText)
+                                    fetchHomepagePreview(clipText)
                                     detectedXhsLink = null
                                     return@homepageGuard
                                 }
@@ -598,7 +603,7 @@ class MainActivity : ComponentActivity() {
                             "douyin_home" -> {
                                 // 主页批次重试：重新反查作者并爬取（旧失败记录不再复用，直接删除避免僵尸）
                                 com.neoruaa.xhsdn.data.TaskManager.deleteTask(task.id)
-                                launchDouyinHomepageDownload(task.noteUrl)
+                                fetchHomepagePreview(task.noteUrl)
                             }
                             else -> ensureStoragePermission {
                                 when (task.source) {
@@ -647,7 +652,7 @@ class MainActivity : ComponentActivity() {
                     onManualInputDownload = homepageGuard@{ inputLink ->
                         // 抖音主页链接（分享文案 / /user/{sec_uid}）：走主页下载，反查作者并批量下载
                         if (UrlUtils.isDouyinHomepageLink(inputLink)) {
-                            launchDouyinHomepageDownload(inputLink)
+                            fetchHomepagePreview(inputLink)
                             return@homepageGuard
                         }
                         ensureStoragePermission {
@@ -694,7 +699,7 @@ class MainActivity : ComponentActivity() {
                                 trackEvent("entry_bubble", mapOf("platform" to bubblePlatform))
                                 // 主页链接：走主页下载，反查作者并批量下载
                                 if (UrlUtils.isDouyinHomepageLink(link)) {
-                                    launchDouyinHomepageDownload(link)
+                                    fetchHomepagePreview(link)
                                     detectedXhsLink = null
                                     detectedPlatform = null
                                     return@homepageGuard
@@ -817,7 +822,7 @@ class MainActivity : ComponentActivity() {
         // 抖音图文/视频统一派发前台服务：服务内先 HTTP 快解（DouyinParser.parse 含 note 页
         // 整页 HTML 解析），失败转后台不可见 WebView 真浏览器兜底（复用登录态 Cookie）——
         // 成功即 createTask 跳任务卡片，与视频下载体验完全一致；全程不启动可见 WebViewActivity，
-        // 无黑窗闪动。主页批量走 launchDouyinHomepageDownload，不受影响。
+        // 无黑窗闪动。主页批量走 fetchHomepagePreview（v2 预览流），本函数只处理单作品。
         lifecycleScope.launch {
             // 主页短链自动转（v1.14.0，用户 2026-09-05 裁定）：v.douyin.com/xxx 302 落地
             // share/user/{sec_uid} 时是作者主页不是单作品——不再失败报错，直接转主页批量下载。
@@ -834,7 +839,7 @@ class MainActivity : ComponentActivity() {
                 }
                 // share/user/{sec_uid} → www.douyin.com/user/{sec_uid}（主页爬取标准形态）
                 val homeUrl = "https://www.douyin.com/user/${userMatch.groupValues[1]}"
-                startDouyinHomepageCrawl(homeUrl)
+                fetchHomepagePreview(homeUrl)
             } else {
                 DownloadService.startDownload(this@MainActivity, cleanUrl, "douyin", taskId)
             }
@@ -911,9 +916,22 @@ class MainActivity : ComponentActivity() {
                         userFromFinal ?: if (UrlUtils.isDouyinHomepageLink(input)) {
                             null
                         } else {
-                            // 视频链接：反查作者主页（resolveAuthorHomepageUrl 内部会再跟跳一次，幂等）
-                            DouyinParser.resolveAuthorHomepageUrl(cleanUrl)
-                                ?.substringAfterLast('/')?.substringBefore('?')
+                            // 视频链接：反查作者主页（resolveAuthorHomepageUrl 内部会再跟跳一次，幂等）。
+                            // detail 反查遇 Argus 风控 → 预热种 cookie 后重试一次（与下方 post 列表同款）。
+                            try {
+                                DouyinParser.resolveAuthorHomepageUrl(cleanUrl)
+                                    ?.substringAfterLast('/')?.substringBefore('?')
+                            } catch (e: WebDetailBlockedException) {
+                                // 反查作者前预热：作品页触发 secsdk 种下完整安全 cookie 链
+                                // （轻量首页只给 UIFID_TEMP，detail API 照样空响应）
+                                BgWebViewParser(applicationContext).warmupAndSnapshot(
+                                    cleanUrl,
+                                    requireCookies = BgWebViewParser.POST_API_REQUIRED_COOKIES,
+                                    budgetMs = BgWebViewParser.POST_WARMUP_BUDGET_MS
+                                )
+                                DouyinParser.resolveAuthorHomepageUrl(cleanUrl)
+                                    ?.substringAfterLast('/')?.substringBefore('?')
+                            }
                         }
                     }
                     if (secUid.isNullOrBlank()) {
@@ -923,29 +941,66 @@ class MainActivity : ComponentActivity() {
                     val homepageUrl = "https://www.douyin.com/user/$secUid"
                     val items = mutableListOf<DouyinPostItem>()
                     var nickname: String? = HomeRepo.nickname(this@MainActivity, secUid)
-                    var cursor = 0L
-                    var hasMore = true
-                    var page = 0
-                    while (hasMore && page < HOMEPAGE_MAX_PAGES) {
-                        val pg = try {
-                            withContext(Dispatchers.IO) { DouyinParser.fetchPostList(secUid, cursor) }
-                        } catch (e: WebDetailBlockedException) {
-                            // 风控：离屏 WebView 预热种 cookie 后重试一次。
-                            // 预热页用轻量首页而非 /user/{secUid}——cookie 按域共享，任意
-                            // www.douyin.com 页都能种下 UIFID 指纹；user 页过重，慢机（模拟器
-                            // 软渲染）20s 内 onPageFinished 不触发即超时，预热等于空转（E2E 实证）。
-                            BgWebViewParser(applicationContext).warmupAndSnapshot(HOMEPAGE_WARMUP_URL)
-                            withContext(Dispatchers.IO) { DouyinParser.fetchPostList(secUid, cursor) }
+                    var totalCount = 0
+                    var hasMore = false
+                    var provider = "l1"
+
+                    // ---- L1 快路径：自算 a_bogus + CookieManager 指纹（约 2s）----
+                    // 抖音现要求 uifid / x-secsdk-web-signature / verifyFp 等**只能由页面 secsdk
+                    // JS 产出**的参数，纯自建请求大概率 403；仍保留一次尝试（成本低，且若抖音
+                    // 回退策略即可白捡秒级路径）。**不再为 L1 做 28s 预热**——实测预热不能救 L1。
+                    try {
+                        val pg = withContext(Dispatchers.IO) { DouyinParser.fetchPostList(secUid, 0L) }
+                        if (pg.items.isNotEmpty()) {
+                            items += pg.items
+                            nickname = nickname ?: pg.nickname
+                            totalCount = pg.totalCount
+                            hasMore = pg.hasMore
+                            var cursor = pg.maxCursor
+                            var page = 1
+                            while (hasMore && page < HOMEPAGE_MAX_PAGES) {
+                                val next = withContext(Dispatchers.IO) { DouyinParser.fetchPostList(secUid, cursor) }
+                                items += next.items
+                                totalCount = maxOf(totalCount, next.totalCount)
+                                cursor = next.maxCursor
+                                hasMore = next.hasMore
+                                page++
+                            }
                         }
-                        items += pg.items
-                        nickname = nickname ?: pg.nickname
-                        cursor = pg.maxCursor
-                        hasMore = pg.hasMore
-                        page++
+                    } catch (e: Exception) {
+                        Log.d(TAG, "L1 post 列表不可用（预期内，转 L2a 嗅探）: ${e.message}")
                     }
+
+                    // ---- L2a 主路径：蹭页面自己发出的 post 请求（不重算任何签名）----
                     if (items.isEmpty()) {
-                        homePreview = HomePreviewState.Error(getString(R.string.home_preview_empty), false)
+                        provider = "l2a"
+                        val sniff = withContext(Dispatchers.IO) {
+                            BgWebViewParser(applicationContext).sniffHomepage(secUid)
+                        }
+                        if (sniff != null && sniff.isNotEmpty) {
+                            items += sniff.items
+                            nickname = nickname ?: sniff.nickname
+                            totalCount = maxOf(totalCount, sniff.totalCount)
+                            hasMore = sniff.hasMore
+                        }
+                    }
+
+                    if (items.isEmpty()) {
+                        trackEvent("homepage_provider_result", mapOf("provider" to provider, "items" to "0"))
+                        homePreview = HomePreviewState.Error(getString(R.string.home_preview_need_login), true)
                         return@launch
+                    }
+                    trackEvent(
+                        "homepage_provider_result",
+                        mapOf("provider" to provider, "items" to items.size.toString(),
+                            "total" to totalCount.toString(), "hasMore" to hasMore.toString())
+                    )
+                    // 匿名上限提示：实测服务端对未登录只返回首屏 21 条（页面显示「登录后查看更多作品」）
+                    if (totalCount > 0 && items.size < totalCount) {
+                        showToast(getString(R.string.home_preview_partial, items.size, totalCount))
+                    } else if (hasMore) {
+                        // 档案接口没取到总数时降级文案，避免出现「共 0 条」
+                        showToast(getString(R.string.home_preview_partial_unknown, items.size))
                     }
                     val lastSync = HomeRepo.lastSync(this@MainActivity, secUid)
                     val newItems = HomeRepo.filterNew(this@MainActivity, secUid, items)
@@ -953,7 +1008,7 @@ class MainActivity : ComponentActivity() {
                     HomeRepo.touch(this@MainActivity, secUid, nickname.orEmpty())
                     homePreview = HomePreviewState.Ready(
                         secUid, nickname ?: getString(R.string.home_preview_default_author),
-                        homepageUrl, items, newItems, lastSync
+                        homepageUrl, items, newItems, totalCount, lastSync
                     )
                 } catch (e: WebDetailBlockedException) {
                     homePreview = HomePreviewState.Error(getString(R.string.home_preview_need_login), true)
@@ -972,9 +1027,10 @@ class MainActivity : ComponentActivity() {
         range: HomepageBatchStore.Range,
         latestN: Int,
         includeImages: Boolean,
-        skipDownloaded: Boolean
+        skipDownloaded: Boolean,
+        selectedIds: Set<String> = emptySet()
     ) {
-        val chosen = scopeHomepageItems(state, range, latestN, includeImages, skipDownloaded)
+        val chosen = scopeHomepageItems(state, range, latestN, includeImages, skipDownloaded, selectedIds)
         if (chosen.isEmpty()) {
             showToast(getString(R.string.home_preview_none_new))
             return
@@ -991,6 +1047,11 @@ class MainActivity : ComponentActivity() {
         homePreview = HomePreviewState.Idle
     }
 
+    /**
+     * 主页下载 v1 WebView 爬取降级链：仅当 v2 post API 被风控（需登录）时，
+     * 由 HomepagePage Error 分支的「改用网页爬取方式」按钮调用。日常主页入口已全走
+     * fetchHomepagePreview（v2 预览流），本函数是兜底，勿在别处新引用。
+     */
     private fun launchDouyinHomepageDownload(input: String) {
         trackEvent("homepage_download")
         val cleanUrl = UrlUtils.extractFirstUrl(input)
@@ -1234,10 +1295,10 @@ class MainActivity : ComponentActivity() {
         const val WEBVIEW_REQUEST_CODE = 3002
         /** UI v2 S5 首次引导完成标记（仅全新安装首启展示）。 */
         private const val ONBOARDING_DONE_KEY = "v2_onboarding_done"
+        /** logcat 标签（主页下载降级链诊断用）。 */
+        private const val TAG = "MainActivity"
         /** 预览拉取翻页上限（防异常账号无限翻页拖垮 Service）。 */
         private const val HOMEPAGE_MAX_PAGES = 20
-        /** 主页批量 cookie 预热的轻量页：同域即种 UIFID 指纹（user 页过重，慢机 20s 预热会超时空转）。 */
-        private const val HOMEPAGE_WARMUP_URL = "https://www.douyin.com/"
     }
 }
 
@@ -1271,7 +1332,8 @@ private fun MainScreen(
     onMainTabSelected: (Int) -> Unit = {},
     onHomepageDownload: (String) -> Unit = {},
     homePreview: HomePreviewState = HomePreviewState.Idle,
-    onHomepageConfirm: (HomepageBatchStore.Range, Int, Boolean, Boolean) -> Unit = { _, _, _, _ -> },
+    onHomepageConfirm: (HomepageBatchStore.Range, Int, Boolean, Boolean, Set<String>) -> Unit = { _, _, _, _, _ -> },
+    onFallbackCrawl: (String) -> Unit = {},
     onClipboardBubbleActivate: () -> Unit = {},
     onDismissPrompt: () -> Unit,
     onCancelSelectiveDownload: () -> Unit,
@@ -1372,6 +1434,7 @@ private fun MainScreen(
                             preview = homePreview,
                             onPreview = onHomepageDownload,
                             onConfirm = onHomepageConfirm,
+                            onFallbackCrawl = onFallbackCrawl,
                             modifier = Modifier.fillMaxSize()
                         )
                         // 2=我的：内嵌设置页（UI v2 S3 分组；原 SettingsActivity 保留独立入口）
@@ -1590,7 +1653,8 @@ private fun HistoryPage(
     onGoHomepage: () -> Unit = {},
     onOpenFailureLog: () -> Unit = {},
     homePreview: HomePreviewState = HomePreviewState.Idle,
-    onHomepageConfirm: (HomepageBatchStore.Range, Int, Boolean, Boolean) -> Unit = { _, _, _, _ -> },
+    onHomepageConfirm: (HomepageBatchStore.Range, Int, Boolean, Boolean, Set<String>) -> Unit = { _, _, _, _, _ -> },
+    onFallbackCrawl: (String) -> Unit = {},
     onClipboardBubbleActivate: () -> Unit = {},
     onDismissPrompt: () -> Unit,
     modifier: Modifier = Modifier,
@@ -2272,6 +2336,9 @@ private fun HistoryPage(
     }
 }
 
+/** 左滑删除锚点（v3.0.12 anchoredDraggable）：Closed=静止，Revealed=滑出删除层 */
+private enum class SwipeAnchor { Closed, Revealed }
+
 /**
  * 任务 Cell 组件
  */
@@ -2332,9 +2399,26 @@ private fun TaskCell(
     }
     
     // 左滑露出删除按钮（卡片左移 REVEAL.dp）；长按弹出菜单（复制链接 / 删除）作为左滑删除的兜底
-    val offsetX = remember { mutableStateOf(0f) }
+    // v3.0.12：detectHorizontalDragGestures 在真机（触控轨迹带垂直分量）上会被 LazyColumn
+    // 垂直滚动仲裁抢走 → 左滑失效（用户小米14 实测）。换官方 anchoredDraggable：
+    // 拖拽锚点机制自带正确的轴向竞争与 settle/fling 语义（foundation 1.11 API）
     val swipeScope = rememberCoroutineScope()
-    val REVEAL = 76f
+    val density = LocalDensity.current
+    val revealPx = with(density) { 76.dp.toPx() }
+    val dragState = remember(revealPx) {
+        androidx.compose.foundation.gestures.AnchoredDraggableState(
+            initialValue = SwipeAnchor.Closed,
+            anchors = androidx.compose.foundation.gestures.DraggableAnchors {
+                SwipeAnchor.Closed at 0f
+                SwipeAnchor.Revealed at -revealPx
+            }
+        )
+    }
+    fun collapseSwipe() = swipeScope.launch {
+        dragState.anchoredDrag { anchors ->
+            dragTo(anchors.positionOf(SwipeAnchor.Closed))
+        }
+    }
     var showTaskMenu by remember { mutableStateOf(false) }
 
     Box(
@@ -2343,7 +2427,8 @@ private fun TaskCell(
             .clip(ContinuousRoundedRectangle(24.dp))
     ) {
         // 删除按钮（满铺红层，α=左滑进度；静止 α=0 → 不透过玻璃卡底色显形，根治珊瑚/粉穿帮）
-        val deleteProgress = (-offsetX.value / REVEAL).coerceIn(0f, 1f)
+        val swipeOffset = if (dragState.offset.isNaN()) 0f else dragState.offset
+        val deleteProgress = (-swipeOffset / revealPx).coerceIn(0f, 1f)
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -2364,7 +2449,7 @@ private fun TaskCell(
         Column(
             modifier = modifier
                 .fillMaxWidth()
-                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .offset { IntOffset(if (dragState.offset.isNaN()) 0 else dragState.offset.roundToInt(), 0) }
                 .clip(ContinuousRoundedRectangle(24.dp))
                 // v3.0.2 mockup .lg：卡底=玻璃白（亮 55% / 暗 15%），非实色 surfaceVariant
                 .background(if (dark) GlassTokens.CardDark else GlassTokens.CardLight)
@@ -2374,33 +2459,21 @@ private fun TaskCell(
                     color = if (dark) GlassTokens.BorderDark else GlassTokens.BorderLight,
                     shape = ContinuousRoundedRectangle(24.dp)
                 )
-                .padding(horizontal = 14.dp, vertical = 12.dp)
+                // v3.0.12 手势区覆盖整卡（含 padding 边带）→ 手势放 padding 之前；
+                // combinedClickable 在前、anchoredDraggable 在后（内层）的顺序不能动：
+                // Main pass 内层先跑，拖拽检测必须最内层才能先认领 touch slop。
                 .combinedClickable(
-                    onClick = { onClick?.invoke() },
+                    // 已滑出（reveal）时点击先收回，不进详情
+                    onClick = {
+                        if (deleteProgress > 0f) collapseSwipe() else onClick?.invoke()
+                    },
                     onLongClick = { showTaskMenu = true }
                 )
-                .pointerInput(Unit) {
-                    detectHorizontalDragGestures(
-                        onHorizontalDrag = { change, dragAmount ->
-                            change.consume()
-                            offsetX.value = (offsetX.value + dragAmount).coerceIn(-REVEAL, 0f)
-                        },
-                        onDragEnd = {
-                            swipeScope.launch {
-                                animate(
-                                    initialValue = offsetX.value,
-                                    targetValue = if (offsetX.value < -REVEAL / 2f) -REVEAL else 0f,
-                                    animationSpec = tween(200)
-                                ) { value, _ -> offsetX.value = value }
-                            }
-                        },
-                        onDragCancel = {
-                            swipeScope.launch {
-                                animate(initialValue = offsetX.value, targetValue = 0f, animationSpec = tween(200)) { value, _ -> offsetX.value = value }
-                            }
-                        }
-                    )
-                }
+                .anchoredDraggable(
+                    state = dragState,
+                    orientation = androidx.compose.foundation.gestures.Orientation.Horizontal
+                )
+                .padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
         Column(
             modifier = Modifier
@@ -2520,14 +2593,15 @@ private fun TaskCell(
             }
 
             // 媒体预览网格（mockup .thumbs: gap6, 52dp/radius14/白描边折射）
+            // v3.0.12：去掉 horizontalScroll——它是横向滚动容器，会把落在缩略图行上的
+            // 左滑手势 slop 先消费掉，父级 anchoredDraggable 弃权 → 用户报「只有部分区域能左滑」。
+            // 改为最多显示 6 张（卡内宽约容纳 6×58dp），更多文件进任务详情页查看。
             if (mediaItems.isNotEmpty()) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    mediaItems.forEach { item ->
+                    mediaItems.take(6).forEach { item ->
                         Box(
                             modifier = Modifier
                                 .size(52.dp)
@@ -2918,7 +2992,11 @@ private fun MainTabBar(
 }
 
 /** 主页批量：指定数量档的默认值与步进。 */
+/** 「指定数量」档的初始条数（LATEST_N 档用）；「按勾选下载」档不读它。 */
 private const val HOMEPAGE_DEFAULT_LIMIT = 100
+/** 勾选网格默认展示条数（超出显示「展开全部」），避免一次性组合全量+拉全量封面。 */
+private const val HOMEPAGE_GRID_PREVIEW = 60
+/** 「指定数量」档步进值。 */
 private const val HOMEPAGE_LIMIT_STEP = 10
 
 /**
@@ -2926,6 +3004,7 @@ private const val HOMEPAGE_LIMIT_STEP = 10
  *  - ONLY_NEW：恒为未下载集合（"仅新增"定义即未下载，不受 skipDownloaded 影响）；
  *  - ALL：skipDownloaded=true 时等同仅新增，false 时含已下载（全量重下）；
  *  - LATEST_N：从全量/新增里取最新 N 条；
+ *  - SELECTED：网格手选集合（忽略 includeImages/skipDownloaded——用户勾了就下，所见即所得）；
  *  - includeImages=false 时剔除图文帖（只下视频）。
  */
 private fun scopeHomepageItems(
@@ -2933,14 +3012,19 @@ private fun scopeHomepageItems(
     range: HomepageBatchStore.Range,
     latestN: Int,
     includeImages: Boolean,
-    skipDownloaded: Boolean
+    skipDownloaded: Boolean,
+    selectedIds: Set<String> = emptySet()
 ): List<DouyinPostItem> {
     val base = when (range) {
         HomepageBatchStore.Range.ONLY_NEW -> state.newItems
         HomepageBatchStore.Range.ALL -> if (skipDownloaded) state.newItems else state.allItems
         HomepageBatchStore.Range.LATEST_N ->
             if (skipDownloaded) state.newItems.take(latestN) else state.allItems.take(latestN)
+        HomepageBatchStore.Range.SELECTED ->
+            if (selectedIds.isEmpty()) emptyList()
+            else state.allItems.filter { it.id in selectedIds }
     }
+    if (range == HomepageBatchStore.Range.SELECTED) return base
     return if (includeImages) base
     else base.filter { it.type == com.neoruaa.xhsdn.douyin.DouyinMediaType.VIDEO }
 }
@@ -2957,6 +3041,8 @@ private sealed interface HomePreviewState {
         val allItems: List<DouyinPostItem>,
         /** 未下载过的新作品（= allItems − 已下载，默认"仅新增"档与统计条用）。 */
         val newItems: List<DouyinPostItem>,
+        /** 该账号作品总数（来自 user/profile/other 的 aweme_count）。0 = 未知。 */
+        val totalCount: Int = 0,
         val lastSync: Long
     ) : HomePreviewState
     data class Error(val message: String, val needLogin: Boolean) : HomePreviewState
@@ -2969,7 +3055,8 @@ private sealed interface HomePreviewState {
 private fun HomepagePage(
     preview: HomePreviewState,
     onPreview: (String) -> Unit,
-    onConfirm: (HomepageBatchStore.Range, Int, Boolean, Boolean) -> Unit,
+    onConfirm: (HomepageBatchStore.Range, Int, Boolean, Boolean, Set<String>) -> Unit,
+    onFallbackCrawl: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val ctx = LocalContext.current
@@ -2998,7 +3085,9 @@ private fun HomepagePage(
         Spacer(modifier = Modifier.height(12.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            // 垂直居中：两钮等高（h52）时消除 1px 级高度差带来的顶边错位（真机像素实测 7px 偏移）
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Button(
                 onClick = {
@@ -3010,14 +3099,17 @@ private fun HomepagePage(
                         Toast.makeText(ctx, ctx.getString(R.string.no_valid_link_found), Toast.LENGTH_SHORT).show()
                     }
                 },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                // v3.1：与右侧「解析作品」统一 h52 胶囊（此前用 Miuix 默认圆角矩形，
+                // 与 36dp 的解析钮一大一小且底边不齐，真机截图实证）
+                cornerRadius = 26.dp
             ) {
                 Text(stringResource(R.string.homepage_paste_clipboard))
             }
-            // v3.0.2 mockup 36dp 胶囊
+            // v3.1：h36 → h52 胶囊，与左侧粘贴钮等高对齐（全 App 主/次按钮统一 h52 标准）
             GlassPrimaryWrap(
-                modifier = Modifier.weight(1f).height(36.dp),
-                cornerRadius = 18.dp
+                modifier = Modifier.weight(1f).height(52.dp),
+                cornerRadius = 26.dp
             ) {
                 Button(
                     onClick = {
@@ -3050,18 +3142,43 @@ private fun HomepagePage(
                     cornerRadius = 14.dp,
                     colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceVariant)
                 ) {
-                    Text(
-                        text = p.message,
-                        fontSize = 13.sp,
-                        color = MiuixTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(12.dp)
-                    )
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = p.message,
+                            fontSize = 13.sp,
+                            color = MiuixTheme.colorScheme.onSurface
+                        )
+                        // 风控/需登录：post API 被拦时给网页爬取降级出路（v1 老路径，需登录态）
+                        if (p.needLogin && link.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "改用网页爬取方式（需在浏览器登录抖音）",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MiuixTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        onPreview(link)
+                                        onFallbackCrawl(link)
+                                    }
+                                    .padding(vertical = 4.dp)
+                            )
+                        }
+                    }
                 }
             }
             is HomePreviewState.Ready -> {
                 val p = preview as HomePreviewState.Ready
                 val downloadedCount = (p.allItems.size - p.newItems.size).coerceAtLeast(0)
-                val selCount = scopeHomepageItems(p, selectedRange, limitN, includeImages, skipDownloaded).size
+                // 勾选状态：默认勾选=全部新增；网格点击切换并自动切「按勾选下载」档
+                val newIdSet = remember(p.secUid) { p.newItems.map { it.id }.toSet() }
+                val selectedIds = remember(p.secUid) {
+                    mutableStateOf(p.newItems.map { it.id }.toSet())
+                }
+                var showAllItems by remember(p.secUid) { mutableStateOf(false) }
+                val selCount = scopeHomepageItems(p, selectedRange, limitN, includeImages, skipDownloaded, selectedIds.value).size
                 Column(modifier = Modifier.fillMaxWidth()) {
                     // 作者卡 + 三格统计
                     Card(
@@ -3076,6 +3193,21 @@ private fun HomepagePage(
                                 fontWeight = FontWeight.Medium,
                                 color = MiuixTheme.colorScheme.onSurface
                             )
+                            // 匿名截断常驻提示：toast 会消失，这里保证用户不会误以为
+                            // 「作者只有这十几个作品」。总数来自 profile 接口，取不到则降级文案。
+                            val truncated = p.allItems.isNotEmpty() &&
+                                (p.totalCount > p.allItems.size || (p.totalCount == 0 && p.allItems.size <= 21))
+                            if (truncated) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (p.totalCount > p.allItems.size)
+                                        stringResource(R.string.home_preview_truncated_hint, p.totalCount, p.allItems.size)
+                                    else
+                                        stringResource(R.string.home_preview_truncated_hint_unknown, p.allItems.size),
+                                    fontSize = 11.sp,
+                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                )
+                            }
                             Spacer(modifier = Modifier.height(10.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 HomeStatCell(
@@ -3088,20 +3220,53 @@ private fun HomepagePage(
                                     modifier = Modifier.weight(1f)
                                 )
                                 HomeStatCell(
-                                    stringResource(R.string.home_stat_total), p.allItems.size,
+                                    stringResource(R.string.home_stat_total),
+                                    // 有总数就显示账号真实总量（而非本次所取条数），
+                                    // 与下方截断提示一致，避免「全部作品=21」的误导
+                                    if (p.totalCount > 0) p.totalCount else p.allItems.size,
                                     modifier = Modifier.weight(1f)
                                 )
                             }
                         }
                     }
                     Spacer(modifier = Modifier.height(10.dp))
-                    // 作品预览网格：最新 9 条，视频/图文以底色+角标区分
-                    p.allItems.take(9).chunked(3).forEach { rowItems ->
+                    // ── 作品勾选网格（v3.1）：全量封面 + 逐条勾选，默认勾选=全部新增 ──
+                    val visibleItems =
+                        if (showAllItems) p.allItems else p.allItems.take(HOMEPAGE_GRID_PREVIEW)
+                    visibleItems.chunked(3).forEach { rowItems ->
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            rowItems.forEach { item -> HomeGridCell(item, Modifier.weight(1f)) }
+                            rowItems.forEach { item ->
+                                HomeSelectableCell(
+                                    item = item,
+                                    selected = item.id in selectedIds.value,
+                                    downloaded = item.id !in newIdSet,
+                                    onToggle = { checked ->
+                                        selectedIds.value =
+                                            if (checked) selectedIds.value + item.id
+                                            else selectedIds.value - item.id
+                                        // 手动勾选即切到「自选」档，保证所见即所得
+                                        selectedRange = HomepageBatchStore.Range.SELECTED
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                             repeat(3 - rowItems.size) { Spacer(modifier = Modifier.weight(1f)) }
                         }
                         Spacer(modifier = Modifier.height(6.dp))
+                    }
+                    if (p.allItems.size > HOMEPAGE_GRID_PREVIEW) {
+                        Text(
+                            text = if (showAllItems) "收起" else "展开全部 ${p.allItems.size} 条作品",
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MiuixTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { showAllItems = !showAllItems }
+                                .padding(vertical = 8.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     // 范围选择（列表单选）
@@ -3122,6 +3287,12 @@ private fun HomepagePage(
                                 selected = selectedRange == HomepageBatchStore.Range.ONLY_NEW,
                                 pill = stringResource(R.string.home_preview_recommend)
                             ) { selectedRange = HomepageBatchStore.Range.ONLY_NEW }
+                            // 网格手选档：勾选集即下载集（忽略 includeImages/skipDownloaded）
+                            HomeRangeRow(
+                                label = "按勾选下载",
+                                countText = selectedIds.value.size.toString(),
+                                selected = selectedRange == HomepageBatchStore.Range.SELECTED
+                            ) { selectedRange = HomepageBatchStore.Range.SELECTED }
                             // 指定数量行：尾部 −/+ 步进（点击即选中该档）
                             val cappedN = limitN.coerceAtMost(p.allItems.size.coerceAtLeast(1))
                             HomeRangeRow(
@@ -3187,7 +3358,7 @@ private fun HomepagePage(
                         cornerRadius = 22.dp
                     ) {
                         Button(
-                            onClick = { onConfirm(selectedRange, limitN, includeImages, skipDownloaded) },
+                            onClick = { onConfirm(selectedRange, limitN, includeImages, skipDownloaded, selectedIds.value) },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
                         insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
@@ -3289,40 +3460,119 @@ private fun HomeStatCell(label: String, value: Int, valueColor: Color? = null, m
     }
 }
 
-/** 主页预览网格单元：视频=灰绿底+播放三角，图文=焦糖底+2x2 缩略。 */
+/** 封面位图内存缓存（主页预览网格用，decoded 缩略位图；LruCache 容量=张数）。 */
+private val homeCoverCache = android.util.LruCache<String, android.graphics.Bitmap>(120)
+
+/** 远程封面加载：进组合才拉取，decode 时 inSampleSize 压尺寸；失败静默（格子有底色角标兜底）。 */
 @Composable
-private fun HomeGridCell(item: com.neoruaa.xhsdn.douyin.DouyinPostItem, modifier: Modifier = Modifier) {
+private fun rememberHomeCover(url: String?): android.graphics.Bitmap? {
+    if (url.isNullOrBlank()) return null
+    var bmp by remember(url) { mutableStateOf(homeCoverCache.get(url)) }
+    LaunchedEffect(url) {
+        if (homeCoverCache.get(url) != null) {
+            bmp = homeCoverCache.get(url)
+            return@LaunchedEffect
+        }
+        val decoded = withContext(Dispatchers.IO) {
+            runCatching {
+                val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 8000
+                conn.readTimeout = 10000
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36")
+                conn.inputStream.use { input ->
+                    val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 4 }
+                    android.graphics.BitmapFactory.decodeStream(input, null, opts)
+                }
+            }.getOrNull()
+        }
+        if (decoded != null) {
+            homeCoverCache.put(url, decoded)
+            bmp = decoded
+        }
+    }
+    return bmp
+}
+
+/**
+ * 主页作品勾选单元（v3.1 主页批量改版）：封面图 + 类型角标 + 已下载角标 + 选中描边。
+ * 点击回调 checked=切换后的状态；封面缺失时退回底色+图标占位。
+ */
+@Composable
+private fun HomeSelectableCell(
+    item: com.neoruaa.xhsdn.douyin.DouyinPostItem,
+    selected: Boolean,
+    downloaded: Boolean,
+    onToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
     val isVideo = item.type == com.neoruaa.xhsdn.douyin.DouyinMediaType.VIDEO
+    val cover = rememberHomeCover(item.coverUrl ?: item.imageUrls.firstOrNull())
     Box(
         modifier = modifier
-            .height(78.dp)
+            .height(86.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(if (isVideo) Color(0xFFBFD0C6) else Color(0xFFE0A06B)),
-        contentAlignment = androidx.compose.ui.Alignment.Center
+            .background(if (isVideo) Color(0xFFBFD0C6) else Color(0xFFE0A06B))
+            .combinedClickable(onClick = { onToggle(!selected) })
+            // 选中态：小米橙描边 2dp（玻璃态橙同色系）
+            .then(
+                if (selected) Modifier.border(
+                    2.dp, Color(0xE5FF6900), RoundedCornerShape(10.dp)
+                ) else Modifier
+            )
     ) {
-        Canvas(modifier = Modifier.size(22.dp)) {
-            val w = this.size.width
-            val h = this.size.height
-            if (isVideo) {
-                val path = androidx.compose.ui.graphics.Path().apply {
-                    moveTo(w * 0.28f, h * 0.16f)
-                    lineTo(w * 0.28f, h * 0.84f)
-                    lineTo(w * 0.84f, h * 0.5f)
-                    close()
-                }
-                drawPath(path, Color.White.copy(alpha = 0.95f))
-            } else {
-                val gap = w * 0.08f
-                val side = (w - gap * 3) / 2
-                for (r in 0..1) {
-                    for (c in 0..1) {
-                        drawRect(
-                            color = Color.White.copy(alpha = 0.9f),
-                            topLeft = androidx.compose.ui.geometry.Offset(gap + c * (side + gap), gap + r * (side + gap)),
-                            size = androidx.compose.ui.geometry.Size(side, side)
-                        )
-                    }
-                }
+        if (cover != null) {
+            Image(
+                bitmap = cover.asImageBitmap(),                contentDescription = item.title,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            // 压暗层：保证角标/勾选态可读
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = if (selected) 0.22f else 0.10f))
+            )
+        }
+        // 类型角标（左下）
+        Box(
+            modifier = Modifier
+                .align(androidx.compose.ui.Alignment.BottomStart)
+                .padding(4.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color.Black.copy(alpha = 0.45f))
+                .padding(horizontal = 4.dp, vertical = 1.dp)
+        ) {
+            Text(
+                text = if (isVideo) "视频" else "图集",
+                fontSize = 9.sp,
+                color = Color.White
+            )
+        }
+        // 已下载角标（右下）
+        if (downloaded) {
+            Box(
+                modifier = Modifier
+                    .align(androidx.compose.ui.Alignment.BottomEnd)
+                    .padding(4.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
+            ) {
+                Text(text = "已下", fontSize = 9.sp, color = Color(0xFF9FE8C4))
+            }
+        }
+        // 选中勾（右上圆点）
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .align(androidx.compose.ui.Alignment.TopEnd)
+                    .padding(4.dp)
+                    .size(18.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(Color(0xE5FF6900)),
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
+                Text("✓", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
     }

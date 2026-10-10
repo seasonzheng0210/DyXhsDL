@@ -7,6 +7,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.View
+import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
@@ -63,6 +65,33 @@ class BgWebViewParser(private val appContext: Context) {
         var done: Boolean = false
     }
 
+    /** 主页作品列表嗅探结果（L2a）。 */
+    data class HomepageSniff(
+        val items: List<com.neoruaa.xhsdn.douyin.DouyinPostItem>,
+        val nickname: String?,
+        val totalCount: Int,
+        val hasMore: Boolean,
+        val logTail: String
+    ) {
+        val isNotEmpty: Boolean get() = items.isNotEmpty()
+    }
+
+    /** 主页嗅探会话：bridge 回传在 WebView 线程，集合用同步包装。 */
+    private class SniffSession {
+        val items: MutableList<com.neoruaa.xhsdn.douyin.DouyinPostItem> =
+            Collections.synchronizedList(mutableListOf())
+        val ids: MutableSet<String> = Collections.synchronizedSet(mutableSetOf())
+
+        @Volatile var nickname: String? = null
+        @Volatile var totalCount: Int = 0
+        @Volatile var hasMore: Boolean = false
+        @Volatile var done: Boolean = false
+        /** 首条作品落地的时间戳（0 = 尚未命中）。用于给档案接口留一小段收口窗口。 */
+        @Volatile var firstItemAt: Long = 0L
+        /** JS 侧诊断日志流（保留全部，便于定位「页面是否发出数据请求」）。 */
+        val logs: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    }
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private val mutex = Mutex()
 
@@ -70,6 +99,9 @@ class BgWebViewParser(private val appContext: Context) {
     private var webView: WebView? = null
     /** bridge 回调路由到的当前会话（主线程赋值/清空）。 */
     private var activeSession: Session? = null
+    /** 主页嗅探会话（主线程赋值/清空；bridge 在 WebView 线程读取）。 */
+    @Volatile
+    private var sniffSession: SniffSession? = null
 
     private val cookieManager: CookieManager by lazy {
         CookieManager.getInstance().apply { setAcceptCookie(true) }
@@ -84,6 +116,47 @@ class BgWebViewParser(private val appContext: Context) {
         @JavascriptInterface
         fun onImageUrl(url: String) {
             if (url.isNotBlank()) activeSession?.imageUrls?.add(url)
+        }
+
+        /** 主页嗅探：一页作品（douyin_home_sniff.js 裁剪后回传，结构与 post 接口同构）。 */
+        @JavascriptInterface
+        fun onHomepagePage(json: String) {
+            val s = sniffSession ?: return
+            runCatching {
+                val page = com.neoruaa.xhsdn.douyin.DouyinParser.parsePostListJson(json)
+                s.nickname = s.nickname ?: page.nickname
+                s.totalCount = maxOf(s.totalCount, page.totalCount)
+                s.hasMore = page.hasMore
+                for (item in page.items) {
+                    if (s.ids.add(item.id)) s.items.add(item)
+                }
+                if (s.items.isNotEmpty() && s.firstItemAt == 0L) s.firstItemAt = System.currentTimeMillis()
+            }.onFailure { Log.w(TAG, "sniff 页解析失败: ${it.message}") }
+        }
+
+        /**
+         * 主页嗅探：作者档案（`user/profile/other` 的 user 节点）。
+         *
+         * post 响应里的 author 节点**不含** aweme_count，作品总数只能从该接口取
+         * （实测匿名上限 21 条时 aweme_count=253）→ 用于「已取 M 条 / 共 N 条」提示。
+         */
+        @JavascriptInterface
+        fun onHomepageProfile(json: String) {
+            val s = sniffSession ?: return
+            runCatching {
+                val o = JSONObject(json)
+                val n = o.optString("nickname", "").takeIf { it.isNotBlank() }
+                val c = o.optInt("aweme_count", 0)
+                if (n != null) s.nickname = s.nickname ?: n
+                if (c > 0) s.totalCount = maxOf(s.totalCount, c)
+            }.onFailure { Log.w(TAG, "sniff 档案解析失败: ${it.message}") }
+        }
+
+        /** 主页嗅探：JS 侧诊断日志（hook 安装/异常/回传统计）。 */
+        @JavascriptInterface
+        fun onHomepageSniffLog(msg: String) {
+            sniffSession?.logs?.add(msg)
+            Log.d(TAG, "sniff js: $msg")
         }
     }
 
@@ -150,51 +223,95 @@ class BgWebViewParser(private val appContext: Context) {
      * __ac_signature/s_v_web_id…），这些只能由真实浏览器 JS 执行后种下，纯 HTTP 拿不到
      * （匿名直调 detail → 403 ArgusSecurityPlugin Uifid Not Found，沙箱实证）。
      *
-     * 做法：复用本类同一后台 WebView（Mutex 串行，不弹窗），加载目标作品页让抖音风控壳
-     * JS 执行种 cookie（CookieManager 全局自动写入，与 WebViewActivity 共享 app_webview 目录），
-     * 等待 [WARMUP_SETTLE_MS] 水合窗口后快照 douyin.com 域 cookie 串返回。
+     * 做法：复用本类同一后台 WebView（Mutex 串行，不弹窗），加载目标页面让抖音风控壳
+     * JS 执行种 cookie（CookieManager 全局自动写入，与 WebViewActivity 共享 app_webview 目录）。
+     *
+     * 完成判定（v3.0.3 改造）：
+     * - 传入 [requireCookies] 时**按 cookie 内容轮询**，全中即刻返回（不再依赖 onPageFinished
+     *   ——慢机软渲染下用户主页可能长时间不触发该回调，旧实现因此空转超时）；
+     * - 不传 [requireCookies] 时保持旧行为：onPageFinished 后等 [settleMs] 再快照。
+     * 预算 [budgetMs] 耗尽时返回**已有 cookie**（部分成功优于全失败）。
+     *
+     * ⚠️ 主页 post API 预热必须加载**用户主页** `www.douyin.com/user/{sec_uid}`，
+     * 而非轻量首页 `www.douyin.com/`：`__ac_signature` / `bd_ticket_guard_client_data`
+     * 只在用户主页由 secsdk 生成，轻量首页仅给 UIFID_TEMP → post 接口会返回空 body。
+     * 详见 docs/design/主页下载-全局重构方案-v3.md §1.6 对照实验。
      *
      * 调用方拿到 cookie 串后无需手工透传——CookieManager 已全局更新，OkHttp 侧
      * DouyinParser.fetchWebDetail 重新快照即得新 cookie。
      *
-     * @return douyin.com 域 cookie 串（name=value;…）；失败/超时返回 null。
+     * @return douyin.com 域 cookie 串（name=value;…）；失败返回 null。
      */
-    suspend fun warmupAndSnapshot(url: String, settleMs: Long = WARMUP_SETTLE_MS): String? {
+    suspend fun warmupAndSnapshot(
+        url: String,
+        settleMs: Long = WARMUP_SETTLE_MS,
+        requireCookies: List<String> = emptyList(),
+        budgetMs: Long = WARMUP_TOTAL_TIMEOUT_MS
+    ): String? {
         if (url.isBlank()) return null
         return mutex.withLock {
             suspendCancellableCoroutine { cont ->
                 mainHandler.post {
                     var finished = false
+                    var pageFinishedAt = 0L
+                    val startedAt = System.currentTimeMillis()
+                    val finish: (String?) -> Unit = { cookie ->
+                        if (!finished) {
+                            finished = true
+                            if (cont.isActive) cont.resume(cookie)
+                        }
+                    }
+                    /** 轮询：requireCookies 全中即提前结束；或 onPageFinished 后满 settleMs。 */
+                    val poll: Runnable = object : Runnable {
+                        override fun run() {
+                            if (finished) return
+                            val cookie = snapshotDouyinCookies()
+                            val allPresent = requireCookies.isNotEmpty() &&
+                                requireCookies.all { cookie?.contains(it) == true }
+                            if (allPresent) {
+                                Log.i(TAG, "warmup 就绪 cookie=${cookie?.length ?: 0}字符 含${requireCookies.joinToString("/")}")
+                                finish(cookie)
+                                return
+                            }
+                            val settled = requireCookies.isEmpty() && pageFinishedAt > 0 &&
+                                System.currentTimeMillis() - pageFinishedAt >= settleMs
+                            if (settled) {
+                                val hasUifid = cookie?.contains("UIFID_TEMP") == true
+                                Log.i(TAG, "warmup 完成 cookie=${cookie?.length ?: 0}字符${if (hasUifid) " 含UIFID_TEMP" else ""}")
+                                finish(cookie)
+                                return
+                            }
+                            if (System.currentTimeMillis() - startedAt >= budgetMs) {
+                                Log.w(TAG, "warmup 预算耗尽(${budgetMs}ms) cookie=${cookie?.length ?: 0}字符 " +
+                                    "缺=${requireCookies.filter { cookie?.contains(it) != true }.joinToString("/")}")
+                                finish(cookie)
+                                return
+                            }
+                            mainHandler.postDelayed(this, WARMUP_POLL_MS)
+                        }
+                    }
                     try {
                         val wv = getOrCreateWebView()
                         wv.stopLoading()
                         wv.webViewClient = object : WebViewClient() {
+                            override fun onPageStarted(view: WebView?, u: String?, favicon: android.graphics.Bitmap?) {
+                                // 风控壳/secdsk 种 cookie 时会读环境信号；保持与 DESKTOP_UA 一致
+                                injectJs(view, DESKTOP_ENV_ASSET)
+                            }
+
                             override fun onPageFinished(view: WebView?, u: String?) {
-                                if (finished) return
-                                finished = true
                                 Log.d(TAG, "warmup onPageFinished: ${u?.take(80)}")
-                                // 文档就绪后 JS 仍需时间种 cookie（React 水合 + 风控壳执行窗口）
-                                mainHandler.postDelayed({
-                                    if (!cont.isActive) return@postDelayed
-                                    val cookie = snapshotDouyinCookies()
-                                    val hasUifid = cookie?.contains("UIFID_TEMP") == true
-                                    Log.i(TAG, "warmup 完成 cookie=${cookie?.length ?: 0}字符${if (hasUifid) " 含UIFID_TEMP" else ""}")
-                                    cont.resume(cookie)
-                                }, settleMs)
+                                if (pageFinishedAt == 0L) pageFinishedAt = System.currentTimeMillis()
                             }
                         }
                         wv.loadUrl(url)
-                        // 总超时兜底：页面卡死/无 onPageFinished 时也尽量返回已有 cookie
-                        mainHandler.postDelayed({
-                            if (!finished) {
-                                finished = true
-                                Log.w(TAG, "warmup 超时(${WARMUP_TOTAL_TIMEOUT_MS}ms): ${url.take(80)}")
-                                if (cont.isActive) cont.resume(snapshotDouyinCookies())
-                            }
-                        }, WARMUP_TOTAL_TIMEOUT_MS)
+                        // 轮询起点：不等 onPageFinished（慢机用户主页可能长时间不触发，旧实现因此空转）
+                        mainHandler.postDelayed(poll, WARMUP_POLL_MS)
+                        // 硬预算兜底（poll 内也判一次，双保险）
+                        mainHandler.postDelayed({ finish(snapshotDouyinCookies()) }, budgetMs + 1_000L)
                     } catch (e: Exception) {
                         Log.w(TAG, "warmup 异常: ${url.take(80)}", e)
-                        if (cont.isActive) cont.resume(null)
+                        finish(null)
                     }
                 }
             }
@@ -205,6 +322,142 @@ class BgWebViewParser(private val appContext: Context) {
     private fun snapshotDouyinCookies(): String? = runCatching {
         cookieManager.getCookie("https://www.douyin.com/")
     }.getOrNull()?.takeIf { it.isNotBlank() }
+
+    /**
+     * L2a · 作者主页作品列表响应嗅探（主页下载的主路径）。
+     *
+     * 原理：加载 `https://www.douyin.com/user/{secUid}`，用 [SNIFF_ASSET] 旁路 hook 页面的
+     * fetch/XHR，把**页面自己发出的** `/aweme/v1/web/aweme/post/` 响应裁裁剪后回传。
+     * 不重算任何签名——抖音要求 `uifid` / `x-secsdk-web-signature` / `verifyFp` 等
+     * 只能由页面 secsdk JS 产出的参数，纯 HTTP 自建请求必被 403（详见方案文档 §1.6）。
+     *
+     * 实测上限：**匿名状态服务端只返回首屏 21 条**（has_more=1 且页面显示
+     * 「登录后查看更多作品」）；要拿更多需用户登录。故本方法拿到 ≥1 页即返回，
+     * 由调用方按 [HomepageSniff.hasMore] 决定是否引导登录。
+     * 作品总数（[HomepageSniff.totalCount]）**不在 post 响应里**，由同一页并行发出的
+     * `user/profile/other` 接口提供（`user.aweme_count`，实测匿名上限时 253），
+     * 见 [androidVideoBridge.onHomepageProfile]。
+     *
+     * ⚠️ **前置条件：必须注入 [DESKTOP_ENV_ASSET] 统一环境身份**（本方法已内置）。
+     * 抖音 post 接口会交叉校验「UA 声明的平台」与 `navigator.platform`：本 App 的 WebView
+     * 用 [DESKTOP_UA]（Windows）而 `navigator.platform` 为 Android 的 Linux 值，
+     * 服务端因此**静默拒绝**——HTTP 200 + 空 body（不是 403，状态码看不出问题）。
+     * CDP 单变量对照（2026-10-10）：同一 UA 下 `platform=Win32` → 21 条；
+     * `platform=Linux x86_64` → 0 字节。WebGL 渲染器/核数/内存/屏幕均**非**触发条件。
+     * 详见 docs/design/主页下载-全局重构方案-v3.md §1.8。
+     *
+     * @return 嗅探结果；超时未嗅到任何作品返回 null。
+     */
+    suspend fun sniffHomepage(secUid: String, budgetMs: Long = SNIFF_BUDGET_MS): HomepageSniff? {
+        if (secUid.isBlank()) return null
+        return mutex.withLock { sniffOnce(secUid, budgetMs) }
+    }
+
+    /**
+     * 单轮嗅探（调用方需持有 [mutex]）。
+     */
+    private suspend fun sniffOnce(secUid: String, budgetMs: Long): HomepageSniff? {
+        val url = "https://www.douyin.com/user/$secUid"
+        return suspendCancellableCoroutine { cont ->
+            mainHandler.post {
+                    val session = SniffSession()
+                    sniffSession = session
+                    val startedAt = System.currentTimeMillis()
+                    var finished = false
+                    val finish: () -> Unit = {
+                        if (!finished) {
+                            finished = true
+                            sniffSession = null
+                            if (cont.isActive) {
+                                val snapshot = HomepageSniff(
+                                    items = session.items.toList(),
+                                    nickname = session.nickname,
+                                    totalCount = session.totalCount,
+                                    hasMore = session.hasMore,
+                                    logTail = session.logs.toList().joinToString(" ; ")
+                                )
+                                Log.i(TAG, "sniff 结束 items=${snapshot.items.size} total=${snapshot.totalCount} " +
+                                    "hasMore=${snapshot.hasMore} log=${snapshot.logTail}")
+                                cont.resume(snapshot)
+                            }
+                        }
+                    }
+                    // 轮询：拿到首屏即返回（匿名上限一页，再等无意义）；
+                    // 已登录账号可能翻页，故给它到预算耗尽前的多次机会
+                    val poll: Runnable = object : Runnable {
+                        override fun run() {
+                            if (finished) return
+                            if (session.items.isNotEmpty()) {
+                                // 等作者档案（totalCount）落地再收口：实测档案请求先于 post 返回，
+                                // 故正常情况下零额外延迟；万一没来，最多多等 [PROFILE_GRACE_MS]。
+                                val firstAt = session.firstItemAt
+                                if (session.totalCount > 0 || firstAt == 0L ||
+                                    System.currentTimeMillis() - firstAt >= PROFILE_GRACE_MS
+                                ) {
+                                    Log.i(TAG, "sniff 首屏命中 ${session.items.size} 条（共 ${session.totalCount}），提前返回")
+                                    finish()
+                                }
+                                return
+                            }
+                            if (System.currentTimeMillis() - startedAt >= budgetMs) {
+                                Log.w(TAG, "sniff 预算耗尽(${budgetMs}ms) 未嗅到作品 log=${session.logs.toList().joinToString(" ; ")}")
+                                finish()
+                                return
+                            }
+                            mainHandler.postDelayed(this, SNIFF_POLL_MS)
+                        }
+                    }
+                    try {
+                        val wv = getOrCreateWebView()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            cookieManager.setAcceptThirdPartyCookies(wv, true)
+                        }
+                        // 离屏 WebView 默认无尺寸（从未 addView 到 window）→ SPA 视口 0×0，
+                        // 作品网格可能不渲染、数据请求可能不发。显式 measure/layout 给一个
+                        // 桌面级视口，保证页面按正常桌面布局渲染（只影响测量，不涉及 attach）。
+                        runCatching {
+                            wv.layoutParams = ViewGroup.LayoutParams(SNIFF_VIEW_W, SNIFF_VIEW_H)
+                            wv.measure(
+                                View.MeasureSpec.makeMeasureSpec(SNIFF_VIEW_W, View.MeasureSpec.EXACTLY),
+                                View.MeasureSpec.makeMeasureSpec(SNIFF_VIEW_H, View.MeasureSpec.EXACTLY)
+                            )
+                            wv.layout(0, 0, SNIFF_VIEW_W, SNIFF_VIEW_H)
+                        }
+                        wv.stopLoading()
+                        wv.webViewClient = object : WebViewClient() {
+                            override fun onPageStarted(view: WebView?, u: String?, favicon: android.graphics.Bitmap?) {
+                                // 顺序敏感：先统一环境身份，再装嗅探钩子（都在页面主 JS 之前）
+                                injectJs(view, DESKTOP_ENV_ASSET)
+                                injectJs(view, SNIFF_ASSET)
+                            }
+
+                            override fun onPageFinished(view: WebView?, u: String?) {
+                                // 幂等守卫（__dyDesktopEnv / __dyHomeSniff）保证重复注入无副作用
+                                injectJs(view, DESKTOP_ENV_ASSET)
+                                injectJs(view, SNIFF_ASSET)
+                            }
+
+                            @RequiresApi(android.os.Build.VERSION_CODES.O)
+                            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                                Log.w(TAG, "sniff 渲染进程 gone，结束并重建 WebView")
+                                finish()
+                                runCatching { view?.stopLoading() }
+                                runCatching { view?.destroy() }
+                                if (webView === view) webView = null
+                                return true
+                            }
+                        }
+                        wv.loadUrl(url)
+                        Log.d(TAG, "sniff loadUrl: $url")
+                        mainHandler.postDelayed(poll, SNIFF_POLL_MS)
+                        mainHandler.postDelayed({ finish() }, budgetMs + 1_000L)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "sniff 异常: ${url.take(80)}", e)
+                        finish()
+                    }
+                }
+            }
+    }
 
     /** 销毁 WebView（Service onDestroy 时调用；必须在主线程执行）。 */
     fun destroy() {
@@ -477,5 +730,41 @@ class BgWebViewParser(private val appContext: Context) {
         private const val WARMUP_SETTLE_MS = 6_000L
         /** warmup 总超时兜底（页面卡死/无 onPageFinished 时也返回已有 cookie）。 */
         private const val WARMUP_TOTAL_TIMEOUT_MS = 20_000L
+        /** warmup 按 cookie 内容判定完成时的轮询间隔。 */
+        private const val WARMUP_POLL_MS = 400L
+        /**
+         * 主页 post API 需要的最小 cookie 集。
+         *
+         * **实测结论（CDP cookie 子集对照实验，详见方案文档 §1.7）：唯一必需的是 `ttwid`。**
+         *   全量 28 个 → 21 条；去 __ac_signature → 21 条；去 bd_ticket_guard_client_data → 21 条；
+         *   **仅 ttwid 一个 → 21 条**；去掉 ttwid → 空 body。
+         * 早期误把 __ac_signature / bd_ticket_guard_client_data 也当必需，导致预热在模拟器上
+         * 空等满预算（那两者在部分机型/环境下永不出现在 CookieManager 中）。
+         */
+        val POST_API_REQUIRED_COOKIES = listOf("ttwid")
+        /** 主页预热预算（慢机软渲染下用户主页水合 + secsdk 执行约需 8~18s）。 */
+        const val POST_WARMUP_BUDGET_MS = 28_000L
+
+        /** L2a 主页嗅探脚本资产名。 */
+        const val SNIFF_ASSET = "douyin_home_sniff.js"
+
+        /**
+         * 桌面环境自洽补丁资产（见 assets/douyin_desktop_env.js 头部说明）。
+         *
+         * 抖音 post 接口交叉校验「UA 声明的平台」与 `navigator.platform`；本 App 的
+         * WebView 用 [DESKTOP_UA]（Windows）但 `navigator.platform` 仍是 Android 的
+         * Linux 值 → 服务端返回 **HTTP 200 + 空 body**（静默拒绝，非 403）。
+         * 必须在页面主 JS 之前注入，把 platform / 触摸 / UA-CH / 屏幕 统一成桌面身份。
+         */
+        const val DESKTOP_ENV_ASSET = "douyin_desktop_env.js"
+        /** L2a 嗅探轮询间隔。 */
+        private const val SNIFF_POLL_MS = 500L
+        /** L2a 嗅探总预算（页面加载 + SPA 水合 + 首个 post 请求）。 */
+        private const val SNIFF_BUDGET_MS = 35_000L
+        /** L2a 离屏 WebView 视口尺寸（桌面级，保证 SPA 正常布局渲染）。 */
+        private const val SNIFF_VIEW_W = 1440
+        private const val SNIFF_VIEW_H = 900
+        /** 首条作品落地后，额外等作者档案接口（aweme_count）的收口窗口。 */
+        private const val PROFILE_GRACE_MS = 2_500L
     }
 }

@@ -543,7 +543,12 @@ class DownloadService : Service() {
                 "https://www.douyin.com/video/$id"
             }
             DownloadLogger.logInfo(this@DownloadService, "douyin", targetUrl, "Cookie 预热(懒): $warmUrl …")
-            val cookie = bgParser.warmupAndSnapshot(warmUrl)
+            // 作品页同样会触发 secsdk，按 cookie 内容轮询等"安全 cookie 链"齐（缺则 detail/post 返回空 body）
+            val cookie = bgParser.warmupAndSnapshot(
+                warmUrl,
+                requireCookies = BgWebViewParser.POST_API_REQUIRED_COOKIES,
+                budgetMs = BgWebViewParser.POST_WARMUP_BUDGET_MS
+            )
             if (cookie.isNullOrBlank()) {
                 DownloadLogger.logInfo(this@DownloadService, "douyin", targetUrl, "Cookie 预热未取到 cookie，跳过重试")
                 false

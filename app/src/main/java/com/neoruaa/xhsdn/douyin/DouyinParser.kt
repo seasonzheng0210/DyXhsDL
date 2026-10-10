@@ -46,7 +46,9 @@ data class DouyinPostItem(
     val title: String,
     val videoUrl: String?,
     val imageUrls: List<String>,
-    val createTime: Long
+    val createTime: Long,
+    /** 列表预览封面（视频=video.cover 小图，图文=首图小图）；仅主页 post 列表填充，空=无封面。 */
+    val coverUrl: String? = null
 )
 
 /**
@@ -56,7 +58,9 @@ data class DouyinPostPage(
     val items: List<DouyinPostItem>,
     val maxCursor: Long,
     val hasMore: Boolean,
-    val nickname: String?
+    val nickname: String?,
+    /** 作者作品总数（author.aweme_count）。0 = 未知。用于「共 N 条 / 已取 M 条」提示。 */
+    val totalCount: Int = 0
 )
 
 /**
@@ -160,17 +164,35 @@ object DouyinParser {
             val data = (0 until list.length())
                 .mapNotNull { list.optJSONObject(it) }
                 .firstOrNull { it.optString("aweme_id") == id }
-                ?: run {
-                    Log.w(TAG, "resolveAuthorHomepageUrl: feed 未返回目标 aweme_id=$id（泛推荐流），放弃反查")
-                    return@withContext null
-                }
-            val author = data.optJSONObject("author") ?: return@withContext null
-            val secUid = author.optString("sec_uid").takeIf { it.isNotBlank() } ?: return@withContext null
-            return@withContext "https://www.douyin.com/user/$secUid"
+            if (data != null) {
+                val author = data.optJSONObject("author") ?: return@withContext null
+                val secUid = author.optString("sec_uid").takeIf { it.isNotBlank() } ?: return@withContext null
+                return@withContext "https://www.douyin.com/user/$secUid"
+            }
+            // feed 未返回目标 aweme_id（泛推荐流）→ 图文 note 兜底：feed 接口对 note id
+            // 常忽略参数返回泛推荐流（E2E 实证），签名 detail API 对 video/note 通吃。
+            Log.w(TAG, "resolveAuthorHomepageUrl: feed 未返回目标 aweme_id=$id（泛推荐流），改 detail 反查")
+            authorSecUidFromDetail(id)?.let { return@withContext "https://www.douyin.com/user/$it" }
+            return@withContext null
+        } catch (e: WebDetailBlockedException) {
+            // 风控可预热重试：上抛交上层（MainActivity 预热后重试一次），不能吞成 null
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "resolveAuthorHomepageUrl failed: ${e.message}")
             return@withContext null
         }
+    }
+
+    /**
+     * detail 接口反查作者 sec_uid（图文 note 兜底）。
+     * 校验 aweme_id 错位（feed 接口同款教训）后取 author.sec_uid。
+     */
+    private fun authorSecUidFromDetail(id: String): String? {
+        val body = fetchDetailBody(id)
+        val json = JSONObject(body)
+        val detail = json.optJSONObject("aweme_detail") ?: return null
+        if (detail.optString("aweme_id", "") != id) return null
+        return detail.optJSONObject("author")?.optString("sec_uid")?.takeIf { it.isNotBlank() }
     }
 
     suspend fun parse(url: String): DouyinMediaInfo = withContext(Dispatchers.IO) {
@@ -279,7 +301,14 @@ object DouyinParser {
      *  - Cookie 缺失/失效（403 Argus）抛 [WebDetailBlockedException]，上层预热后重试（P2）；
      *  - 业务失败（帖子删除等 status_code!=0）或结构不符返回 null，降级后续候选。
      */
-    private fun fetchWebDetail(id: String): DouyinMediaInfo? {
+    private fun fetchWebDetail(id: String): DouyinMediaInfo? = parseDetailJson(fetchDetailBody(id), id)
+
+    /**
+     * detail 接口原始请求（签名 + 指纹 cookie + SIGN_UA），返回响应体。
+     *  - 403/461/Argus 壳抛 [WebDetailBlockedException]，调用方可预热后重试；
+     *  - fetchWebDetail 与 resolveAuthorHomepageUrl 的 detail 反查兜底共用。
+     */
+    private fun fetchDetailBody(id: String): String {
         val params = detailParams(id)
         val query = DouyinAbogus.buildQuery(params)
         val aBogus = DouyinAbogus.getValue(query)
@@ -294,7 +323,7 @@ object DouyinParser {
             .header("Accept", "application/json, text/plain, */*")
         if (!cookie.isNullOrBlank()) builder.header("Cookie", cookie)
 
-        val body = client.newCall(builder.build()).execute().use { resp ->
+        return client.newCall(builder.build()).execute().use { resp ->
             // 403/461 为 Argus 风控（缺 UIFID 指纹或签名异常）——可预热后重试
             if (resp.code == 403 || resp.code == 461) {
                 throw WebDetailBlockedException("detail 接口 HTTP ${resp.code}（Argus 风控/缺 UIFID 指纹）")
@@ -302,7 +331,6 @@ object DouyinParser {
             if (!resp.isSuccessful) throw Exception("detail 接口失败: HTTP ${resp.code}")
             resp.body.string()
         }
-        return parseDetailJson(body, id)
     }
 
     /** post 列表参数（公共设备指纹 + 翻页三元组，顺序敏感同 detail）。 */
@@ -377,6 +405,7 @@ object DouyinParser {
         val list = json.optJSONArray("aweme_list") ?: JSONArray()
         val items = mutableListOf<DouyinPostItem>()
         var nickname: String? = null
+        var totalCount = 0
         for (i in 0 until list.length()) {
             val d = list.optJSONObject(i) ?: continue
             val id = d.optString("aweme_id", "")
@@ -384,12 +413,31 @@ object DouyinParser {
             if (nickname == null) {
                 nickname = d.optJSONObject("author")?.optString("nickname")?.takeIf { it.isNotBlank() }
             }
+            if (totalCount == 0) {
+                totalCount = d.optJSONObject("author")?.optInt("aweme_count", 0) ?: 0
+            }
             val title = safeTitleOf(d.optString("desc", "").trim().ifEmpty { "douyin_$id" }, id)
             val createTime = d.optLong("create_time", 0L)
+            // 封面小图：视频=video.cover.url_list[0]；图文=首图 images[0].cover_url_list[0]（无则退原图首张）。
+            // 抖音 CDN 封面 URL 为公开直链，无需签名/登录态。图文帖优先取 images（video 字段是 BGM 的）。
+            fun coverUrlOf(isImage: Boolean): String? {
+                fun videoCover(): String? = runCatching {
+                    d.optJSONObject("video")?.optJSONObject("cover")
+                        ?.optJSONArray("url_list")?.optString(0)?.takeIf { it.isNotBlank() }
+                }.getOrNull()
+                fun imageCover(): String? = runCatching {
+                    val imgs = d.optJSONArray("images")
+                    if (imgs != null && imgs.length() > 0) {
+                        imgs.optJSONObject(0)?.optJSONArray("cover_url_list")
+                            ?.optString(0)?.takeIf { it.isNotBlank() }
+                    } else null
+                }.getOrNull()
+                return if (isImage) imageCover() ?: videoCover() else videoCover()
+            }
             // 图集优先：images[] 非空即图文帖（video.play_addr 是 BGM，严禁当视频下）
             val imageUrls = extractDouyinImages(d)
             if (imageUrls.isNotEmpty()) {
-                items.add(DouyinPostItem(id, DouyinMediaType.IMAGE, title, null, imageUrls, createTime))
+                items.add(DouyinPostItem(id, DouyinMediaType.IMAGE, title, null, imageUrls, createTime, coverUrlOf(true)))
                 continue
             }
             val video = d.optJSONObject("video") ?: continue
@@ -399,13 +447,14 @@ object DouyinParser {
                     !p.endsWith(".mp3") && !p.endsWith(".m4a") && !p.endsWith(".m3u8")
                 }
                 ?: continue
-            items.add(DouyinPostItem(id, DouyinMediaType.VIDEO, title, vUrl, emptyList(), createTime))
+            items.add(DouyinPostItem(id, DouyinMediaType.VIDEO, title, vUrl, emptyList(), createTime, coverUrlOf(false)))
         }
         return DouyinPostPage(
             items = items,
             maxCursor = json.optLong("max_cursor", 0L),
             hasMore = json.optInt("has_more", 0) == 1,
-            nickname = nickname
+            nickname = nickname,
+            totalCount = totalCount
         )
     }
 

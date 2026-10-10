@@ -241,7 +241,12 @@
     <string name="home_preview_confirm">确认下载</string>
     <string name="home_preview_bad_link">无法识别主页链接，请粘贴抖音主页链接或作品链接</string>
     <string name="home_preview_empty">未获取到作品（账号可能私密或无作品）</string>
-    <string name="home_preview_need_login">需要登录抖音：请先在「视频下载」页粘贴任意抖音链接进入网页登录，再回来重试</string>
+    <string name="home_preview_partial">已获取最近 %1$d 条（该账号共 %2$d 条作品，更多需登录抖音后查看）</string>
+    <string name="home_preview_partial_unknown">已获取最近 %1$d 条（该账号作品更多，需登录抖音后查看）</string>
+    <!-- 常驻截断提示：作者卡下方，比 toast 更持久，避免用户误以为作者只有这 N 个作品 -->
+    <string name="home_preview_truncated_hint">该账号共 %1$d 条作品，当前仅取到最近 %2$d 条（匿名上限）；登录抖音后可下载更多</string>
+    <string name="home_preview_truncated_hint_unknown">该作者作品更多，当前仅取到最近 %1$d 条（匿名上限）；登录抖音后可下载更多</string>
+    <string name="home_preview_need_login">接口被抖音风控拦截，备用通道也未能取到作品。可稍后重试，或在「视频下载」页粘贴任意抖音链接进入网页登录后再试</string>
     <string name="home_preview_failed">主页解析失败：%1$s</string>
     <string name="home_preview_none_new">该作者作品都已下载过，无新增（如需重下，请关闭「自动跳过已下载」后选全部作品）</string>
     <string name="home_preview_started">已开始下载 %1$d 条作品</string>
