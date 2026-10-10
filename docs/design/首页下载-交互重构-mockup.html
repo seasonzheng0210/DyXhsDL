@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>首页下载 · 交互重构 mockup（v3.0.12 后）</title>
+<style>
+  :root{
+    --wall: linear-gradient(155deg,#B7A6FF 0%,#FFB7CC 42%,#FFC9A0 100%);
+    --text:#241F18;
+    --text2:rgba(36,31,24,.55);
+    --text3:rgba(36,31,24,.38);
+    --chrome:rgba(255,255,255,.5);
+    --card:rgba(255,255,255,.55);
+    --cardHi:rgba(255,255,255,.62);
+    --border:rgba(255,255,255,.72);
+    --hi:rgba(255,255,255,.9);
+    --track:rgba(36,31,24,.10);
+    --shadow:0 18px 50px rgba(60,40,80,.22);
+    --grad:linear-gradient(120deg,#FF8A3C,#FF5F6D);
+    --primaryText:#E2560E;
+    --ok:#00895C;
+    --fail:#E23145;
+    --warn:#C26A00;
+    --fill:rgba(255,106,46,.16);
+  }
+  body.dark{
+    --wall: linear-gradient(155deg,#241B45 0%,#3B1E38 42%,#3A2415 100%);
+    --text:#F5F6F8;
+    --text2:rgba(245,246,248,.55);
+    --text3:rgba(245,246,248,.36);
+    --chrome:rgba(255,255,255,.13);
+    --card:rgba(255,255,255,.15);
+    --cardHi:rgba(255,255,255,.18);
+    --border:rgba(255,255,255,.2);
+    --hi:rgba(255,255,255,.16);
+    --track:rgba(255,255,255,.14);
+    --shadow:0 18px 50px rgba(0,0,0,.5);
+    --primaryText:#FFB37A;
+    --ok:#7AE0B8;
+    --fail:#FF9AA6;
+    --warn:#FFC77D;
+    --fill:rgba(255,106,46,.22);
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+    background:#15131c;
+    color:#e9e6f2;
+    padding:40px 28px 72px;
+    -webkit-font-smoothing:antialiased;
+  }
+  body.dark{background:#0d0b13}
+
+  /* ── 页头 ───────────────────────────────── */
+  .head{max-width:1320px;margin:0 auto 34px}
+  .head h1{font-size:26px;font-weight:650;letter-spacing:-.4px}
+  .head .sub{margin-top:8px;font-size:14px;line-height:1.7;color:#a49db8;max-width:860px}
+  .head .sub b{color:#ffb37a;font-weight:600}
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:18px}
+  .tag{font-size:12px;padding:5px 11px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:#c9c3da}
+  .tag.bad{background:rgba(226,49,69,.16);border-color:rgba(226,49,69,.35);color:#ff9aa6}
+  .tag.good{background:rgba(0,137,92,.18);border-color:rgba(0,137,92,.4);color:#7ae0b8}
+  button.theme{
+    margin-left:auto;font:inherit;font-size:13px;padding:9px 18px;border-radius:999px;cursor:pointer;
+    background:var(--grad);color:#fff;border:0;font-weight:600;
+  }
+
+  /* ── 画廊 ───────────────────────────────── */
+  .gallery{max-width:1320px;margin:0 auto;display:flex;flex-wrap:wrap;gap:38px 34px;align-items:flex-start}
+  figure{width:390px}
+  figcaption{margin-top:16px}
+  figcaption .cap{font-size:14px;font-weight:650;color:#f0edf7;display:flex;align-items:baseline;gap:8px}
+  figcaption .cap .idx{font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.09);color:#b9b2cc;font-weight:600}
+  figcaption ul{margin-top:9px;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+  figcaption li{font-size:12.5px;line-height:1.6;color:#a49db8;padding-left:15px;position:relative}
+  figcaption li::before{content:"—";position:absolute;left:0;color:#6c6480}
+  figcaption li b{color:#ffb37a;font-weight:600}
+
+  /* ── 手机框 ─────────────────────────────── */
+  .phone{
+    width:390px;height:844px;border-radius:46px;overflow:hidden;position:relative;
+    background:var(--wall);box-shadow:var(--shadow);
+    display:flex;flex-direction:column;
+    border:1px solid rgba(255,255,255,.28);
+    color:var(--text);
+    font-size:13px;
+  }
+  body.dark .phone{border-color:rgba(255,255,255,.12)}
+
+  .statusbar{height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:12.5px;font-weight:600;color:var(--text)}
+  .statusbar .ic{display:flex;gap:5px;align-items:center;opacity:.85}
+  .statusbar .ic i{display:block;width:15px;height:9px;border-radius:2px;border:1.4px solid currentColor;opacity:.8}
+  .statusbar .ic i:first-child{width:13px;height:9px;border-radius:1px;background:currentColor;border:0;clip-path:polygon(0 100%,100% 0,100% 100%)}
+
+  .topbar{height:56px;flex:none;display:flex;align-items:center;gap:10px;padding:0 18px;position:relative}
+  .topbar::after{content:"";position:absolute;inset:0;background:var(--chrome);backdrop-filter:blur(22px) saturate(1.8);-webkit-backdrop-filter:blur(22px) saturate(1.8);z-index:-1;box-shadow:inset 0 1px 0 var(--hi)}
+  .topbar .t{font-size:17px;font-weight:650;letter-spacing:-.2px}
+  .topbar .r{margin-left:auto;font-size:13px;color:var(--primaryText);font-weight:600}
+  .topbar .back{font-size:17px;color:var(--text2);margin-right:2px}
+
+  .body{flex:1;min-height:0;overflow:hidden;padding:14px 16px 0}
+
+  /* ── 通用玻璃件 ─────────────────────────── */
+  .card{background:var(--card);backdrop-filter:blur(22px) saturate(1.7);-webkit-backdrop-filter:blur(22px) saturate(1.7);border:1px solid var(--border);border-radius:22px;box-shadow:inset 0 1px 0 var(--hi);position:relative;overflow:hidden}
+  .card.pad{padding:14px}
+  .card.tight{padding:6px}
+
+  .input{display:flex;align-items:center;gap:10px;background:var(--card);backdrop-filter:blur(22px) saturate(1.7);-webkit-backdrop-filter:blur(22px) saturate(1.7);border:1px solid var(--border);border-radius:16px;box-shadow:inset 0 1px 0 var(--hi);padding:0 14px;height:52px}
+  .input .ph{flex:1;color:var(--text3);font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .input .val{flex:1;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .input .ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-size:14px;flex:none}
+  .input .ico svg{display:block}
+  .input .ico.clip{background:var(--fill);color:var(--primaryText)}
+  .input .ico.close{background:var(--track);color:var(--text2);font-size:13px}
+
+  .btn{height:52px;border-radius:26px;display:grid;place-items:center;font-size:14.5px;font-weight:650;letter-spacing:.2px}
+  .btn.primary{background:var(--grad);color:#fff;box-shadow:0 6px 18px rgba(255,95,60,.32),inset 0 1px 0 rgba(255,255,255,.35)}
+  .btn.ghost{background:var(--card);border:1px solid var(--border);color:var(--text);backdrop-filter:blur(22px) saturate(1.7);-webkit-backdrop-filter:blur(22px) saturate(1.7)}
+  .btn.disabled{background:var(--track);color:var(--text3);box-shadow:none}
+  .btn.sm{height:40px;border-radius:20px;font-size:13px;padding:0 18px;display:inline-grid}
+
+  .sec{display:flex;align-items:baseline;gap:8px;margin:20px 2px 10px}
+  .sec .st{font-size:13.5px;font-weight:650}
+  .sec .sr{margin-left:auto;font-size:12px;color:var(--primaryText);font-weight:600}
+
+  .avatar{width:38px;height:38px;border-radius:12px;background:var(--fill);color:var(--primaryText);display:grid;place-items:center;font-size:15px;font-weight:650;flex:none}
+
+  /* ── 最近作者横滑 ───────────────────────── */
+  .hscroll{display:flex;gap:10px;overflow:hidden}
+  .recent{width:112px;flex:none;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:12px 10px;text-align:center;backdrop-filter:blur(22px) saturate(1.7);-webkit-backdrop-filter:blur(22px) saturate(1.7);box-shadow:inset 0 1px 0 var(--hi)}
+  .recent .av{width:40px;height:40px;border-radius:13px;margin:0 auto 8px;background:var(--fill);color:var(--primaryText);display:grid;place-items:center;font-size:16px;font-weight:650}
+  .recent .nm{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .recent .mt{font-size:10.5px;color:var(--text3);margin-top:3px}
+
+  /* ── 阶段进度 ───────────────────────────── */
+  .stage{display:flex;align-items:center;gap:11px;padding:9px 2px}
+  .stage .dot{width:20px;height:20px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:11px}
+  .stage .dot.done{background:rgba(0,137,92,.18);color:var(--ok)}
+  .stage .dot.now{border:2px solid var(--primaryText);border-top-color:transparent;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .stage .dot.wait{background:var(--track);color:var(--text3)}
+  .stage .tx{font-size:13.5px}
+  .stage.now .tx{font-weight:650}
+  .stage.done .tx{color:var(--text2)}
+  .stage.wait .tx{color:var(--text3)}
+  .hint{font-size:11px;color:var(--text3);padding:2px 2px 0}
+
+  /* ── 下载计划卡 ─────────────────────────── */
+  .row{display:flex;align-items:center;gap:10px;padding:11px 2px;font-size:13.5px}
+  .row+.row{border-top:1px solid var(--track)}
+  .row .lb{color:var(--text)}
+  .row .rv{margin-left:auto;font-weight:650;font-variant-numeric:tabular-nums}
+  .row .rv.mute{color:var(--text2);font-weight:600}
+  .row .go{margin-left:auto;color:var(--primaryText);font-weight:600;font-size:13px}
+  .row.tap{cursor:default}
+  .hdr{display:flex;align-items:center;padding:12px 2px 4px}
+  .hdr .h{font-size:13.5px;font-weight:650}
+  .hdr .a{margin-left:auto;font-size:12.5px;color:var(--primaryText);font-weight:600}
+
+  /* ── 缩略图网格 ─────────────────────────── */
+  .thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+  .th{border-radius:12px;aspect-ratio:4/5;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.35)}
+  body.dark .th{border-color:rgba(255,255,255,.14)}
+  .th .bd{position:absolute;left:5px;bottom:5px;font-size:9.5px;padding:2px 6px;border-radius:999px;background:rgba(0,0,0,.42);color:#fff;font-weight:600;backdrop-filter:blur(4px)}
+  .th .ck{position:absolute;right:5px;top:5px;width:19px;height:19px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;background:var(--grad);color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25)}
+  .th .ck.off{background:rgba(0,0,0,.28);border:1.5px solid rgba(255,255,255,.9);color:transparent;backdrop-filter:blur(4px)}
+  .th .dim{position:absolute;inset:0;background:rgba(20,16,30,.5);backdrop-filter:grayscale(1) blur(1px)}
+  .th .dbtag{position:absolute;left:5px;top:5px;font-size:9.5px;padding:2px 6px;border-radius:999px;background:rgba(0,0,0,.5);color:#fff;font-weight:600}
+
+  /* ── 常驻操作条 / dock ──────────────────── */
+  .actionbar{flex:none;padding:12px 16px 14px;display:flex;align-items:center;gap:12px;position:relative}
+  .actionbar::after{content:"";position:absolute;inset:0;background:var(--chrome);backdrop-filter:blur(22px) saturate(1.8);-webkit-backdrop-filter:blur(22px) saturate(1.8);z-index:-1;box-shadow:inset 0 1px 0 var(--hi)}
+  .actionbar .lbl{font-size:13.5px;font-weight:650;line-height:1.35}
+  .actionbar .lbl small{display:block;font-size:11px;color:var(--text2);font-weight:500;margin-top:2px}
+  .actionbar .btn{margin-left:auto;min-width:132px;padding:0 20px}
+
+  .dock{flex:none;height:64px;display:flex;align-items:center;position:relative}
+  .dock::after{content:"";position:absolute;inset:0;background:var(--chrome);backdrop-filter:blur(22px) saturate(1.8);-webkit-backdrop-filter:blur(22px) saturate(1.8);z-index:-1;box-shadow:inset 0 1px 0 var(--hi)}
+  .dock .tab{flex:1;text-align:center;font-size:11px;color:var(--text2)}
+  .dock .tab .g{display:block;font-size:17px;margin-bottom:2px;opacity:.75}
+  .dock .tab.on{color:var(--primaryText);font-weight:650}
+  .dock .tab.on .g{opacity:1}
+
+  /* ── bottom sheet ───────────────────────── */
+  .scrim{position:absolute;inset:0;background:rgba(16,12,24,.42);backdrop-filter:blur(2px);z-index:5}
+  .sheet{position:absolute;left:0;right:0;bottom:0;z-index:6;background:var(--cardHi);backdrop-filter:blur(34px) saturate(1.9);-webkit-backdrop-filter:blur(34px) saturate(1.9);border-radius:30px 30px 0 0;border-top:1px solid var(--border);box-shadow:inset 0 1px 0 var(--hi);padding:10px 18px 26px}
+  .sheet .grab{width:38px;height:4px;border-radius:99px;background:var(--text3);margin:0 auto 14px}
+  .sheet .h{font-size:12px;font-weight:650;color:var(--text2);letter-spacing:.3px;margin:14px 2px 4px}
+  .opt{display:flex;align-items:center;gap:11px;padding:12px 2px;font-size:14px}
+  .opt .rd{width:20px;height:20px;border-radius:50%;border:2px solid var(--text3);flex:none;display:grid;place-items:center}
+  .opt.on .rd{border-color:var(--primaryText)}
+  .opt.on .rd::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--primaryText)}
+  .opt.on .lb{font-weight:650}
+  .opt .rv{margin-left:auto;font-size:13px;color:var(--text2);font-variant-numeric:tabular-nums}
+  .opt .rec{font-size:10px;padding:2px 7px;border-radius:999px;background:var(--fill);color:var(--primaryText);font-weight:650;margin-left:7px}
+  .sw{margin-left:auto;width:44px;height:26px;border-radius:999px;background:var(--grad);position:relative;flex:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+  .sw::after{content:"";position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+  .sw.off{background:var(--track)}
+  .sw.off::after{right:auto;left:3px}
+  .step{display:flex;align-items:center;gap:9px;margin-left:auto}
+  .step b{width:32px;height:32px;border-radius:10px;background:var(--track);display:grid;place-items:center;font-size:16px;font-weight:500;color:var(--text)}
+  .step span{width:34px;text-align:center;font-size:14px;font-weight:650;font-variant-numeric:tabular-nums}
+  .note{font-size:11px;color:var(--text3);line-height:1.6;margin:14px 2px 12px;display:flex;gap:6px}
+
+  /* ── 分段 / 筛选 ────────────────────────── */
+  .seg{display:flex;gap:8px;margin:4px 0 12px}
+  .seg span{flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12.5px;font-weight:600;background:var(--card);border:1px solid var(--border);color:var(--text2)}
+  .seg span.on{background:var(--fill);border-color:transparent;color:var(--primaryText)}
+  .filters{display:flex;gap:8px;margin-bottom:12px;align-items:center}
+  .filters .f{font-size:11.5px;padding:5px 11px;border-radius:999px;background:var(--card);border:1px solid var(--border);color:var(--text2)}
+  .filters .f.on{color:var(--primaryText);border-color:var(--primaryText)}
+
+  /* ── 进度 ───────────────────────────────── */
+  .prog{height:8px;border-radius:99px;background:var(--track);overflow:hidden;margin:12px 0 4px}
+  .prog i{display:block;height:100%;width:67%;border-radius:99px;background:var(--grad)}
+  .big{font-size:27px;font-weight:700;letter-spacing:-.6px;font-variant-numeric:tabular-nums}
+  .big small{font-size:14px;font-weight:600;color:var(--text2);letter-spacing:0}
+  .kv{display:flex;gap:22px;margin-top:12px}
+  .kv div{font-size:12.5px;color:var(--text2)}
+  .kv b{display:block;font-size:17px;font-weight:700;margin-bottom:2px;font-variant-numeric:tabular-nums}
+  .ok{color:var(--ok)}
+  .bad{color:var(--fail)}
+
+  .center-hero{display:flex;flex-direction:column;align-items:center;text-align:center;padding:34px 8px}
+  .center-hero .ring{width:66px;height:66px;border-radius:50%;display:grid;place-items:center;font-size:30px;background:rgba(0,137,92,.16);color:var(--ok);margin-bottom:14px}
+  .center-hero .t1{font-size:17px;font-weight:650}
+  .center-hero .t2{font-size:12.5px;color:var(--text2);margin-top:6px}
+
+  .wallnote{max-width:1320px;margin:56px auto 0;padding:22px 24px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)}
+  .wallnote h3{font-size:15px;font-weight:650;margin-bottom:12px;color:#f0edf7}
+  .wallnote table{border-collapse:collapse;width:100%;font-size:12.5px}
+  .wallnote th,.wallnote td{text-align:left;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.08);vertical-align:top;line-height:1.6}
+  .wallnote th{color:#b9b2cc;font-weight:600;white-space:nowrap}
+  .wallnote td{color:#a49db8}
+  .wallnote td b{color:#ffb37a;font-weight:600}
+</style>
+</head>
+<body class="light">
+
+<div class="head">
+  <h1>首页下载 · 交互重构</h1>
+  <p class="sub">
+    功能已可用（v3.0.12），<b>问题在交互</b>：配置、内容、主操作三层被揉进同一条滚动流。
+    重构主张 —— 把主页页改成 <b>「一个常驻操作条 + 三层状态」</b>：解析结果只做摘要与确认，
+    真正的挑选下沉到二级页，<b>主按钮永远不动</b>。
+  </p>
+  <div class="bar">
+    <span class="tag bad">现状：确认下载在最底部，实测要滑 5 次</span>
+    <span class="tag bad">现状：开关在「按勾选下载」档下被静默忽略</span>
+    <span class="tag bad">现状：解析 11~14s 只有一行灰字，不可取消</span>
+    <span class="tag good">新：主路径 3 步 0 滚动</span>
+    <span class="tag good">新：约束前置到计划里</span>
+    <button class="theme" id="themeBtn">切换暗色</button>
+  </div>
+</div>
+
+<div class="gallery">
+
+  <!-- ══ S0 空态 ══ -->
+  <figure>
+    <div class="phone" data-dock="1" data-title="抖快红下载">
+      <div class="body">
+        <div class="input">
+          <div class="ico clip"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M10.5 13.5a4.5 4.5 0 0 0 6.4 0l2.6-2.6a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M13.5 10.5a4.5 4.5 0 0 0-6.4 0l-2.6 2.6a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></div>
+          <div class="ph">抖音主页链接或分享文案</div>
+          <div class="ico close" style="background:var(--fill);color:var(--primaryText)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1.4"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></div>
+        </div>
+        <div style="height:12px"></div>
+        <div class="btn primary">解析主页</div>
+
+        <div class="sec"><span class="st">最近</span><span class="sr">全部</span></div>
+        <div class="hscroll">
+          <div class="recent"><div class="av">奶</div><div class="nm">奶霜莓莓</div><div class="mt">上次 21 条</div></div>
+          <div class="recent"><div class="av">小</div><div class="nm">小鹿的日常</div><div class="mt">上次 12 条</div></div>
+          <div class="recent" style="width:64px;display:grid;place-items:center;background:transparent;border-style:dashed;color:var(--text3)">
+            <span style="font-size:24px;line-height:1;margin-top:-3px">›</span>
+          </div>
+        </div>
+
+        <div class="hint" style="margin-top:20px">ⓘ 支持主页分享文案 / user/xxx · 点击展开</div>
+      </div>
+    </div>
+    <figcaption>
+      <div class="cap"><span class="idx">S0</span>空态</div>
+      <ul>
+        <li>粘贴按钮<b>内嵌到输入框右侧</b>：省掉一整行，也省掉一次点击</li>
+        <li>去掉并列的次按钮，只留<b>一个主按钮</b></li>
+        <li>「最近作者」升级为<b>常驻横滑卡组</b>（原来只在 Idle 态出现一张）</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- ══ S1 解析中 ══ -->
+  <figure>
+    <div class="phone" data-dock="1" data-title="抖快红下载">
+      <div class="body">
+        <div class="input">
+          <div class="ico clip">🔗</div>
+          <div class="val">v.douyin.com/f1xouOxEGDw/</div>
+          <div class="ico close">✕</div>
+        </div>
+
+        <div class="card pad" style="margin-top:16px">
+          <div class="stage done"><div class="dot done">✓</div><div class="tx">打开作者主页</div></div>
+          <div class="stage now"><div class="dot now"></div><div class="tx">建立会话指纹</div></div>
+          <div class="stage wait"><div class="dot wait">·</div><div class="tx">读取作品列表</div></div>
+          <div class="hint" style="margin-top:6px">首次解析约需 10 秒 · 之后会快一些</div>
+        </div>
+      </div>
+      <div class="actionbar">
+        <div class="lbl">正在解析…<small>可随时取消</small></div>
+        <div class="btn ghost" style="min-width:96px">取消</div>
+      </div>
+    </div>
+    <figcaption>
+      <div class="cap"><span class="idx">S1</span>解析中（11~14s）</div>
+      <ul>
+        <li>三个阶段<b>由真实回调驱动</b>（loadUrl / 注入完成 / 收到接口响应），不是假动画</li>
+        <li>输入框切<b>锁定态</b>，右侧 ✕ 即取消</li>
+        <li>给一句「约需 10 秒」的预期，消除「是不是卡死」的怀疑</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- ══ S2 就绪 ══ -->
+  <figure>
+    <div class="phone" data-dock="1" data-title="抖快红下载">
+      <div class="body">
+        <div class="input">
+          <div class="avatar" style="width:32px;height:32px;border-radius:10px;font-size:14px">奶</div>
+          <div class="val">奶霜莓莓</div>
+          <div class="ico close">✕</div>
+        </div>
+
+        <div style="margin:14px 2px 0">
+          <div style="font-size:14px;font-weight:650">共 253 条作品 · 本次可取 21 条</div>
+          <div style="font-size:12px;color:var(--warn);margin-top:6px;display:flex;align-items:center;gap:5px">
+            ⚠ 匿名上限，登录后可下载更多 <span style="margin-left:auto;color:var(--primaryText);font-weight:600">去登录 ›</span>
+          </div>
+        </div>
+
+        <div class="card pad" style="margin-top:14px">
+          <div class="hdr" style="padding-top:0">
+            <span class="h">下载计划</span>
+            <span class="a">调整</span>
+          </div>
+          <div class="row" style="padding-bottom:6px"><span class="lb">新增作品</span><span class="rv">18</span></div>
+          <div class="row" style="padding-top:6px"><span class="lb">已下载将跳过</span><span class="rv mute">3</span></div>
+          <div class="row"><span class="lb">手动挑选作品</span><span class="go">›</span></div>
+        </div>
+
+        <div class="sec"><span class="st">作品预览</span><span class="sr">查看全部 21 条 ›</span></div>
+        <div class="thumbs">
+          <div class="th" style="background:linear-gradient(140deg,#FFC9A0,#FF8A3C)"><div class="bd">▶ 0:12</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#B7A6FF,#7a63e0)"><div class="bd">▶ 0:08</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#A9E0F2,#4aa8c9)"><div class="bd">▶ 0:21</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#FFB7CC,#e0729a)"><div class="bd">▣ 图集 6</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#FFE0A3,#e0a93c)"><div class="bd">▶ 0:15</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#C4E8C0,#57a86a)"><div class="bd">▶ 0:09</div></div>
+        </div>
+      </div>
+      <div class="actionbar">
+        <div class="lbl">将下载 18 个<small>跳过 3 个已下载</small></div>
+        <div class="btn primary">开始下载</div>
+      </div>
+    </div>
+    <figcaption>
+      <div class="cap"><span class="idx">S2</span>就绪 · 核心屏</div>
+      <ul>
+        <li><b>主按钮进常驻操作条</b>：不滚、不消失、位置永不改变</li>
+        <li>作者条<b>占据输入框原位</b>（同位置切换形态，减少页面跳变）</li>
+        <li>「共 253 条 · 本次可取 21 条」放在昵称正下方——<b>约束前置</b></li>
+        <li>「下载计划」是<b>只读摘要</b>不是表单：改设置去 sheet</li>
+        <li>预览只给 6 张：它是<b>确认信号</b>，不是挑选工具</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- ══ S3 调整面板 ══ -->
+  <figure>
+    <div class="phone" data-dock="1" data-title="抖快红下载">
+      <div class="body">
+        <div class="input">
+          <div class="avatar" style="width:32px;height:32px;border-radius:10px;font-size:14px">奶</div>
+          <div class="val">奶霜莓莓</div>
+          <div class="ico close">✕</div>
+        </div>
+        <div style="margin:14px 2px 0">
+          <div style="font-size:14px;font-weight:650">共 253 条作品 · 本次可取 21 条</div>
+        </div>
+        <div class="card pad" style="margin-top:14px;opacity:.5">
+          <div class="hdr" style="padding-top:0"><span class="h">下载计划</span><span class="a">调整</span></div>
+          <div class="row" style="padding-bottom:6px"><span class="lb">新增作品</span><span class="rv">18</span></div>
+          <div class="row" style="padding-top:6px"><span class="lb">已下载将跳过</span><span class="rv mute">3</span></div>
+        </div>
+      </div>
+      <div class="scrim"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="h">下载范围</div>
+        <div class="opt on"><div class="rd"></div><span class="lb">仅新增</span><span class="rec">推荐</span><span class="rv">18</span></div>
+        <div class="opt"><div class="rd"></div><span class="lb">全部作品</span><span class="rv">21</span></div>
+        <div class="opt"><div class="rd"></div><span class="lb">最近 N 条</span>
+          <span class="step"><b>−</b><span>20</span><b>+</b></span>
+        </div>
+        <div class="h">选项</div>
+        <div class="opt"><span class="lb">包含图文作品</span><span class="sw"></span></div>
+        <div class="opt" style="padding-top:4px"><span class="lb">跳过已下载</span><span class="sw"></span></div>
+        <div class="note">ⓘ 手动挑选作品时，本面板的设置不生效</div>
+        <div class="btn primary">完成</div>
+      </div>
+    </div>
+    <figcaption>
+      <div class="cap"><span class="idx">S3</span>调整面板</div>
+      <ul>
+        <li>四档单选 + 两个开关从页面里<b>整体收进 sheet</b></li>
+        <li>「仅新增 / 全部 / 最近 N」是<b>策略</b>；手选是<b>枚举</b>，两者不再平铺混排</li>
+        <li>把原来「改了没反应」的失效组合改成<b>显式声明</b>：手动挑选时本面板不生效</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- ══ S4 选片页 ══ -->
+  <figure>
+    <div class="phone" data-title="← 挑选作品" data-topright="全选">
+      <div class="body">
+        <div class="seg">
+          <span>全部 21</span><span class="on">新增 18</span><span>已下载 3</span>
+        </div>
+        <div class="filters"><span class="f on">视频 21</span><span class="f">图集 2</span><span style="margin-left:auto;font-size:11.5px;color:var(--primaryText);font-weight:600">反选</span></div>
+        <div class="thumbs" style="grid-template-columns:repeat(3,1fr);gap:8px">
+          <div class="th" style="background:linear-gradient(140deg,#FFC9A0,#FF8A3C)"><div class="ck">✓</div><div class="bd">▶ 0:12</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#B7A6FF,#7a63e0)"><div class="ck">✓</div><div class="bd">▶ 0:08</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#A9E0F2,#4aa8c9)"><div class="ck off"></div><div class="bd">▶ 0:21</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#FFB7CC,#e0729a)"><div class="ck">✓</div><div class="bd">▣ 图集 6</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#FFE0A3,#e0a93c)"><div class="ck">✓</div><div class="bd">▶ 0:15</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#C4E8C0,#57a86a)"><div class="ck off"></div><div class="bd">▶ 0:09</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#B7A6FF,#9a7fe8)"><div class="ck">✓</div><div class="bd">▶ 0:31</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#FFC9A0,#e07a3c)"><div class="ck">✓</div><div class="bd">▶ 0:07</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#A9E0F2,#5fbdd6)"><div class="ck off"></div><div class="bd">▶ 0:18</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#FFB7CC,#d8688c)"><div class="ck">✓</div><div class="bd">▶ 0:11</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#FFE0A3,#d6a02e)"><div class="ck">✓</div><div class="bd">▶ 0:24</div></div>
+          <div class="th" style="background:linear-gradient(140deg,#C4E8C0,#4d9d62)"><div class="ck off"></div><div class="bd">▶ 0:05</div></div>
+        </div>
+      </div>
+      <div class="actionbar">
+        <div class="lbl">已选 12 个<small>3 个未选</small></div>
+        <div class="btn primary">下载已选</div>
+      </div>
+    </div>
+    <figcaption>
+      <div class="cap"><span class="idx">S4</span>选片页（二级）</div>
+      <ul>
+        <li>网格从主页<b>下沉到二级页</b>：主页首屏变干净，主路径不再被 60 条网格撑长</li>
+        <li>分段「全部 / 新增 / 已下载」+ 类型筛选 + 全选/反选</li>
+        <li>返回<b>不丢选择</b>，回写 S2 的操作条</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- ══ S5a 下载中 ══ -->
+  <figure>
+    <div class="phone" data-dock="1" data-title="抖快红下载">
+      <div class="body">
+        <div class="card pad" style="margin-top:8px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="avatar" style="width:34px;height:34px;border-radius:11px;font-size:14px">奶</div>
+            <div>
+              <div style="font-size:14px;font-weight:650">奶霜莓莓</div>
+              <div style="font-size:11.5px;color:var(--text2);margin-top:2px">共 253 条 · 本次取 21 条</div>
+            </div>
+          </div>
+          <div class="big" style="margin-top:20px">12 <small>/ 18</small></div>
+          <div class="prog"><i></i></div>
+          <div class="kv">
+            <div><b class="ok">11</b>已完成</div>
+            <div><b class="bad">1</b>失败</div>
+            <div><b>5</b>等待中</div>
+          </div>
+        </div>
+        <div class="card tight" style="margin-top:14px">
+          <div class="row" style="padding:11px 14px"><span class="lb">去任务页看细节</span><span class="go">›</span></div>
+          <div class="row" style="padding:11px 14px"><span class="lb" style="color:var(--fail)">取消剩余 5 个</span></div>
+        </div>
+      </div>
+      <div class="actionbar">
+        <div class="lbl">下载中 12 / 18<small>可离开此页，任务继续</small></div>
+        <div class="btn primary">去任务页</div>
+      </div>
+    </div>
+    <figcaption>
+      <div class="cap"><span class="idx">S5a</span>下载中</div>
+      <ul>
+        <li>确认后<b>不跳页</b>：页内变进度卡，消除「我点了之后去哪了」的断点</li>
+        <li>给「可离开此页，任务继续」的明示，鼓励用户去做别的事</li>
+        <li>失败数单独可见（现在只能去任务页才发现）</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- ══ S5b 完成 ══ -->
+  <figure>
+    <div class="phone" data-dock="1" data-title="抖快红下载">
+      <div class="body">
+        <div class="center-hero">
+          <div class="ring">✓</div>
+          <div class="t1">下载完成 17 个</div>
+          <div class="t2">1 个失败 · 3 个已跳过（早前下过）</div>
+        </div>
+        <div class="card tight">
+          <div class="row" style="padding:11px 14px"><span class="lb">查看任务</span><span class="go">›</span></div>
+          <div class="row" style="padding:11px 14px"><span class="lb">再检查新作品</span><span class="go">›</span></div>
+          <div class="row" style="padding:11px 14px"><span class="lb">换一个作者</span><span class="go">›</span></div>
+        </div>
+      </div>
+      <div class="actionbar">
+        <div class="lbl">完成 17 个<small>1 个失败可重试</small></div>
+        <div class="btn primary">查看任务</div>
+      </div>
+    </div>
+    <figcaption>
+      <div class="cap"><span class="idx">S5b</span>完成</div>
+      <ul>
+        <li>完成页直接给<b>下一步的三个出口</b>，而不是静默回到空态</li>
+        <li>「再检查新作品」把<b>回访场景</b>做成显式动作（配合 S0 的最近作者）</li>
+        <li>结果口径写全：完成 / 失败 / 跳过，避免「怎么少了 3 个」的困惑</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+</div>
+
+<div class="wallnote">
+  <h3>关键改动摘要</h3>
+  <table>
+    <tr><th>根因</th><th>现状</th><th>新设计</th></tr>
+    <tr>
+      <td><b>R1</b> 主操作在滚动流里</td>
+      <td>「确认下载」是 <code>Column.verticalScroll</code> 的最后一个节点，实测要上滑 5 次</td>
+      <td>移入 <b>Scaffold 常驻操作条</b>，任何状态任何滚动位置都可见</td>
+    </tr>
+    <tr>
+      <td><b>R2</b> 两种选择语义混排</td>
+      <td>4 档单选 + 2 开关平铺；开关在「按勾选下载」档下被静默忽略；点网格偷偷切档</td>
+      <td><b>策略收进 sheet</b>，<b>枚举下沉二级页</b>；失效组合改为显式声明</td>
+    </tr>
+    <tr>
+      <td><b>R3</b> 长任务零信息量</td>
+      <td>11~14s 只有一行灰字，不可取消</td>
+      <td>三<b>阶段</b>进度（真实回调驱动）+ 可取消</td>
+    </tr>
+    <tr>
+      <td><b>R4</b> 硬约束事后解释</td>
+      <td>253 条只给 21 条，再用 11sp 灰字解释——本次报障的心理起点</td>
+      <td>「共 N 条 · 本次可取 M 条」放在昵称正下方 + 登录出口</td>
+    </tr>
+    <tr>
+      <td><b>R5</b> 回访路径长</td>
+      <td>「上次解析」只在 Idle 态一张卡，换作者要先退出预览</td>
+      <td>最近作者<b>常驻横滑</b>；完成页也给「换一个作者」</td>
+    </tr>
+  </table>
+</div>
+
+<script>
+  // 注入状态栏（所有屏一致）
+  document.querySelectorAll('.phone').forEach(function(p){
+    var sb = document.createElement('div');
+    sb.className = 'statusbar';
+    sb.innerHTML = '<span>9:41</span><span class="ic"><i></i><i></i><span style="font-size:11px">100%</span></span>';
+    p.insertBefore(sb, p.firstChild);
+
+    // 顶栏
+    var title = p.getAttribute('data-title');
+    if (title) {
+      var tb = document.createElement('div');
+      tb.className = 'topbar';
+      var isBack = title.charAt(0) === '←';
+      var right = p.getAttribute('data-topright') || '';
+      tb.innerHTML = (isBack ? '<span class="back">‹</span>' : '')
+        + '<span class="t">' + title.replace('← ','') + '</span>'
+        + (right ? '<span class="r">' + right + '</span>' : (isBack ? '' : '<span class="r" style="color:var(--text2)">⚙</span>'));
+      var sbNode = p.querySelector('.statusbar');
+      sbNode.insertAdjacentElement('afterend', tb);
+    }
+
+    // dock
+    if (p.getAttribute('data-dock') === '1') {
+      var d = document.createElement('div');
+      d.className = 'dock';
+      d.innerHTML = '<div class="tab on"><span class="g">⌂</span>首页下载</div>'
+        + '<div class="tab"><span class="g">☰</span>任务</div>'
+        + '<div class="tab"><span class="g">⚙</span>设置</div>';
+      p.appendChild(d);
+    }
+  });
+
+  // 主题切换
+  var btn = document.getElementById('themeBtn');
+  btn.addEventListener('click', function(){
+    var dark = document.body.classList.toggle('dark');
+    btn.textContent = dark ? '切换亮色' : '切换暗色';
+  });
+</script>
+</body>
+</html>
