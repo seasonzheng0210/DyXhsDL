@@ -2740,9 +2740,7 @@ private fun TaskCell(
                         Box(
                             modifier = Modifier
                                 .clip(ContinuousRoundedRectangle(999.dp))
-                                .background(
-                                    MiuixTheme.colorScheme.primary.copy(alpha = if (dark) 0.22f else 0.13f)
-                                )
+                                .background(accentBg(lightAlpha = 0.13f))
                                 .clickable { onHomepageDownload() }
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
@@ -2750,7 +2748,7 @@ private fun TaskCell(
                                 text = stringResource(R.string.task_card_homepage_cd),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MiuixTheme.colorScheme.primary
+                                color = accentFg()
                             )
                         }
                     }
@@ -3215,6 +3213,24 @@ private val BtnBarWidth = 132.dp
 /** .actionbar .btn padding:0 20px。 */
 private val BtnBarPadH = 20.dp
 
+// ── 「橙 chip」色对 ────────────────────────────────────────────────────────────
+// ★暗色陷阱：MiuixTheme.colorScheme.primary 在暗色下是**深棕橙**（实测合成后 ≈ #682C11 级别），
+// 所以「primary 半透明底 + primary 字」这种亮色下很好看的胶囊，在暗色下退化成
+// 深棕底 + 深棕字 —— 任务卡「该作者主页」胶囊实测对比度只有 **1.16:1**，文字基本看不见。
+// 统一改用 GlassTokens：暗色 = 暖橙底(渐变起色 @0.20) + 浅橙字(OrangeOnDark)，实测 ≈9.5:1。
+// 亮色不变（深橙字 + 浅橙底），保持原有观感。
+
+/** 「橙 chip / 橙图标」前景色（亮=深橙，暗=浅橙）。 */
+@Composable
+private fun accentFg(): Color =
+    if (isSystemInDarkTheme()) GlassTokens.OrangeOnDark else MiuixTheme.colorScheme.primary
+
+/** 「橙 chip」底色；lightAlpha 为亮色下的不透明度（暗色固定 0.20）。 */
+@Composable
+private fun accentBg(lightAlpha: Float = 0.14f): Color =
+    if (isSystemInDarkTheme()) GlassTokens.GradientStart.copy(alpha = 0.20f)
+    else MiuixTheme.colorScheme.primary.copy(alpha = lightAlpha)
+
 /**
  * 主页批量：按范围档 + 两开关计算实际待下载作品集（UI 统计与确认共用，保证所见即所得）。
  *  - ONLY_NEW：恒为未下载集合（"仅新增"定义即未下载，不受 skipDownloaded 影响）；
@@ -3453,7 +3469,7 @@ private fun HomepagePage(
                                 text = "改用网页爬取方式（需在浏览器登录抖音）",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = MiuixTheme.colorScheme.primary,
+                                color = accentFg(),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(10.dp))
@@ -3505,7 +3521,7 @@ private fun HomepagePage(
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 HomeStatCell(
                                     stringResource(R.string.home_stat_new), p.newItems.size,
-                                    valueColor = MiuixTheme.colorScheme.primary,
+                                    valueColor = accentFg(),
                                     modifier = Modifier.weight(1f)
                                 )
                                 HomeStatCell(
@@ -3552,7 +3568,7 @@ private fun HomepagePage(
                             text = if (showAllItems) "收起" else "展开全部 ${p.allItems.size} 条作品",
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MiuixTheme.colorScheme.primary,
+                            color = accentFg(),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
@@ -3667,7 +3683,7 @@ private fun HomepagePage(
                                 modifier = Modifier
                                     .size(34.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.18f)),
+                                    .background(accentBg(lightAlpha = 0.18f)),
                                 contentAlignment = androidx.compose.ui.Alignment.Center
                             ) {
                                 Text(
@@ -3675,7 +3691,7 @@ private fun HomepagePage(
                                         .take(1),
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = MiuixTheme.colorScheme.primary
+                                    color = accentFg()
                                 )
                             }
                             Spacer(modifier = Modifier.width(10.dp))
@@ -3732,14 +3748,14 @@ private fun HomepagePage(
                                     modifier = Modifier
                                         .size(20.dp)
                                         .clip(RoundedCornerShape(999.dp))
-                                        .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.18f)),
+                                        .background(accentBg(lightAlpha = 0.18f)),
                                     contentAlignment = androidx.compose.ui.Alignment.Center
                                 ) {
                                     Text(
                                         text = name.take(1),
                                         fontSize = 10.5.sp,
                                         fontWeight = FontWeight.Medium,
-                                        color = MiuixTheme.colorScheme.primary
+                                        color = accentFg()
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -3858,14 +3874,14 @@ private fun HomepageHowToCard() {
                         modifier = Modifier
                             .size(18.dp)
                             .clip(RoundedCornerShape(999.dp))
-                            .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                            .background(accentBg(lightAlpha = 0.16f)),
                         contentAlignment = androidx.compose.ui.Alignment.Center
                     ) {
                         Text(
                             text = (i + 1).toString(),
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = MiuixTheme.colorScheme.primary
+                            color = accentFg()
                         )
                     }
                     Spacer(modifier = Modifier.width(9.dp))
@@ -3903,14 +3919,14 @@ private fun HomepageSourceBar(entryFrom: String, onReturn: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.10f))
+            .background(accentBg(lightAlpha = 0.10f))
             .padding(start = 12.dp, end = 6.dp, top = 9.dp, bottom = 9.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
     ) {
         Icon(
             imageVector = MiuixIcons.Link,
             contentDescription = null,
-            tint = MiuixTheme.colorScheme.primary,
+            tint = accentFg(),
             modifier = Modifier.size(15.dp)
         )
         Spacer(modifier = Modifier.width(8.dp))
@@ -3926,7 +3942,7 @@ private fun HomepageSourceBar(entryFrom: String, onReturn: () -> Unit) {
             text = stringResource(R.string.home_src_return),
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
-            color = MiuixTheme.colorScheme.primary,
+            color = accentFg(),
             modifier = Modifier
                 .clip(RoundedCornerShape(999.dp))
                 .clickable { onReturn() }
@@ -4082,7 +4098,7 @@ private fun HomepageParseStages(activeStage: Int) {
                     )
                     if (active) {
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "…", fontSize = 13.5.sp, color = MiuixTheme.colorScheme.primary)
+                        Text(text = "…", fontSize = 13.5.sp, color = accentFg())
                     }
                 }
             }
@@ -4272,12 +4288,12 @@ private fun HomeRangeRow(
                 text = pill,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (selected) Color.White else MiuixTheme.colorScheme.primary,
+                color = if (selected) Color.White else accentFg(),
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
                     .background(
                         if (selected) Color.White.copy(alpha = 0.25f)
-                        else MiuixTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        else accentBg(lightAlpha = 0.14f)
                     )
                     .padding(horizontal = 7.dp, vertical = 2.dp)
             )
