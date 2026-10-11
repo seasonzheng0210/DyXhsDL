@@ -2460,8 +2460,8 @@ private fun HistoryPage(
                             modifier = Modifier.weight(1f)
                         )
                         GlassPrimaryWrap(
-                            modifier = Modifier.weight(1f).height(52.dp),
-                            cornerRadius = 26.dp
+                            modifier = Modifier.weight(1f).height(BtnHeight),
+                            cornerRadius = BtnCornerRadius
                         ) {
                             Button(
                                 onClick = {
@@ -2476,11 +2476,18 @@ private fun HistoryPage(
                                         Toast.makeText(context, pleaseEnterUrl, Toast.LENGTH_SHORT).show()
                                     }
                                 },
-                                modifier = Modifier.fillMaxWidth(),
+                                // 与主页下载页主按钮同规格（.btn）：显式填满托盘高度 + 统一字号字重字距
+                                modifier = Modifier.fillMaxWidth().height(BtnHeight),
                                 colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
+                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                             ) {
-                                Text(downloadButtonText, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    text = downloadButtonText,
+                                    color = Color.White,
+                                    fontSize = BtnFontSize,
+                                    fontWeight = BtnFontWeight,
+                                    letterSpacing = BtnLetterSpacing
+                                )
                             }
                         }
                     }
@@ -3180,6 +3187,34 @@ private const val HOMEPAGE_GRID_PREVIEW = 60
 /** 「指定数量」档步进值。 */
 private const val HOMEPAGE_LIMIT_STEP = 10
 
+// ══════════════════════════════════════════════════════════════════════════════
+// 设计规范：按钮排版（唯一真源 = docs/design/首页下载-交互重构-mockup.html 的 .btn）
+//
+//   .btn{height:52px;border-radius:26px;font-size:14.5px;font-weight:650;letter-spacing:.2px}
+//   .actionbar .btn{margin-left:auto;min-width:132px;padding:0 20px}
+//   .actionbar .lbl{font-size:13.5px;font-weight:650;line-height:1.35}
+//
+// 此前主按钮的字号/字重/字距全靠 Miuix Button 默认值（body1 ≈ 17sp / Medium），
+// 比规范大 2.5sp 且没有字距 —— 「解析作品」因此显得又大又糊；同一页面底部的
+// 「确认下载」却是显式 14sp/Medium，比规范小。两个同级主按钮大小不一致，
+// 所以看到「上面的大、下面的小」。统一收到这里，改一处即全局生效。
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** .btn 字号 14.5px。 */
+private val BtnFontSize = 14.5.sp
+/** .btn 字距 .2px。 */
+private val BtnLetterSpacing = 0.2.sp
+/** .btn 字重 650（Compose 无 650，取 SemiBold=600，Miuix 侧同档）。 */
+private val BtnFontWeight = FontWeight.SemiBold
+/** .btn 高度 52px。 */
+private val BtnHeight = 52.dp
+/** .btn 圆角 26px（= 高度一半，正胶囊）。 */
+private val BtnCornerRadius = 26.dp
+/** .actionbar .btn min-width:132px —— 固定宽度而非 minWidth，避免换文案时按钮宽度跳动。 */
+private val BtnBarWidth = 132.dp
+/** .actionbar .btn padding:0 20px。 */
+private val BtnBarPadH = 20.dp
+
 /**
  * 主页批量：按范围档 + 两开关计算实际待下载作品集（UI 统计与确认共用，保证所见即所得）。
  *  - ONLY_NEW：恒为未下载集合（"仅新增"定义即未下载，不受 skipDownloaded 影响）；
@@ -3281,6 +3316,9 @@ private fun HomepagePage(
 
     // dock 浮层避让：96dp + 导航栏；操作条再垫在 dock 之上
     val dockPad = 96.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // 常驻操作条实测高度 = 外 padding 8×2 + 内 padding 10×2 + 按钮 52 = 88dp（此前按钮 46dp 时是 82，
+    // 预留只给了 76，靠渐隐托盘兜住）。按钮对齐规范升到 52 后同步把预留补足，避免最后一行被压住。
+    val actionBarH = 88.dp
 
     Box(modifier = modifier.fillMaxSize()) {
     Column(
@@ -3288,7 +3326,7 @@ private fun HomepagePage(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
-            .padding(top = 4.dp, bottom = dockPad + 76.dp)
+            .padding(top = 4.dp, bottom = dockPad + actionBarH)
     ) {
         // ── 来源条：仅"被打断"型入口显示（manual/recent 两个原地入口不显示）──
         if (showSourceBar) {
@@ -3326,12 +3364,19 @@ private fun HomepagePage(
                 },
                 // 解析中禁用：避免与进行中的解析抢占（复制粘贴会改变 link 语义）
                 enabled = !parsing,
-                modifier = Modifier.weight(1f),
+                // 显式 h52：Miuix Button 默认 50dp，比右侧玻璃托盘矮 2dp，两个胶囊底边不齐
+                modifier = Modifier.weight(1f).height(BtnHeight),
                 // v3.1：与右侧「解析作品」统一 h52 胶囊（此前用 Miuix 默认圆角矩形，
                 // 与 36dp 的解析钮一大一小且底边不齐，真机截图实证）
-                cornerRadius = 26.dp
+                cornerRadius = BtnCornerRadius
             ) {
-                Text(stringResource(R.string.homepage_paste_clipboard))
+                // 排版对齐 .btn：14.5sp / 650 / .2px（此前吃 Miuix 默认 ≈17sp，比规范大 2.5sp）
+                Text(
+                    text = stringResource(R.string.homepage_paste_clipboard),
+                    fontSize = BtnFontSize,
+                    fontWeight = BtnFontWeight,
+                    letterSpacing = BtnLetterSpacing
+                )
             }
             // v3.1：h36 → h52 胶囊，与左侧粘贴钮等高对齐（全 App 主/次按钮统一 h52 标准）
             // 美工：解析中不再用「渐变 + alpha」降级 —— alpha 会把白色按钮字一起打掉，
@@ -3340,15 +3385,20 @@ private fun HomepagePage(
                 Button(
                     onClick = { },
                     enabled = false,
-                    modifier = Modifier.weight(1f).height(52.dp),
-                    cornerRadius = 26.dp
+                    modifier = Modifier.weight(1f).height(BtnHeight),
+                    cornerRadius = BtnCornerRadius
                 ) {
-                    Text(stringResource(R.string.home_preview_parsing_short))
+                    Text(
+                        text = stringResource(R.string.home_preview_parsing_short),
+                        fontSize = BtnFontSize,
+                        fontWeight = BtnFontWeight,
+                        letterSpacing = BtnLetterSpacing
+                    )
                 }
             } else {
                 GlassPrimaryWrap(
-                    modifier = Modifier.weight(1f).height(52.dp),
-                    cornerRadius = 26.dp
+                    modifier = Modifier.weight(1f).height(BtnHeight),
+                    cornerRadius = BtnCornerRadius
                 ) {
                     Button(
                         onClick = {
@@ -3358,11 +3408,22 @@ private fun HomepagePage(
                                 Toast.makeText(ctx, ctx.getString(R.string.please_enter_url), Toast.LENGTH_SHORT).show()
                             }
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        // ★ 必须显式填满托盘高度：托盘是 52dp 的 Box，内层 Button 不给高度时
+                        // 按 Miuix 默认（≈41dp）量测，Box 默认 TopStart 对齐 → 文字整体上移 5.3dp
+                        // （真机逐行墨迹实测：胶囊中心 537.5px，文字墨迹中心 523px）。
+                        // 同排左侧按钮是垂直居中的，两者因此肉眼可见地不齐。
+                        modifier = Modifier.fillMaxWidth().height(BtnHeight),
                         colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        // vertical 给 0：高度已由外层锁定，上下 padding 只会把文字挤偏
+                        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                     ) {
-                        Text(stringResource(R.string.home_preview_parse), color = Color.White)
+                        Text(
+                            text = stringResource(R.string.home_preview_parse),
+                            color = Color.White,
+                            fontSize = BtnFontSize,
+                            fontWeight = BtnFontWeight,
+                            letterSpacing = BtnLetterSpacing
+                        )
                     }
                 }
             }
@@ -3900,8 +3961,9 @@ private fun HomepageActionBar(
         if (label.isNotEmpty()) {
             Text(
                 text = label,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
+                // .actionbar .lbl{font-size:13.5px;font-weight:650}
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.SemiBold,
                 color = MiuixTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -3912,24 +3974,27 @@ private fun HomepageActionBar(
         }
         // 禁用态不用 alpha 降级（会把白色按钮字一起打掉）→ 换成真正的禁用态胶囊，
         // 尺寸完全一致，保证"位置稳定 > 省空间"这一原则在禁用态也成立。
+        // 排版同样对齐 .btn：14.5sp / 650 / .2px —— 此前 14sp/Medium 比同页的「解析作品」
+        // 小一档，同一屏里上下两个主按钮大小不一致（用户直接指出的问题）。
         if (enabled) {
             GlassPrimaryWrap(
                 modifier = Modifier
-                    .height(46.dp)
-                    .width(124.dp),
-                cornerRadius = 23.dp
+                    .height(BtnHeight)
+                    .width(BtnBarWidth),
+                cornerRadius = BtnCornerRadius
             ) {
                 Button(
                     onClick = onPrimary,
-                    modifier = Modifier.fillMaxWidth().height(46.dp),
+                    modifier = Modifier.fillMaxWidth().height(BtnHeight),
                     colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                    insideMargin = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    insideMargin = PaddingValues(horizontal = BtnBarPadH, vertical = 0.dp)
                 ) {
                     Text(
                         text = primaryText,
                         color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontSize = BtnFontSize,
+                        fontWeight = BtnFontWeight,
+                        letterSpacing = BtnLetterSpacing,
                         maxLines = 1
                     )
                 }
@@ -3939,11 +4004,17 @@ private fun HomepageActionBar(
                 onClick = { },
                 enabled = false,
                 modifier = Modifier
-                    .height(46.dp)
-                    .width(124.dp),
-                cornerRadius = 23.dp
+                    .height(BtnHeight)
+                    .width(BtnBarWidth),
+                cornerRadius = BtnCornerRadius
             ) {
-                Text(text = primaryText, fontSize = 14.sp, maxLines = 1)
+                Text(
+                    text = primaryText,
+                    fontSize = BtnFontSize,
+                    fontWeight = BtnFontWeight,
+                    letterSpacing = BtnLetterSpacing,
+                    maxLines = 1
+                )
             }
         }
     }
@@ -3975,8 +4046,9 @@ private fun HomepageParseStages(activeStage: Int) {
                     modifier = Modifier.padding(vertical = 4.dp)
                 ) {
                     Box(
+                        // .stage .dot{width:20px;height:20px}
                         modifier = Modifier
-                            .size(16.dp)
+                            .size(20.dp)
                             .clip(RoundedCornerShape(999.dp))
                             .background(
                                 when {
@@ -3992,15 +4064,16 @@ private fun HomepageParseStages(activeStage: Int) {
                                 imageVector = MiuixIcons.Ok,
                                 contentDescription = null,
                                 tint = Color.White,
-                                modifier = Modifier.size(11.dp)
+                                modifier = Modifier.size(12.dp)
                             )
                         }
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = name,
-                        fontSize = 13.sp,
-                        fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
+                        // .stage .tx{font-size:13.5px} / .stage.now .tx{font-weight:650}
+                        fontSize = 13.5.sp,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                         color = when {
                             done -> MiuixTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                             active -> MiuixTheme.colorScheme.onSurface
@@ -4009,14 +4082,15 @@ private fun HomepageParseStages(activeStage: Int) {
                     )
                     if (active) {
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "…", fontSize = 13.sp, color = MiuixTheme.colorScheme.primary)
+                        Text(text = "…", fontSize = 13.5.sp, color = MiuixTheme.colorScheme.primary)
                     }
                 }
             }
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = stringResource(R.string.home_parse_hint),
-                fontSize = 11.5.sp,
+                // .hint{font-size:11px}
+                fontSize = 11.sp,
                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.50f)
             )
         }
@@ -4188,8 +4262,9 @@ private fun HomeRangeRow(
         Text(
             text = label,
             modifier = Modifier.weight(1f),
-            fontSize = 13.sp,
-            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            // .row{font-size:13.5px}
+            fontSize = 13.5.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = if (selected) Color.White else MiuixTheme.colorScheme.onSurface
         )
         if (pill != null) {
