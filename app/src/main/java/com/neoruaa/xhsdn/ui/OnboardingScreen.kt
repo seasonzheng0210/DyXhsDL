@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.sp
 import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
 import com.neoruaa.xhsdn.ui.glass.GlassTokens
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
+import com.neoruaa.xhsdn.ui.glass.accentBg
+import com.neoruaa.xhsdn.ui.glass.accentFg
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -144,10 +146,13 @@ fun OnboardingScreen(
                                 .size(if (active) 8.dp else 7.dp)
                                 .clip(RoundedCornerShape(999.dp))
                                 .background(
+                                    // 指示点：选中=实心语义橙，未选中=极淡同色/白色
+                                    // ★原先选中态在亮色下用 OrangePrimaryLight（半透明打底色 @0.88），
+                                    //   是同类 token 误用；统一走 accentFg / accentBg。
                                     if (active) {
-                                        if (dark) GlassTokens.DownloadingDark else GlassTokens.OrangePrimaryLight
+                                        accentFg()
                                     } else {
-                                        if (dark) Color.White.copy(alpha = 0.30f) else GlassTokens.OrangePrimaryLight.copy(alpha = 0.28f)
+                                        if (dark) Color.White.copy(alpha = 0.30f) else accentBg(0.28f)
                                     }
                                 )
                         )
@@ -199,14 +204,14 @@ private fun BrandPage(textPrimary: Color, textSecondary: Color) {
             .padding(horizontal = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 玻璃 logo 圆：橙渐变 + 白色播放符
+        // 玻璃 logo 圆：橙渐变 + 白色播放符（★token 化，原先硬编码 0xFFFF8A3C/0xFFF06500）
         Box(
             modifier = Modifier
                 .size(88.dp)
                 .clip(RoundedCornerShape(28.dp))
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(Color(0xFFFF8A3C), Color(0xFFF06500))
+                        colors = listOf(GlassTokens.GradientStart, GlassTokens.DownloadingLight)
                     )
                 ),
             contentAlignment = Alignment.Center
@@ -271,7 +276,6 @@ private fun SkillRow(
     textPrimary: Color,
     textSecondary: Color
 ) {
-    val primary = if (dark) GlassTokens.OrangePrimaryDark else GlassTokens.OrangePrimaryLight
     Card(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 22.dp,
@@ -287,14 +291,15 @@ private fun SkillRow(
                 modifier = Modifier
                     .size(46.dp)
                     .clip(RoundedCornerShape(15.dp))
-                    .background(primary.copy(alpha = if (dark) 0.5f else 0.16f)),
+                    // ★浅底用 --fill（#FF6A2E@.16/.22），不要用 primary（半透明打底色）
+                    .background(accentBg()),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     modifier = Modifier.size(23.dp),
-                    tint = if (dark) GlassTokens.DownloadingDark else GlassTokens.OrangeTextDeep
+                    tint = accentFg()
                 )
             }
             Spacer(Modifier.width(14.dp))
@@ -371,7 +376,7 @@ private fun PermRow(
                 imageVector = icon,
                 contentDescription = null,
                 modifier = Modifier.size(22.dp),
-                tint = if (dark) GlassTokens.DownloadingDark else GlassTokens.OrangeTextDeep
+                tint = accentFg()
             )
             Spacer(Modifier.width(12.dp))
             Column {

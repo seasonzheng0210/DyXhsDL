@@ -77,6 +77,7 @@ import top.yukonga.miuix.kmp.theme.ThemeController
 import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
 import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
+import com.neoruaa.xhsdn.ui.glass.accentFg
 import androidx.compose.ui.res.stringResource
 import com.kyant.capsule.ContinuousRoundedRectangle
 
@@ -503,7 +504,10 @@ private fun WebViewScreen(
                 Text(
                     text = statusMsg.value,
                     fontSize = 12.sp,
-                    color = MiuixTheme.colorScheme.primary,
+                    // ★状态文字不要用 primary：它是**半透明**打底色（亮 .88 / 暗 .45），
+                    //   当正文前景在暗色下合成后只剩 ~1.9:1，几乎读不出来。
+                    //   走共享的 accentFg（亮 #E2560E / 暗 #FFB37A）。
+                    color = accentFg(),
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 )
             }
@@ -523,7 +527,8 @@ private fun WebViewScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .align(Alignment.TopCenter),
-                        color = MiuixTheme.colorScheme.primary
+                        // 进度条同理：primary 半透明在暗色下会「消失」，用不透明语义橙
+                        color = accentFg()
                     )
                 } else {
                     androidx.compose.ui.viewinterop.AndroidView(

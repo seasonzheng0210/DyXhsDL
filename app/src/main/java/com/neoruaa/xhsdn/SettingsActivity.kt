@@ -842,7 +842,15 @@ private fun TokenChip(
             .then(if (enabled) Modifier.clickable { onInsert(token.placeholder) } else Modifier),
         cornerRadius = 14.dp,
         colors = CardDefaults.defaultColors(
-            color = if (enabled) MiuixTheme.colorScheme.surfaceVariant else MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            // ★surfaceVariant 也是**白色半透覆盖层**（亮 白@55% / 暗 白@15%）。
+            //   旧写法 .copy(alpha = 0.5f) 是**替换** alpha → 暗色下把 15% 抬成 50%，
+            //   结果「禁用」卡比「可用」卡还亮（affordance 反了）。
+            //   按 token 自身 alpha 等比降低才对：亮 0.55→0.48（几乎不变），暗 0.15→0.13。
+            color = if (enabled) MiuixTheme.colorScheme.surfaceVariant
+            else {
+                val sv = MiuixTheme.colorScheme.surfaceVariant
+                sv.copy(alpha = sv.alpha * 0.88f)
+            }
         )
     ) {
         Column(

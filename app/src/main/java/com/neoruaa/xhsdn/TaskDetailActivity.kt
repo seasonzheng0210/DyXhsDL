@@ -66,6 +66,8 @@ import com.neoruaa.xhsdn.ui.glass.GlassDialog
 import com.neoruaa.xhsdn.ui.glass.GlassLogBody
 import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
 import com.neoruaa.xhsdn.ui.glass.GlassTokens
+import com.neoruaa.xhsdn.ui.glass.accentBg
+import com.neoruaa.xhsdn.ui.glass.accentFg
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
 import com.neoruaa.xhsdn.utils.DownloadLogger
 import top.yukonga.miuix.kmp.basic.Button
@@ -415,14 +417,17 @@ private fun AuthorHomeEntryCard(
                 modifier = Modifier
                     .size(38.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                    // ★原来用 primary@0.16 当底 + primary 当图标 —— primary 是半透明打底色，
+                    //   暗色下两者一起压成深棕，实测对比度 ~1.4:1（图标几乎看不见）。
+                    //   改走共享的 accentBg/accentFg（亮 #E2560E / 暗 #FFB37A）。
+                    .background(accentBg()),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     // 美工：原借用 Play（播放三角）表达"作者"，语义不符；换人物圆标
                     imageVector = MiuixIcons.ContactsCircle,
                     contentDescription = null,
-                    tint = MiuixTheme.colorScheme.primary,
+                    tint = accentFg(),
                     modifier = Modifier.size(19.dp)
                 )
             }

@@ -56,6 +56,16 @@ object GlassTokens {
     val CardDark = Color(0x26FFFFFF)        // 白 15%
     val CardElevatedDark = Color(0x2BFFFFFF)
 
+    /**
+     * ⚠️ 上面 ChromeDark/PanelDark/CardDark 等**暗色值也是「白色半透」**（白 13~17%），
+     * 它们是**覆盖层**，只能**原样**铺在深壁纸上。
+     * **绝不要对它们写 `.copy(alpha = X)`** —— `copy(alpha)` 是**替换**不是相乘，
+     * 会把「白@14%」换成「白@X%」：X 一大就变成**一块白板**（实测 `surface.copy(alpha=0.94f)`
+     * 在暗色下 = 白 94%，状态文字 #F5F6F8 压上去只有 **1.04:1**，完全看不见）。
+     * 需要「实心表面」请用 [SolidDark]（亮色侧用纯白），见 `GlassAccent.glassSolid()`。
+     */
+    val SolidDark = Color(0xFF151518)       // 实心玻璃基色（暗）：近黑，压在深壁纸上
+
     // ── 主操作：液态渐变（橙→珊瑚粉 120°）───────────────────────────
     val GradientStart = Color(0xFFFF8A3C)   // 渐变起：暖橙
     val GradientEnd = Color(0xFFFF5F6D)     // 渐变止：珊瑚粉
@@ -65,6 +75,14 @@ object GlassTokens {
     /** 亮/暗禁用主操作（灰化，渐变装饰层在 disabled 时隐藏）。 */
     val DisabledPrimaryLight = Color(0xFFCFC7D6).copy(alpha = 0.7f)
     val DisabledPrimaryDark = Color(0xFF8A8A95).copy(alpha = 0.35f)
+
+    /**
+     * 「橙浅底」（芯片 / 头像底 / 来源条 / 推荐标）—— 对应 mockup `:root` 的
+     * `--fill:rgba(255,106,46,.16)`（暗色 `.22`）。
+     * ★注意：这是**打底色**，只作背景用；当文字/图标色用会读不出来（见 GlassAccent）。
+     */
+    val FillLight = Color(0xFFFF6A2E).copy(alpha = 0.16f)
+    val FillDark = Color(0xFFFF6A2E).copy(alpha = 0.22f)
 
     // ── 文字（定稿）─────────────────────────────────────────────────
     val TextPrimaryLight = Color(0xFF241F18)

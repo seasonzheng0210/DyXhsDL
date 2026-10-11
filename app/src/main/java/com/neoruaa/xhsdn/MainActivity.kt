@@ -65,7 +65,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -122,7 +126,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.layout.offset
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.input.pointer.pointerInput
@@ -141,6 +149,9 @@ import com.neoruaa.xhsdn.ui.glass.GlassDialog
 import com.neoruaa.xhsdn.ui.glass.GlassLogBody
 import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
 import com.neoruaa.xhsdn.ui.glass.GlassTokens
+import com.neoruaa.xhsdn.ui.glass.accentBg
+import com.neoruaa.xhsdn.ui.glass.accentFg
+import com.neoruaa.xhsdn.ui.glass.glassSolid
 import com.neoruaa.xhsdn.ui.OnboardingScreen
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -1715,7 +1726,9 @@ private fun SelectiveDownloadSheet(
                     imageVector = MiuixIcons.Download,
                     contentDescription = stringResource(R.string.download_button),
                     modifier = Modifier.size(26.dp),
-                    tint = if (canSave) MiuixTheme.colorScheme.primary else Color.Gray
+                    // ★橙色图标不要用 primary（半透明，暗色下压成深棕 ~1.9:1）；
+                    //   禁用态也别硬编码 Color.Gray，跟随主题次级文字色
+                    tint = if (canSave) accentFg() else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                 )
             }
         }
@@ -3269,22 +3282,10 @@ private val FabBottomOffset = DockTopOffset + 12.dp
 private val ClipBubbleBottomOffset = FabBottomOffset + FabSize + 8.dp
 
 // ── 「橙 chip」色对 ────────────────────────────────────────────────────────────
-// ★暗色陷阱：MiuixTheme.colorScheme.primary 在暗色下是**深棕橙**（实测合成后 ≈ #682C11 级别），
-// 所以「primary 半透明底 + primary 字」这种亮色下很好看的胶囊，在暗色下退化成
-// 深棕底 + 深棕字 —— 任务卡「该作者主页」胶囊实测对比度只有 **1.16:1**，文字基本看不见。
-// 统一改用 GlassTokens：暗色 = 暖橙底(渐变起色 @0.20) + 浅橙字(OrangeOnDark)，实测 ≈9.5:1。
-// 亮色不变（深橙字 + 浅橙底），保持原有观感。
-
-/** 「橙 chip / 橙图标」前景色（亮=深橙，暗=浅橙）。 */
-@Composable
-private fun accentFg(): Color =
-    if (isSystemInDarkTheme()) GlassTokens.OrangeOnDark else MiuixTheme.colorScheme.primary
-
-/** 「橙 chip」底色；lightAlpha 为亮色下的不透明度（暗色固定 0.20）。 */
-@Composable
-private fun accentBg(lightAlpha: Float = 0.14f): Color =
-    if (isSystemInDarkTheme()) GlassTokens.GradientStart.copy(alpha = 0.20f)
-    else MiuixTheme.colorScheme.primary.copy(alpha = lightAlpha)
+// accentFg() / accentBg() 已抽到 ui/glass/GlassAccent.kt 共享（TaskDetailActivity /
+// WebViewActivity 也需要，私有在本文件里它们就用不到 —— 那正是之前漏改的原因）。
+// ★铁律：橙色文字/图标/浅底一律走那两个 helper，不要直接用 MiuixTheme.colorScheme.primary。
+//   它是**半透明**的打底色（亮 .88 / 暗 .45，暗色合成后是深棕橙），当前景用暗色下只有 ~1.9:1。
 
 /**
  * 主页批量：按范围档 + 两开关计算实际待下载作品集（UI 统计与确认共用，保证所见即所得）。
@@ -3791,7 +3792,8 @@ private fun HomepagePage(
                             Row(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(999.dp))
-                                    .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.7f))
+                                    // ★surface 暗色是「白@14%」覆盖层，copy(alpha=0.7) 会变成白 70% → 白板
+                                    .background(glassSolid(0.70f))
                                     .clickable {
                                         link = "https://www.douyin.com/user/$secUid"
                                         onPreview(link)
@@ -4024,7 +4026,10 @@ private fun HomepageActionBar(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .clip(ContinuousRoundedRectangle(20.dp))
-            .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.94f))
+            // ★这里原来写的是 surface.copy(alpha = 0.94f)：亮色=纯白 94% 没问题，
+            //   但暗色 surface 是「白@14%」覆盖层，copy(alpha) 是替换 →
+            //   暗色下变成**白 94% 的白板**，条上状态文字(onSurface=#F5F6F8)只有 1.04:1，看不见。
+            .background(glassSolid(0.94f))
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -4116,26 +4121,65 @@ private fun HomepageParseStages(activeStage: Int) {
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     modifier = Modifier.padding(vertical = 4.dp)
                 ) {
+                    // ── 阶段圆点：按 mockup .stage .dot 三态（此前两处都与规范不符）────────
+                    //   .stage .dot.done{background:rgba(0,137,92,.18);color:var(--ok)}
+                    //                                                          完成 = **绿色系**
+                    //   .stage .dot.now{border:2px solid var(--primaryText);
+                    //     border-top-color:transparent;animation:spin .8s linear infinite}
+                    //                                                          进行中 = 橙描边 spinner
+                    //   .stage .dot.wait{background:var(--track)}               等待 = 中性灰
+                    // 旧实现是「完成 = 橙实底 + 白勾 / 进行中 = 橙@0.28 实心点」：
+                    // 前者完成态用错品牌色（该绿），后者暗色合成后仅 ~1.5:1 几乎看不见。
+                    val dark = isSystemInDarkTheme()
+                    val okColor = if (dark) GlassTokens.SuccessGreenDark else GlassTokens.SuccessGreen
+                    val ringColor = accentFg()
                     Box(
-                        // .stage .dot{width:20px;height:20px}
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(
-                                when {
-                                    done -> MiuixTheme.colorScheme.primary
-                                    active -> MiuixTheme.colorScheme.primary.copy(alpha = 0.28f)
-                                    else -> MiuixTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-                                }
-                            ),
+                        // .stage .dot{width:20px;height:20px;border-radius:50%}
+                        modifier = Modifier.size(20.dp),
                         contentAlignment = androidx.compose.ui.Alignment.Center
                     ) {
-                        if (done) {
-                            Icon(
-                                imageVector = MiuixIcons.Ok,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(12.dp)
+                        when {
+                            done -> Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .background(okColor.copy(alpha = if (dark) 0.22f else 0.18f), CircleShape),
+                                contentAlignment = androidx.compose.ui.Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = MiuixIcons.Ok,
+                                    contentDescription = null,
+                                    tint = okColor,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                            active -> {
+                                // .8s/圈匀速，等价 CSS spin .8s linear infinite
+                                val spin = rememberInfiniteTransition(label = "stageSpin").animateFloat(
+                                    initialValue = 0f,
+                                    targetValue = 360f,
+                                    animationSpec = infiniteRepeatable(
+                                        animation = tween(durationMillis = 800, easing = LinearEasing)
+                                    ),
+                                    label = "stageSpinAngle"
+                                )
+                                Canvas(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .rotate(spin.value)
+                                ) {
+                                    drawArc(
+                                        color = ringColor,
+                                        startAngle = -90f,
+                                        sweepAngle = 300f,  // 缺口 60°，等价 border-top-color:transparent
+                                        useCenter = false,
+                                        style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                                    )
+                                }
+                            }
+                            else -> Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .background(MiuixTheme.colorScheme.onSurface.copy(alpha = 0.12f), CircleShape)
                             )
                         }
                     }
@@ -4174,7 +4218,8 @@ private fun HomeStatCell(label: String, value: Int, valueColor: Color? = null, m
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.6f))
+            // ★同 4027：surface.copy(alpha=0.6f) 在暗色下是白 60% → 白格
+            .background(glassSolid(0.60f))
             .padding(vertical = 8.dp),
         horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
     ) {
