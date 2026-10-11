@@ -380,7 +380,7 @@ private fun PermRow(
             )
             Spacer(Modifier.width(12.dp))
             Column {
-                Text(text = name, color = textPrimary, fontSize = 15.5.sp, fontWeight = FontWeight.Medium)
+                Text(text = name, color = textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(2.dp))
                 Text(text = desc, color = textSecondary, fontSize = 12.sp)
             }

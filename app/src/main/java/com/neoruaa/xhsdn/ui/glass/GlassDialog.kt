@@ -115,23 +115,25 @@ fun GlassDialog(
                         )
                     }
                     if (confirmText != null) {
+                        // v3.1.5：内层 Button 必须显式给高度，否则被托盘 Box 顶对齐 → 文字偏上（实测偏 5.6dp）
                         GlassPrimaryWrap(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(52.dp),
-                            cornerRadius = 26.dp
+                                .height(GlassSpec.BtnHeight),
+                            cornerRadius = GlassSpec.BtnCornerRadius
                         ) {
                             Button(
                                 onClick = { onConfirm?.invoke() },
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().height(GlassSpec.BtnHeight),
                                 colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
+                                insideMargin = PaddingValues(horizontal = GlassSpec.BtnBarPadH, vertical = 0.dp)
                             ) {
                                 Text(
                                     text = confirmText,
                                     color = Color.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontSize = GlassSpec.BtnFontSize,
+                                    fontWeight = GlassSpec.BtnFontWeight,
+                                    letterSpacing = GlassSpec.BtnLetterSpacing
                                 )
                             }
                         }

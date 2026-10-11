@@ -29,12 +29,14 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
@@ -76,6 +78,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
 import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
+import com.neoruaa.xhsdn.ui.glass.GlassSpec
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
 import com.neoruaa.xhsdn.ui.glass.accentFg
 import androidx.compose.ui.res.stringResource
@@ -399,22 +402,28 @@ private fun WebViewScreen(
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions.Default.copy(imeAction = ImeAction.Go),
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { loadUrl(webView, urlText.text) })
                 )
+                // v3.1.5：底部动作按钮统一 .btn 规格（52dp / r26 / 14.5sp / 650）。
+                // 原先三处都没写 fontSize → 吃 Miuix Button 默认 ≈17sp；内层不给高度 → 文字被托盘顶对齐偏上
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Button(
                         onClick = { loadUrl(webView, urlText.text) },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).height(GlassSpec.BtnHeight),
                         enabled = urlText.text.isNotBlank(),
+                        insideMargin = PaddingValues(horizontal = GlassSpec.BtnBarPadH, vertical = 0.dp)
                     ) {
                         Text(
-                            text = stringResource(R.string.webview_go)
+                            text = stringResource(R.string.webview_go),
+                            fontSize = GlassSpec.BtnFontSize,
+                            fontWeight = GlassSpec.BtnFontWeight,
+                            letterSpacing = GlassSpec.BtnLetterSpacing
                         )
                     }
                     GlassPrimaryWrap(
-                        modifier = Modifier.weight(1f),
-                        cornerRadius = 20.dp
+                        modifier = Modifier.weight(1f).height(GlassSpec.BtnHeight),
+                        cornerRadius = GlassSpec.BtnCornerRadius
                     ) {
                         Button(
                             onClick = {
@@ -426,13 +435,17 @@ private fun WebViewScreen(
                                     extractImages(context, webView, sniffedVideoUrls, capturedUrls, capturedImageUrls, source, finished, onResult, 0, statusMsg, extractionFailed, retryUrl, direct, fallback)
                                 }
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(GlassSpec.BtnHeight),
                             enabled = !loading,
-                            colors = ButtonDefaults.buttonColorsPrimary()
+                            colors = ButtonDefaults.buttonColorsPrimary(),
+                            insideMargin = PaddingValues(horizontal = GlassSpec.BtnBarPadH, vertical = 0.dp)
                         ) {
                             Text(
                                 text = if (isHomepage) "完成爬取" else stringResource(R.string.webview_crawl),
-                                color = MiuixTheme.colorScheme.onPrimary
+                                color = MiuixTheme.colorScheme.onPrimary,
+                                fontSize = GlassSpec.BtnFontSize,
+                                fontWeight = GlassSpec.BtnFontWeight,
+                                letterSpacing = GlassSpec.BtnLetterSpacing
                             )
                         }
                     }
@@ -445,12 +458,16 @@ private fun WebViewScreen(
                                     onResult(emptyList(), emptyList(), "", null, true)
                                 }
                             },
-                            modifier = Modifier.weight(1f),
-                            enabled = !loading
+                            modifier = Modifier.weight(1f).height(GlassSpec.BtnHeight),
+                            enabled = !loading,
+                            insideMargin = PaddingValues(horizontal = GlassSpec.BtnBarPadH, vertical = 0.dp)
                         ) {
                         Text(
                             text = "直链解析",
-                            color = Color.White
+                            color = Color.White,
+                            fontSize = GlassSpec.BtnFontSize,
+                            fontWeight = GlassSpec.BtnFontWeight,
+                            letterSpacing = GlassSpec.BtnLetterSpacing
                         )
                         }
                     }
@@ -464,21 +481,35 @@ private fun WebViewScreen(
                     ) {
                         Button(
                             onClick = { goLogin() },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f).height(GlassSpec.BtnHeight),
+                            insideMargin = PaddingValues(horizontal = GlassSpec.BtnBarPadH, vertical = 0.dp)
                         ) {
-                            Text(text = "去登录${sourceLabel}", color = Color.White)
+                            Text(
+                                text = "去登录${sourceLabel}",
+                                color = Color.White,
+                                fontSize = GlassSpec.BtnFontSize,
+                                fontWeight = GlassSpec.BtnFontWeight,
+                                letterSpacing = GlassSpec.BtnLetterSpacing
+                            )
                         }
                         if (extractionFailed.value) {
                             GlassPrimaryWrap(
-                                modifier = Modifier.weight(1f),
-                                cornerRadius = 20.dp
+                                modifier = Modifier.weight(1f).height(GlassSpec.BtnHeight),
+                                cornerRadius = GlassSpec.BtnCornerRadius
                             ) {
                                 Button(
                                     onClick = { retryExtract() },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColorsPrimary()
+                                    modifier = Modifier.fillMaxWidth().height(GlassSpec.BtnHeight),
+                                    colors = ButtonDefaults.buttonColorsPrimary(),
+                                    insideMargin = PaddingValues(horizontal = GlassSpec.BtnBarPadH, vertical = 0.dp)
                                 ) {
-                                    Text(text = "重试提取", color = MiuixTheme.colorScheme.onPrimary)
+                                    Text(
+                                        text = "重试提取",
+                                        color = MiuixTheme.colorScheme.onPrimary,
+                                        fontSize = GlassSpec.BtnFontSize,
+                                        fontWeight = GlassSpec.BtnFontWeight,
+                                        letterSpacing = GlassSpec.BtnLetterSpacing
+                                    )
                                 }
                             }
                         }

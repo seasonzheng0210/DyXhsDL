@@ -69,6 +69,7 @@ import com.neoruaa.xhsdn.ui.glass.GlassTokens
 import com.neoruaa.xhsdn.ui.glass.accentBg
 import com.neoruaa.xhsdn.ui.glass.accentFg
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
+import com.neoruaa.xhsdn.ui.glass.GlassSpec
 import com.neoruaa.xhsdn.utils.DownloadLogger
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -572,9 +573,10 @@ private fun ActiveCard(
                 Spacer(Modifier.height(6.dp))
                 Text(text = "图文笔记下载前可先挑选；重新下载将下载全部内容", color = ts, fontSize = 12.5.sp)
                 Spacer(Modifier.height(18.dp))
-                GlassPrimaryWrap(Modifier.fillMaxWidth().height(48.dp), cornerRadius = 24.dp) {
-                    Button(onClick = onRedownload, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White), insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
-                        Text("重新下载全部", color = fg, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                // v3.1.5：按钮几何/字号统一走 GlassSpec（`.btn` 52dp / r26 / 14.5sp / 650）
+                GlassPrimaryWrap(Modifier.fillMaxWidth().height(GlassSpec.BtnHeight), cornerRadius = GlassSpec.BtnCornerRadius) {
+                    Button(onClick = onRedownload, modifier = Modifier.fillMaxWidth().height(GlassSpec.BtnHeight), colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White), insideMargin = PaddingValues(horizontal = GlassSpec.BtnBarPadH, vertical = 0.dp)) {
+                        Text("重新下载全部", color = fg, fontSize = GlassSpec.BtnFontSize, fontWeight = GlassSpec.BtnFontWeight, letterSpacing = GlassSpec.BtnLetterSpacing)
                     }
                 }
             } else {
@@ -645,9 +647,9 @@ private fun ActiveCard(
                     Text(text = "排队中，可停止等待", color = ts, fontSize = 12.sp)
                 }
                 Spacer(Modifier.height(20.dp))
-                GlassPrimaryWrap(Modifier.fillMaxWidth().height(48.dp), cornerRadius = 24.dp) {
-                    Button(onClick = onStop, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White), insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
-                        Text("停止下载", color = fg, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                GlassPrimaryWrap(Modifier.fillMaxWidth().height(GlassSpec.BtnHeight), cornerRadius = GlassSpec.BtnCornerRadius) {
+                    Button(onClick = onStop, modifier = Modifier.fillMaxWidth().height(GlassSpec.BtnHeight), colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White), insideMargin = PaddingValues(horizontal = GlassSpec.BtnBarPadH, vertical = 0.dp)) {
+                        Text("停止下载", color = fg, fontSize = GlassSpec.BtnFontSize, fontWeight = GlassSpec.BtnFontWeight, letterSpacing = GlassSpec.BtnLetterSpacing)
                     }
                 }
             }
@@ -694,14 +696,14 @@ private fun CompletedCard(
             Spacer(Modifier.height(22.dp))
             if (task.filePaths.isNotEmpty()) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    GlassPrimaryWrap(Modifier.weight(1f).height(46.dp), cornerRadius = 23.dp) {
-                        Button(onClick = onOpenFirst, modifier = Modifier.fillMaxWidth().height(46.dp), colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White), insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
-                            Text("打开", color = fg, fontSize = 14.5.sp, fontWeight = FontWeight.Medium)
+                    GlassPrimaryWrap(Modifier.weight(1f).height(GlassSpec.BtnHeight), cornerRadius = GlassSpec.BtnCornerRadius) {
+                        Button(onClick = onOpenFirst, modifier = Modifier.fillMaxWidth().height(GlassSpec.BtnHeight), colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White), insideMargin = PaddingValues(horizontal = GlassSpec.BtnBarPadH, vertical = 0.dp)) {
+                            Text("打开", color = fg, fontSize = GlassSpec.BtnFontSize, fontWeight = GlassSpec.BtnFontWeight, letterSpacing = GlassSpec.BtnLetterSpacing)
                         }
                     }
-                    GlassPrimaryWrap(Modifier.weight(1f).height(46.dp), cornerRadius = 23.dp) {
-                        Button(onClick = onBrowseFiles, modifier = Modifier.fillMaxWidth().height(46.dp), colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White), insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
-                            Text("查看文件", color = fg, fontSize = 14.5.sp, fontWeight = FontWeight.Medium)
+                    GlassPrimaryWrap(Modifier.weight(1f).height(GlassSpec.BtnHeight), cornerRadius = GlassSpec.BtnCornerRadius) {
+                        Button(onClick = onBrowseFiles, modifier = Modifier.fillMaxWidth().height(GlassSpec.BtnHeight), colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White), insideMargin = PaddingValues(horizontal = GlassSpec.BtnBarPadH, vertical = 0.dp)) {
+                            Text("查看文件", color = fg, fontSize = GlassSpec.BtnFontSize, fontWeight = GlassSpec.BtnFontWeight, letterSpacing = GlassSpec.BtnLetterSpacing)
                         }
                     }
                 }
@@ -761,13 +763,13 @@ private fun FailedCard(
                 )
             }
             Spacer(Modifier.height(22.dp))
-            GlassPrimaryWrap(Modifier.fillMaxWidth().height(48.dp), cornerRadius = 24.dp) {
+            GlassPrimaryWrap(Modifier.fillMaxWidth().height(GlassSpec.BtnHeight), cornerRadius = GlassSpec.BtnCornerRadius) {
                 Button(
                     onClick = { onRetry(task) },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    modifier = Modifier.fillMaxWidth().height(GlassSpec.BtnHeight),
                     colors = ButtonDefaults.buttonColorsPrimary()
                 ) {
-                    Text("重试", color = fg, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Text("重试", color = fg, fontSize = GlassSpec.BtnFontSize, fontWeight = GlassSpec.BtnFontWeight, letterSpacing = GlassSpec.BtnLetterSpacing)
                 }
             }
             Spacer(Modifier.height(10.dp))

@@ -149,6 +149,7 @@ import com.neoruaa.xhsdn.ui.glass.GlassDialog
 import com.neoruaa.xhsdn.ui.glass.GlassLogBody
 import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
 import com.neoruaa.xhsdn.ui.glass.GlassTokens
+import com.neoruaa.xhsdn.ui.glass.GlassSpec
 import com.neoruaa.xhsdn.ui.glass.accentBg
 import com.neoruaa.xhsdn.ui.glass.accentFg
 import com.neoruaa.xhsdn.ui.glass.glassSolid
@@ -1943,15 +1944,16 @@ private fun HistoryPage(
                                 color = if (dark) GlassTokens.TextSecondaryDark else GlassTokens.TextSecondaryLight
                             )
                             Spacer(Modifier.height(18.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                 TextButton(
                                     text = stringResource(R.string.cancel),
                                     onClick = { showClearCompletedDialog = false },
                                     modifier = Modifier.weight(1f)
                                 )
+                                // v3.1.5：内层必须显式给高度，否则按 Miuix 默认量测后被托盘 Box 顶对齐 → 文字偏上
                                 GlassPrimaryWrap(
-                                    modifier = Modifier.weight(1f).height(52.dp),
-                                    cornerRadius = 26.dp
+                                    modifier = Modifier.weight(1f).height(BtnHeight),
+                                    cornerRadius = BtnCornerRadius
                                 ) {
                                     Button(
                                         onClick = {
@@ -1959,11 +1961,11 @@ private fun HistoryPage(
                                             com.neoruaa.xhsdn.data.TaskManager.clearCompletedTasks(tabScope)
                                             showClearCompletedDialog = false
                                         },
-                                        modifier = Modifier.fillMaxWidth(),
+                                        modifier = Modifier.fillMaxWidth().height(BtnHeight),
                                         colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                                        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
+                                        insideMargin = PaddingValues(horizontal = BtnBarPadH, vertical = 0.dp)
                                     ) {
-                                        Text("清除", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("清除", color = Color.White, fontSize = BtnFontSize, fontWeight = BtnFontWeight, letterSpacing = BtnLetterSpacing)
                                     }
                                 }
                             }
@@ -2045,7 +2047,8 @@ private fun HistoryPage(
                                             Text(
                                                 text = "$value",
                                                 color = if (value > 0) GlassTokens.OrangeTextDeep else tPrimary,
-                                                fontSize = 21.sp,
+                                                // v3.1.5：21sp 不在设计稿字号并集内，收口到 20sp
+                                                fontSize = 20.sp,
                                                 fontWeight = FontWeight.Bold
                                             )
                                             Spacer(Modifier.height(3.dp))
@@ -2077,18 +2080,18 @@ private fun HistoryPage(
                             GlassPrimaryWrap(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(48.dp),
-                                cornerRadius = 24.dp
+                                    .height(BtnHeight),
+                                cornerRadius = BtnCornerRadius
                             ) {
                                 Button(
                                     onClick = goPaste,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(48.dp),
+                                        .height(BtnHeight),
                                     colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                insideMargin = PaddingValues(horizontal = BtnBarPadH, vertical = 0.dp)
                                 ) {
-                                    Text("去下载一个试试", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                    Text("去下载一个试试", color = Color.White, fontSize = BtnFontSize, fontWeight = BtnFontWeight, letterSpacing = BtnLetterSpacing)
                                 }
                             }
                             Spacer(Modifier.height(14.dp))
@@ -2158,39 +2161,40 @@ private fun HistoryPage(
                             GlassPrimaryWrap(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(48.dp),
-                                cornerRadius = 24.dp
+                                    .height(BtnHeight),
+                                cornerRadius = BtnCornerRadius
                             ) {
                                 Button(
                                     onClick = pasteAction,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(48.dp),
+                                        .height(BtnHeight),
                                     colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                insideMargin = PaddingValues(horizontal = BtnBarPadH, vertical = 0.dp)
                                 ) {
-                                    Text("粘贴链接", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                    Text("粘贴链接", color = Color.White, fontSize = BtnFontSize, fontWeight = BtnFontWeight, letterSpacing = BtnLetterSpacing)
                                 }
                             }
                             Spacer(Modifier.height(12.dp))
-                            // 次级玻璃按钮：批量下载博主主页
+                            // 次级玻璃按钮：批量下载博主主页（同 .btn 尺寸，只有底不同 —— 规范里
+                            // .btn.ghost 与 .btn.primary 高度/圆角/字号完全一致）
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(48.dp)
-                                    .clip(RoundedCornerShape(24.dp))
+                                    .height(BtnHeight)
+                                    .clip(RoundedCornerShape(BtnCornerRadius))
                                     .clickable {
                                         EventTracker.track(emptyCtx, "empty_homepage", mapOf("where" to "tasks"))
                                         onGoHomepage()
                                     },
-                                cornerRadius = 24.dp,
+                                cornerRadius = BtnCornerRadius,
                                 colors = CardDefaults.defaultColors(color = ctaCardBg)
                             ) {
                                 Box(
                                     modifier = Modifier.fillMaxSize(),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("批量下载博主主页", color = tPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                    Text("批量下载博主主页", color = tPrimary, fontSize = BtnFontSize, fontWeight = BtnFontWeight, letterSpacing = BtnLetterSpacing)
                                 }
                             }
                             Spacer(Modifier.height(24.dp))
@@ -2220,7 +2224,7 @@ private fun HistoryPage(
                             Text(
                                 text = "该平台还没有任务",
                                 color = tPrimary,
-                                fontSize = 15.5.sp,
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.Medium
                             )
                             Spacer(Modifier.height(6.dp))
@@ -2298,23 +2302,26 @@ private fun HistoryPage(
             }
         }
 
-        // v3.0.2 FAB：mockup 46×46 圆形胶囊 icon-only（.fab r999 h46 渐变，right16 bottom66）
+        // v3.1.5 FAB：按 LGv3 `.fab{width:46px;height:46px;border-radius:999px;right:16px}`
+        //   由 60dp 圆角方 收到 **46dp 正圆**（尺寸依据见 GlassSpec 的文件头：已实测确认 LGv3
+        //   的 px 是设备值而非缩略图值）。渐变由外层 GlassPrimaryWrap 画，本层不要重复画 —— 否则
+        //   wrap 在 enabled=false 时不画渐变、这一层却照画，**下载中 FAB 看起来还是可点的橙钮**。
         GlassPrimaryWrap(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = navPadding + FabBottomOffset),
-            cornerRadius = 30.dp,
+                .padding(end = GlassSpec.FabEndPadding, bottom = navPadding + FabBottomOffset),
+            cornerRadius = FabSize / 2,
             enabled = !uiState.isDownloading
         ) {
             Box(
                 modifier = Modifier
-                    .size(60.dp)
-                    .clip(ContinuousRoundedRectangle(23.dp))
-                    // mockup .fab：橙→珊瑚渐变实底 + 白图标
+                    .size(FabSize)
+                    .clip(CircleShape)
+                    // 禁用态底色（wrap 在 disabled 时不画渐变，由这里兜住灰化外观）
                     .background(
-                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                            colors = listOf(GlassTokens.GradientStart, GlassTokens.GradientEnd)
-                        )
+                        if (uiState.isDownloading)
+                            (if (isSystemInDarkTheme()) GlassTokens.DisabledPrimaryDark else GlassTokens.DisabledPrimaryLight)
+                        else Color.Transparent
                     )
                     .clickable(enabled = !uiState.isDownloading) {
                         if (manualInputLinks) onShowInputDialogChange(true) else onDownload()
@@ -2324,7 +2331,7 @@ private fun HistoryPage(
                 Icon(
                     imageVector = if (manualInputLinks) MiuixIcons.Link else MiuixIcons.File,
                     contentDescription = if (uiState.isDownloading) "下载中" else if (manualInputLinks) "手动输入链接" else "粘贴下载",
-                    modifier = Modifier.size(26.dp),
+                    modifier = Modifier.size(GlassSpec.FabIconSize),
                     tint = Color.White
                 )
             }
@@ -2842,19 +2849,19 @@ private fun TaskCell(
                                 task.status == com.neoruaa.xhsdn.data.TaskStatus.QUEUED
 
             if (isDownloading) {
-                 // v3.0.10：任务卡主操作按钮提到 mockup .btn-grad 大按钮标准 h38（原 .btn-mini h32
-                 // 真机观感偏小，用户实测打回）；radius 19 对齐 h38 胶囊
+                 // v3.1.5：几何/字号统一走 GlassSpec（`.btn` 52dp / r26 / 14.5sp / 650）。
+                 //（v3.0.10 曾按 mockup `.btn-grad` 缩略图值 h38/r19 实现，属误读——缩略图不是设备值）
                  GlassPrimaryWrap(
-                     modifier = Modifier.weight(1f).height(52.dp),
-                     cornerRadius = 26.dp
+                     modifier = Modifier.weight(1f).height(BtnHeight),
+                     cornerRadius = BtnCornerRadius
                  ) {
                      Button(
                          onClick = onStop,
-                         modifier = Modifier.fillMaxWidth(),
+                         modifier = Modifier.fillMaxWidth().height(BtnHeight),
                          colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                         insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
+                         insideMargin = PaddingValues(horizontal = BtnBarPadH, vertical = 0.dp)
                      ) {
-                         Text("停止", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                         Text("停止", color = Color.White, fontSize = BtnFontSize, fontWeight = BtnFontWeight, letterSpacing = BtnLetterSpacing)
                      }
                  }
             } else {
@@ -2875,28 +2882,28 @@ private fun TaskCell(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             GlassPrimaryWrap(
-                                modifier = Modifier.weight(1f).height(52.dp),
-                                cornerRadius = 26.dp
+                                modifier = Modifier.weight(1f).height(BtnHeight),
+                                cornerRadius = BtnCornerRadius
                             ) {
                                 Button(
                                     onClick = onContinue,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier.fillMaxWidth().height(BtnHeight),
                                     colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
+                                insideMargin = PaddingValues(horizontal = BtnBarPadH, vertical = 0.dp)
                                 ) {
-                                    Text("坚持下载", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                                    Text("坚持下载", color = Color.White, fontSize = BtnFontSize, fontWeight = BtnFontWeight, letterSpacing = BtnLetterSpacing)
                                 }
                             }
                             Button(
                                 onClick = onWebCrawl,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(52.dp)
-                                    .clip(ContinuousRoundedRectangle(26.dp))
+                                    .height(BtnHeight)
+                                    .clip(ContinuousRoundedRectangle(BtnCornerRadius))
                                     .border(
                                         1.dp,
                                         if (dark) GlassTokens.BorderDark else GlassTokens.BorderLight,
-                                        ContinuousRoundedRectangle(26.dp)
+                                        ContinuousRoundedRectangle(BtnCornerRadius)
                                     ),
                                 colors = ButtonDefaults.buttonColors(
                                     // v3.0.8：原来用 MiuixTheme.colorScheme.surface（半透）→ 浮在玻璃卡上近乎隐形；
@@ -2904,35 +2911,37 @@ private fun TaskCell(
                                     if (dark) Color(0x1AFFFFFF) else Color(0x73FFFFFF),
                                     if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight
                                 ),
-                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
+                                insideMargin = PaddingValues(horizontal = BtnBarPadH, vertical = 0.dp)
                             ) {
                                 Text(
                                     text = stringResource(R.string.web_crawl_option),
                                     color = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontSize = BtnFontSize,
+                                    fontWeight = BtnFontWeight,
+                                    letterSpacing = BtnLetterSpacing
                                 )
                             }
                         }
                     }
                 } else {
-                    // 重试按钮（仅失败任务显示）v3.0.10：提到 .btn-grad 大按钮标准 h38（同「停止」）
+                    // 重试按钮（仅失败任务显示）v3.1.5：统一 .btn 规格
                     if (task.status == com.neoruaa.xhsdn.data.TaskStatus.FAILED) {
                         GlassPrimaryWrap(
-                            modifier = Modifier.weight(1f).height(52.dp),
-                            cornerRadius = 26.dp
+                            modifier = Modifier.weight(1f).height(BtnHeight),
+                            cornerRadius = BtnCornerRadius
                         ) {
                             Button(
                                 onClick = onRetry,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().height(BtnHeight),
                                 colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
+                                insideMargin = PaddingValues(horizontal = BtnBarPadH, vertical = 0.dp)
                             ) {
                                 Text(
                                     text = stringResource(R.string.retry),
                                     color = Color.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontSize = BtnFontSize,
+                                    fontWeight = BtnFontWeight,
+                                    letterSpacing = BtnLetterSpacing
                                 )
                             }
                         }
@@ -3235,20 +3244,23 @@ private const val HOMEPAGE_LIMIT_STEP = 10
 // 所以看到「上面的大、下面的小」。统一收到这里，改一处即全局生效。
 // ══════════════════════════════════════════════════════════════════════════════
 
+// ★ v3.1.5：真源已抽到 ui/glass/GlassSpec.kt（TaskDetailActivity / OnboardingScreen 也要用，
+//   私有在本文件里它们就用不到 —— 与 GlassAccent 抽公共是同一个原因）。
+//   这里保留同名别名，既有的 BtnHeight/... 调用点无需改动。
 /** .btn 字号 14.5px。 */
-private val BtnFontSize = 14.5.sp
+private val BtnFontSize = GlassSpec.BtnFontSize
 /** .btn 字距 .2px。 */
-private val BtnLetterSpacing = 0.2.sp
+private val BtnLetterSpacing = GlassSpec.BtnLetterSpacing
 /** .btn 字重 650（Compose 无 650，取 SemiBold=600，Miuix 侧同档）。 */
-private val BtnFontWeight = FontWeight.SemiBold
+private val BtnFontWeight = GlassSpec.BtnFontWeight
 /** .btn 高度 52px。 */
-private val BtnHeight = 52.dp
+private val BtnHeight = GlassSpec.BtnHeight
 /** .btn 圆角 26px（= 高度一半，正胶囊）。 */
-private val BtnCornerRadius = 26.dp
+private val BtnCornerRadius = GlassSpec.BtnCornerRadius
 /** .actionbar .btn min-width:132px —— 固定宽度而非 minWidth，避免换文案时按钮宽度跳动。 */
-private val BtnBarWidth = 132.dp
+private val BtnBarWidth = GlassSpec.BtnBarWidth
 /** .actionbar .btn padding:0 20px。 */
-private val BtnBarPadH = 20.dp
+private val BtnBarPadH = GlassSpec.BtnBarPadH
 
 // ── 底部 dock 几何（唯一真源 = docs/design/LiquidGlass-液态玻璃定稿总览-v3.html）────
 //
@@ -3267,19 +3279,23 @@ private val BtnBarPadH = 20.dp
 // ──────────────────────────────────────────────────────────────────────────────
 
 /** mockup .dock{height:64px} —— dock 胶囊的目标视觉高度。 */
-private val DockCapsuleH = 64.dp
+private val DockCapsuleH = GlassSpec.DockCapsuleH
 /** mockup .nav{bottom:10px} —— 胶囊底边距导航栏（手势条）顶边的内边距。 */
-private val DockBottomInset = 10.dp
+private val DockBottomInset = GlassSpec.DockBottomInset
 /** dock 胶囊顶边相对导航栏顶边的偏移（FAB / 气泡的最低下界）。 */
-private val DockTopOffset = DockBottomInset + DockCapsuleH
-/** 底部导航项图标尺寸：Material bottom nav 标准 24dp（mockup 用 17px 字号图标）。 */
-private val DockIconSize = 24.dp
-/** 主 FAB 直径（现网实现值；mockup .fab 写的是 46px，历史差异，本次不动）。 */
-private val FabSize = 60.dp
-/** FAB 底边偏移 = 让开 dock 顶边 + 12dp 间隙。 */
-private val FabBottomOffset = DockTopOffset + 12.dp
+private val DockTopOffset = GlassSpec.DockTopOffset
+/** 底部导航项图标尺寸：Material bottom nav 标准 24dp（实测 mockup `.dock .tab .g` 渲染高正好 24px）。 */
+private val DockIconSize = GlassSpec.DockIconSize
+/**
+ * ★v3.1.5：FAB 由 60dp 收到规范的 **46dp 圆形**。
+ * LGv3 `.fab{width:46px;height:46px;border-radius:999px}` 且已实测确认该文件的 px 是**设备值**
+ * （其 `.nv` 在 232px 画幅下仍是 11px，与 mockup 390px 画幅的 `.dock .tab` 同为 11px）。
+ */
+private val FabSize = GlassSpec.FabSize
+/** FAB 底边偏移 = 让开 dock 顶边 + LGv3 实测的 17px 间隙（原来是拍脑袋的 12dp）。 */
+private val FabBottomOffset = GlassSpec.FabBottomOffset
 /** 剪贴板气泡底边偏移 = FAB 顶边 + 8dp 间隙。 */
-private val ClipBubbleBottomOffset = FabBottomOffset + FabSize + 8.dp
+private val ClipBubbleBottomOffset = GlassSpec.ClipBubbleBottomOffset
 
 // ── 「橙 chip」色对 ────────────────────────────────────────────────────────────
 // accentFg() / accentBg() 已抽到 ui/glass/GlassAccent.kt 共享（TaskDetailActivity /
@@ -4322,7 +4338,7 @@ private fun HomeSelectableCell(
         ) {
             Text(
                 text = if (isVideo) "视频" else "图集",
-                fontSize = 9.sp,
+                fontSize = 10.sp,
                 color = Color.White
             )
         }
@@ -4336,7 +4352,7 @@ private fun HomeSelectableCell(
                     .background(Color.Black.copy(alpha = 0.45f))
                     .padding(horizontal = 4.dp, vertical = 1.dp)
             ) {
-                Text(text = "已下", fontSize = 9.sp, color = Color(0xFF9FE8C4))
+                Text(text = "已下", fontSize = 10.sp, color = Color(0xFF9FE8C4))
             }
         }
         // 选中勾（右上圆点）
