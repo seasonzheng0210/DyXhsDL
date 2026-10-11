@@ -25,7 +25,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -81,6 +80,8 @@ import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
 import com.neoruaa.xhsdn.ui.glass.GlassSpec
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
 import com.neoruaa.xhsdn.ui.glass.accentFg
+import com.neoruaa.xhsdn.ui.glass.platformBrandColor
+import com.neoruaa.xhsdn.ui.glass.platformLabel
 import androidx.compose.ui.res.stringResource
 import com.kyant.capsule.ContinuousRoundedRectangle
 
@@ -273,18 +274,9 @@ private fun WebViewScreen(
     val isHomepage = mode == "homepage"
 
     // 平台品牌色（快手橙 / 抖音近黑·暗近白 / 小红书红，明暗两态——抖音青 #25F4EE 白底不可见）
-    val dark = isSystemInDarkTheme()
-    val sourceColor = when (source) {
-        "kuaishou" -> if (dark) Color(0xFFFF7A3D) else Color(0xFFFE5000)
-        "douyin" -> if (dark) Color(0xFFE8EAEF) else Color(0xFF26292F)
-        else -> if (dark) Color(0xFFFF6B81) else Color(0xFFFE2C55)
-    }
-    val sourceLabel = when {
-        isHomepage -> "抖音主页"
-        source == "kuaishou" -> "快手"
-        source == "douyin" -> "抖音"
-        else -> "小红书"
-    }
+    // v3.1.6：色值与平台名走 ui/glass/PlatformBrand.kt（全 App 唯一入口）
+    val sourceColor = platformBrandColor(source)
+    val sourceLabel = if (isHomepage) "抖音主页" else platformLabel(source)
 
     // 抖音/快手：在 App 内 WebView 打开平台登录页（登录态由 CookieManager 自动持久化）
     val goLogin = {

@@ -153,6 +153,8 @@ import com.neoruaa.xhsdn.ui.glass.GlassSpec
 import com.neoruaa.xhsdn.ui.glass.accentBg
 import com.neoruaa.xhsdn.ui.glass.accentFg
 import com.neoruaa.xhsdn.ui.glass.glassSolid
+import com.neoruaa.xhsdn.ui.glass.platformBrandColor
+import com.neoruaa.xhsdn.ui.glass.platformLabel
 import com.neoruaa.xhsdn.ui.OnboardingScreen
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -1833,6 +1835,11 @@ private fun HistoryPage(
 ) {
     val tasks by com.neoruaa.xhsdn.data.TaskManager.getAllTasks().collectAsStateWithLifecycle(initialValue = emptyList())
     val navPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // v3.1.6 列表底部让位（根治「FAB 压住最后一张卡操作按钮」）：
+    //   FAB 只挂在 HistoryPage（见下方 GlassPrimaryWrap），它占 navbar+FabBottomOffset .. +FabSize 这条竖带。
+    //   把**列表视口**底边直接钳到 FAB 上缘 → 内容在滚动过程中也不可能画进 FAB 底下（旧值 56dp 是
+    //   v3.1.2 之前 38dp 老 dock 时代的残值：既让内容钻到 dock 胶囊下面 18dp，又把最后一张卡送进 FAB）。
+    val listBottomReserve = GlassSpec.FabBottomOffset + GlassSpec.FabSize   // 91 + 46 = 137dp
     val activeTask = tasks.firstOrNull {
         it.status == com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING || it.status == com.neoruaa.xhsdn.data.TaskStatus.QUEUED
     }
@@ -2025,7 +2032,8 @@ private fun HistoryPage(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .verticalScroll(rememberScrollState())
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                // v3.1.6：与任务列表同样让位给 FAB（空态也从页面根部铺到底，FAB 会压住末行）
+                                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = listBottomReserve),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             // 统计条（跨平台聚合）
@@ -2120,7 +2128,8 @@ private fun HistoryPage(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .verticalScroll(rememberScrollState())
-                                .padding(horizontal = 24.dp, vertical = 30.dp),
+                                // v3.1.6：同上，让位给 FAB
+                                .padding(start = 24.dp, end = 24.dp, top = 30.dp, bottom = listBottomReserve),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             // 玻璃装饰圆
@@ -2249,19 +2258,21 @@ private fun HistoryPage(
                         contentPadding = PaddingValues(
                             start = 16.dp,
                             end = 16.dp,
-                            // 底部右下 FAB 高度 + navPadding + 余量，避免最后一项被 FAB 遮挡
-                            bottom = navPadding + 96.dp
+                            // v3.1.6：仅留呼吸余量。底部让位已由外层视口（navPadding + listBottomReserve）负责，
+                            // 这里原先再叠一层 `navPadding + 96.dp` 属重复预留，滚到底时会白白空掉 63dp。
+                            bottom = 12.dp
                         ),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         // v3.0.9：列表在 dock 上缘截断（padding 同时限制布局与绘制）。
                         // 设计稿用 backdrop-blur 遮住滚进 dock 区的内容；本项目无 blur，
                         // 穿透文字会直接堆在 dock 下方手势区（用户实测打回）→ 内容到 dock 上缘为止。
+                        // v3.1.6：上缘进一步收到 **FAB 上缘**（navPadding + 137dp），见 listBottomReserve 注释。
                         modifier = if (nestedScrollConnection != null) {
                             Modifier.fillMaxSize()
-                                .padding(bottom = navPadding + 56.dp)
+                                .padding(bottom = navPadding + listBottomReserve)
                                 .nestedScroll(nestedScrollConnection)
                         } else {
-                            Modifier.fillMaxSize().padding(bottom = navPadding + 56.dp)
+                            Modifier.fillMaxSize().padding(bottom = navPadding + listBottomReserve)
                         }
                     ) {
                         itemsIndexed(filteredTasks, key = { _, task -> task.id }) { _, task ->
@@ -2554,15 +2565,11 @@ private fun TaskCell(
     // 玻璃文本 token（标题/元信息）
     val tPrimary = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight
     val tSecondary = if (dark) GlassTokens.TextSecondaryDark else GlassTokens.TextSecondaryLight
-    // 平台点标（来源标识：抖音近黑 / 快手橙红 / 小红书珊瑚，明暗两态）
+    // 平台点标（来源标识）—— v3.1.6 起色值与平台名都走 ui/glass/PlatformBrand.kt（全 App 唯一入口）
     val isDy = task.source == "douyin" || task.source == "douyin_home"
     val isKs = task.source == "kuaishou"
-    val sourceLabel = when { isKs -> "快手"; isDy -> "抖音"; else -> "小红书" }
-    val sourceColor = when {
-        isKs -> if (dark) Color(0xFFFF7A3D) else Color(0xFFFE5000)
-        isDy -> if (dark) Color(0xFFE8EAEF) else Color(0xFF26292F)
-        else -> if (dark) Color(0xFFFF6B81) else Color(0xFFFE2C55)
-    }
+    val sourceLabel = platformLabel(task.source)
+    val sourceColor = platformBrandColor(task.source)
     
     val statusText = when (task.status) {
         com.neoruaa.xhsdn.data.TaskStatus.QUEUED -> stringResource(R.string.task_status_queued)
@@ -3656,7 +3663,8 @@ private fun HomepagePage(
                         cornerRadius = 14.dp,
                         colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceVariant)
                     ) {
-                        Column(modifier = Modifier.padding(6.dp)) {
+                        // v3.1.6：`.opt` 行自带 `padding:12px 2px`，容器补 14dp → 圆环距卡片边 16dp（近 sheet 的 18px）
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp)) {
                             HomeRangeRow(
                                 label = stringResource(R.string.home_preview_range_all),
                                 countText = p.allItems.size.toString(),
@@ -3674,40 +3682,36 @@ private fun HomepagePage(
                                 countText = selectedIds.value.size.toString(),
                                 selected = selectedRange == HomepageBatchStore.Range.SELECTED
                             ) { selectedRange = HomepageBatchStore.Range.SELECTED }
-                            // 指定数量行：尾部 −/+ 步进（点击即选中该档）
+                            // 指定数量行：尾部 −/+ 步进（`.step{margin-left:auto}` 内联在同一行，不再另起一行）
                             val cappedN = limitN.coerceAtMost(p.allItems.size.coerceAtLeast(1))
                             HomeRangeRow(
                                 label = stringResource(R.string.home_preview_range_latest),
                                 selected = selectedRange == HomepageBatchStore.Range.LATEST_N,
-                                countText = cappedN.toString()
+                                trailing = {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(9.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        HomeStepButton("−") {
+                                            selectedRange = HomepageBatchStore.Range.LATEST_N
+                                            limitN = (limitN - HOMEPAGE_LIMIT_STEP).coerceAtLeast(HOMEPAGE_LIMIT_STEP)
+                                        }
+                                        Text(
+                                            text = cappedN.toString(),
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MiuixTheme.colorScheme.onSurface,
+                                            modifier = Modifier.width(34.dp),
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                        HomeStepButton("+") {
+                                            selectedRange = HomepageBatchStore.Range.LATEST_N
+                                            limitN = (limitN + HOMEPAGE_LIMIT_STEP)
+                                                .coerceAtMost(p.allItems.size.coerceAtLeast(HOMEPAGE_LIMIT_STEP))
+                                        }
+                                    }
+                                }
                             ) { selectedRange = HomepageBatchStore.Range.LATEST_N }
-                            // 步进控件（独立于选中态，点击先切档再步进）
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 12.dp, end = 6.dp, bottom = 2.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                            ) {
-                                Spacer(modifier = Modifier.weight(1f))
-                                HomeStepButton("−") {
-                                    selectedRange = HomepageBatchStore.Range.LATEST_N
-                                    limitN = (limitN - HOMEPAGE_LIMIT_STEP).coerceAtLeast(HOMEPAGE_LIMIT_STEP)
-                                }
-                                Text(
-                                    text = cappedN.toString(),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MiuixTheme.colorScheme.onSurface,
-                                    modifier = Modifier.width(36.dp),
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                                HomeStepButton("+") {
-                                    selectedRange = HomepageBatchStore.Range.LATEST_N
-                                    limitN = (limitN + HOMEPAGE_LIMIT_STEP)
-                                        .coerceAtMost(p.allItems.size.coerceAtLeast(HOMEPAGE_LIMIT_STEP))
-                                }
-                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(10.dp))
@@ -3717,7 +3721,7 @@ private fun HomepagePage(
                         cornerRadius = 14.dp,
                         colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceVariant)
                     ) {
-                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)) {
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp)) {
                             HomeSwitchRow(stringResource(R.string.home_opt_include_images), includeImages) {
                                 includeImages = it
                             }
@@ -4372,7 +4376,24 @@ private fun HomeSelectableCell(
     }
 }
 
-/** 主页预览范围行：整行可点，选中高亮为主色底白字；可选尾部 pill 与计数。 */
+/**
+ * 主页预览范围行 —— **严格对齐 mockup `.opt`（S3 调整面板）**，v3.1.6 从「橙实底 + 白字」改成 radio 规范。
+ *
+ * 规范原文（`docs/design/首页下载-交互重构-mockup.html`）：
+ * ```
+ * .opt{display:flex;align-items:center;gap:11px;padding:12px 2px;font-size:14px}
+ * .opt .rd{width:20px;height:20px;border-radius:50%;border:2px solid var(--text3);flex:none}
+ * .opt.on .rd{border-color:var(--primaryText)}          .opt.on .rd::after{width:10px;height:10px;…primaryText}
+ * .opt.on .lb{font-weight:650}
+ * .opt .rv{margin-left:auto;font-size:13px;color:var(--text2)}
+ * .opt .rec{font-size:10px;padding:2px 7px;border-radius:999px;background:var(--fill);color:var(--primaryText);font-weight:650;margin-left:7px}
+ * ```
+ * 注意两点易错处：① `.lb` **不是** flex:1 —— `推荐` pill 紧跟标签，只有 `.rv` / `.step` 走 `margin-left:auto`；
+ * ② 选中态**不再有实底**，靠圆环描边 + 内点 + 标签加粗表达（旧实现用 `colorScheme.primary` 半透明打底色当实底，
+ * 暗色下合成深棕，前景用白字对比度不合格）。
+ *
+ * @param trailing 尾部自定义控件（如「最近 N 条」的 `.step`）。给了就不渲染 [countText]。
+ */
 @Composable
 private fun HomeRangeRow(
     label: String,
@@ -4380,85 +4401,111 @@ private fun HomeRangeRow(
     pill: String? = null,
     selected: Boolean,
     modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
     onClick: () -> Unit
 ) {
+    val dark = isSystemInDarkTheme()
+    // `.rd` 未选中描边 = --text3（亮 rgba(36,31,24,.38) / 暗 rgba(245,246,248,.36)）
+    val ringIdle = if (dark) GlassTokens.TextTertiaryDark else GlassTokens.TextTertiaryLight
+    val accent = accentFg()
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) MiuixTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent)
+            .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 9.dp),
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            .padding(horizontal = 2.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        // .rd：20dp 圆环 / 2dp 描边；选中 → 描边转橙 + 中心 10dp 实心点
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .clip(CircleShape)
+                .border(2.dp, if (selected) accent else ringIdle, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(accent)
+                )
+            }
+        }
         Text(
             text = label,
-            modifier = Modifier.weight(1f),
-            // .row{font-size:13.5px}
-            fontSize = 13.5.sp,
+            fontSize = 14.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) Color.White else MiuixTheme.colorScheme.onSurface
+            color = MiuixTheme.colorScheme.onSurface
         )
         if (pill != null) {
             Text(
                 text = pill,
                 fontSize = 10.sp,
-                fontWeight = FontWeight.Medium,
-                color = if (selected) Color.White else accentFg(),
+                fontWeight = FontWeight.SemiBold,
+                color = accent,
                 modifier = Modifier
+                    // `.rec{margin-left:7px}` —— 必须用 **外层 padding** 表达 margin：
+                    // 若改用 `Spacer(Modifier.width(7.dp))`，`Arrangement.spacedBy(11.dp)` 会在它两侧各加一次
+                    // 间隔 → 实际变成 11+7+11=29dp（v3.1.6 实测偏右 11.1dp 后改回）。
+                    .padding(start = 7.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(
-                        if (selected) Color.White.copy(alpha = 0.25f)
-                        else accentBg(lightAlpha = 0.14f)
-                    )
+                    .background(accentBg(lightAlpha = 0.16f))   // --fill
                     .padding(horizontal = 7.dp, vertical = 2.dp)
             )
-            Spacer(modifier = Modifier.width(6.dp))
         }
-        if (countText != null) {
+        if (trailing != null) {
+            Spacer(modifier = Modifier.weight(1f))   // .step{margin-left:auto}
+            trailing()
+        } else if (countText != null) {
+            Spacer(modifier = Modifier.weight(1f))   // .rv{margin-left:auto}
             Text(
                 text = countText,
-                fontSize = 12.sp,
-                color = if (selected) Color.White.copy(alpha = 0.9f)
-                else MiuixTheme.colorScheme.onSurfaceVariantSummary
+                fontSize = 13.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
             )
         }
     }
 }
 
-/** 主页预览步进小按钮（指定数量 − / +）。 */
+/** 主页预览步进小按钮（「最近 N 条」的 − / +）。mockup `.step b{width:32px;height:32px;border-radius:10px;font-size:16px;font-weight:500}` */
 @Composable
 private fun HomeStepButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
         modifier = modifier
-            .size(26.dp)
-            .clip(RoundedCornerShape(50))
+            .size(32.dp)
+            .clip(RoundedCornerShape(10.dp))
             .background(MiuixTheme.colorScheme.onSurface.copy(alpha = 0.08f))
             .clickable(onClick = onClick),
         contentAlignment = androidx.compose.ui.Alignment.Center
     ) {
         Text(
             text = text,
-            fontSize = 14.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
             color = MiuixTheme.colorScheme.onSurface
         )
     }
 }
 
-/** 主页预览开关行：Miuix Switch。 */
+/**
+ * 主页预览开关行 —— mockup 里开关行也是 `.opt`，但**没有 `.rd`**：
+ * `<div class="opt"><span class="lb">包含图文作品</span><span class="sw"></span></div>`
+ */
 @Composable
 private fun HomeSwitchRow(title: String, checked: Boolean, modifier: Modifier = Modifier, onChange: (Boolean) -> Unit) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp),
+            .padding(horizontal = 2.dp, vertical = 12.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
     ) {
         Text(
             text = title,
             modifier = Modifier.weight(1f),
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             color = MiuixTheme.colorScheme.onSurface
         )
         Switch(checked = checked, onCheckedChange = onChange)

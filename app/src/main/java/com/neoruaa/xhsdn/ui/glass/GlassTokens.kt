@@ -89,6 +89,21 @@ object GlassTokens {
     val TextSecondaryLight = Color(0x8C241F18) // 55% alpha
     val TextPrimaryDark = Color(0xFFF5F6F8)
     val TextSecondaryDark = Color(0x8CF5F6F8)
+    /** 三级文字（`--text3`）：亮 rgba(36,31,24,.38) / 暗 rgba(245,246,248,.36)。用于未选中态控件描边。 */
+    val TextTertiaryLight = Color(0x61241F18)
+    val TextTertiaryDark = Color(0x5CF5F6F8)
+
+    // ── 平台品牌色（来源标识；亮/暗两态）──────────────────────────────
+    /**
+     * 三平台来源色。暗色侧取高亮变体 —— 尤其抖音：品牌青 `#25F4EE` 在白底上不可见，
+     * 故亮色用近黑、暗色用近白（见 `PlatformBrand.platformBrandColor()`，全 App 唯一入口）。
+     */
+    val KuaishouBrandLight = Color(0xFFFE5000)
+    val KuaishouBrandDark = Color(0xFFFF7A3D)
+    val DouyinBrandLight = Color(0xFF26292F)
+    val DouyinBrandDark = Color(0xFFE8EAEF)
+    val XhsBrandLight = Color(0xFFFE2C55)
+    val XhsBrandDark = Color(0xFFFF6B81)
 
     // ── 完成态（高饱和翠绿）─────────────────────────────────────────
     val SuccessGreen = Color(0xFF00895C)     // 亮：翠绿（v2 #0E8A56 加深饱和）

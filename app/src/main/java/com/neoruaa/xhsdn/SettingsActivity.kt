@@ -89,6 +89,7 @@ import top.yukonga.miuix.kmp.window.WindowDialog
 import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
 import com.neoruaa.xhsdn.ui.glass.GlassDialog
 import com.neoruaa.xhsdn.ui.glass.GlassLogBody
+import com.neoruaa.xhsdn.ui.glass.GlassSpec
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
 import com.neoruaa.xhsdn.utils.DownloadLogger
 import com.neoruaa.xhsdn.utils.EventTracker
@@ -403,15 +404,24 @@ internal fun SettingsScreen(
                 .padding(padding)
                 // v3.0.9：embedded 时列表在 dock 上缘截断（与 MainActivity 任务列表同款处理）——
                 // 无 backdrop-blur，内容穿透 dock 会直接堆在 dock 下方手势区
+                // v3.1.6：上缘对齐 **dock 胶囊实测上缘** `navbar + GlassSpec.DockTopOffset`
+                //（DockBottomInset 10 + DockCapsuleH 64 = 74dp；v3.1.3 实测胶囊高 62.9dp、顶边 navbar+73dp）。
+                // 旧值 56dp 是 v3.1.2 之前 38dp 老 dock 时期的残值，会让内容钻到胶囊下面 18dp。
                 .then(
                     if (embedded) Modifier.padding(
-                        bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 56.dp
+                        bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + GlassSpec.DockTopOffset
                     ) else Modifier
                 ),
             // embedded=内嵌「我的」tab：dock overlay 浮层，预留 dock 高防末项被遮
-            // v3.0.7（P3-9）：实测 110dp 仍不够——「项目主页」末项（y≈2194）压在 dock 内不可见
-            // → 提到 150dp（dock 高约 96 + 描述行高 24 + 视觉安全间距 30）
-            contentPadding = PaddingValues(bottom = 20.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (embedded) 150.dp else 0.dp),
+            // v3.0.7（P3-9）：实测 110dp 仍不够——「项目主页」末项（y≈2194）压在 dock 内不可见 → 提到 150dp
+            // v3.1.6 重核：150dp 是**旧假设**（认为内容会钻到 dock 下面，故按「dock 高 96 + 描述行 24 +
+            //   安全间距 30」补偿）。现在视口底已被 dock 上缘钳住（上面那条 padding），滚动到底时末项底边
+            //   天然落在 `navbar + 74 + contentPadding` 处，150dp 只会让列表尾部空掉一大块 → 收到 12dp 呼吸余量。
+            // 注意：SettingsPage **没有 FAB**（FAB 只挂 HistoryPage），所以这里不需要 FabBottomOffset。
+            contentPadding = PaddingValues(
+                bottom = if (embedded) 12.dp
+                else 20.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            ),
 //            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {

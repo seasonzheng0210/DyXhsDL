@@ -70,6 +70,8 @@ import com.neoruaa.xhsdn.ui.glass.accentBg
 import com.neoruaa.xhsdn.ui.glass.accentFg
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
 import com.neoruaa.xhsdn.ui.glass.GlassSpec
+import com.neoruaa.xhsdn.ui.glass.platformBrandColor
+import com.neoruaa.xhsdn.ui.glass.platformLabel
 import com.neoruaa.xhsdn.utils.DownloadLogger
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -502,17 +504,9 @@ private fun HeaderCard(task: DownloadTask, tp: Color, ts: Color, cardBg: Color) 
 
 @Composable
 private fun SourcePill(source: String) {
-    val label = when (source) {
-        "kuaishou" -> "快手"
-        "douyin", "douyin_home" -> "抖音"
-        else -> "小红书"
-    }
-    val dark = isSystemInDarkTheme()
-    val color = when (source) {
-        "kuaishou" -> if (dark) Color(0xFFFF7A3D) else Color(0xFFFE5000)
-        "douyin", "douyin_home" -> if (dark) Color(0xFFE8EAEF) else Color(0xFF26292F)
-        else -> if (dark) Color(0xFFFF6B81) else Color(0xFFFE2C55)
-    }
+    // v3.1.6：色值与平台名走 ui/glass/PlatformBrand.kt（全 App 唯一入口）
+    val label = platformLabel(source)
+    val color = platformBrandColor(source)
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
