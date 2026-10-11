@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
+import com.neoruaa.xhsdn.ui.glass.GlassSpec
 import com.neoruaa.xhsdn.ui.glass.GlassTokens
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
 import com.neoruaa.xhsdn.ui.glass.accentBg
@@ -185,8 +186,12 @@ fun OnboardingScreen(
                                 else -> "开始使用"
                             },
                             color = if (dark) GlassTokens.OrangeOnDark else Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium
+                            // v3.1.7：16sp/Medium → 收口到 `.btn` 规范 14.5sp/650/.2px。
+                            // 它是 52dp 高、26dp 圆角的**同一颗** `.btn`，字号却是全 App 唯一一处 16sp，
+                            // 与其它主按钮并列看会明显偏大。真源见 GlassSpec。
+                            fontSize = GlassSpec.BtnFontSize,
+                            fontWeight = GlassSpec.BtnFontWeight,
+                            letterSpacing = GlassSpec.BtnLetterSpacing
                         )
                     }
                 }

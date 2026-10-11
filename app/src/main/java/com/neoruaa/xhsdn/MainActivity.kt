@@ -15,6 +15,7 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.core.view.WindowCompat
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -80,8 +81,10 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
@@ -110,7 +113,6 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -3233,8 +3235,12 @@ private fun MainTabBar(
 /** 主页批量：指定数量档的默认值与步进。 */
 /** 「指定数量」档的初始条数（LATEST_N 档用）；「按勾选下载」档不读它。 */
 private const val HOMEPAGE_DEFAULT_LIMIT = 100
-/** 勾选网格默认展示条数（超出显示「展开全部」），避免一次性组合全量+拉全量封面。 */
-private const val HOMEPAGE_GRID_PREVIEW = 60
+/**
+ * 主页「作品预览」条数（v3.1.7：60 → 6）。
+ * 依据 mockup S2 的明确裁定：「预览只给 **6 张** —— 它是**确认信号**，不是挑选工具」；
+ * 挑选已下沉到 S4 二级选片页。改回大数值会让主页首屏重新被网格撑长。
+ */
+private const val HOMEPAGE_GRID_PREVIEW = 6
 /** 「指定数量」档步进值。 */
 private const val HOMEPAGE_LIMIT_STEP = 10
 
@@ -3394,6 +3400,9 @@ private fun HomepagePage(
     var limitN by remember { mutableStateOf(HOMEPAGE_DEFAULT_LIMIT) }
     var includeImages by remember { mutableStateOf(true) }
     var skipDownloaded by remember { mutableStateOf(true) }
+    // v3.1.7（对齐 mockup S3/S4）：调整面板改 bottom sheet、网格下沉到二级选片页
+    var sheetOpen by remember { mutableStateOf(false) }
+    var pickerOpen by remember { mutableStateOf(false) }
 
     // ── 提到分支外：常驻操作条需要读取这些值（原实现把主按钮放在滚动流末尾，要滑 5 次才找到）──
     val ready = preview as? HomePreviewState.Ready
@@ -3416,12 +3425,43 @@ private fun HomepagePage(
     val actionBarH = 88.dp
 
     Box(modifier = modifier.fillMaxSize()) {
+    // ── S4 选片页（二级）：网格下沉到这里，主页首屏不再被几十条封面撑长 ──
+    if (pickerOpen && ready != null) {
+        HomepagePickerPage(
+            items = ready.allItems,
+            newIdSet = newIdSet,
+            selectedIds = selectedIds.value,
+            dockPad = dockPad,
+            onToggle = { id, checked ->
+                selectedIds.value =
+                    if (checked) selectedIds.value + id else selectedIds.value - id
+                // 手选即切「自选」档：回写 S2 的操作条，保证所见即所得
+                selectedRange = HomepageBatchStore.Range.SELECTED
+            },
+            onSetSelection = { ids ->
+                selectedIds.value = ids
+                if (ids.isNotEmpty()) selectedRange = HomepageBatchStore.Range.SELECTED
+            },
+            onBack = { pickerOpen = false },
+            onConfirm = {
+                selectedRange = HomepageBatchStore.Range.SELECTED
+                onConfirm(
+                    HomepageBatchStore.Range.SELECTED, limitN,
+                    includeImages, skipDownloaded, selectedIds.value
+                )
+            }
+        )
+    } else {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            // ★底部让位必须钳在**视口**上：`Modifier.padding` 要写在 `.verticalScroll` **之前**。
+            //   写在之后 → padding 变成「滚动内容末尾的一段空白」，只在滚到底才生效，
+            //   滚动途中/短内容照样画进操作条与 dock 底下（同「列表底部让位铁律」的老坑）。
+            .padding(bottom = dockPad + actionBarH)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
-            .padding(top = 4.dp, bottom = dockPad + actionBarH)
+            .padding(top = 4.dp)
     ) {
         // ── 来源条：仅"被打断"型入口显示（manual/recent 两个原地入口不显示）──
         if (showSourceBar) {
@@ -3565,8 +3605,6 @@ private fun HomepagePage(
             is HomePreviewState.Ready -> {
                 val p = preview as HomePreviewState.Ready
                 val downloadedCount = (p.allItems.size - p.newItems.size).coerceAtLeast(0)
-                // 勾选集 / 计数 / selCount 已提到函数头部（供常驻操作条读取）
-                var showAllItems by remember(p.secUid) { mutableStateOf(false) }
                 Column(modifier = Modifier.fillMaxWidth()) {
                     // 作者卡 + 三格统计
                     Card(
@@ -3618,119 +3656,82 @@ private fun HomepagePage(
                         }
                     }
                     Spacer(modifier = Modifier.height(10.dp))
-                    // ── 作品勾选网格（v3.1）：全量封面 + 逐条勾选，默认勾选=全部新增 ──
-                    val visibleItems =
-                        if (showAllItems) p.allItems else p.allItems.take(HOMEPAGE_GRID_PREVIEW)
-                    visibleItems.chunked(3).forEach { rowItems ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // ── 下载计划（只读摘要卡）── mockup S2：`.card.pad` + `.hdr` + 三行 `.row`
+                    // 设计要点：它是**摘要**不是表单 —— 四档单选 + 两个开关整体收进 S3 sheet，
+                    // 改设置走右上「调整」，主页主路径不再被表单撑长（v3.1.7）。
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        cornerRadius = 22.dp,
+                        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            // `.hdr{padding:12px 2px 4px}`：`.h` 13.5px/650、`.a` 12.5px/primaryText/600
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 2.dp, end = 2.dp, bottom = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "下载计划",
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MiuixTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text(
+                                    text = "调整",
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = accentFg(),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { sheetOpen = true }
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                )
+                            }
+                            HomePlanRow(
+                                label = "新增作品",
+                                valueText = p.newItems.size.toString()
+                            )
+                            HomePlanRow(
+                                label = "已下载将跳过",
+                                valueText = downloadedCount.toString(),
+                                mute = true
+                            )
+                            // `.row.tap` + `.row .go` → 进 S4 选片页；已手选时把条数挂在右侧
+                            HomePlanRow(
+                                label = "手动挑选作品",
+                                goText = if (selectedRange == HomepageBatchStore.Range.SELECTED)
+                                    selectedIds.value.size.toString() else null,
+                                onClick = { pickerOpen = true }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(14.dp))
+                    // ── 作品预览：`.sec` 标题 + 只给 6 张 ──
+                    // 「预览是**确认信号**，不是挑选工具」：挑选下沉到 S4 二级页（v3.1.7）
+                    HomepageSectionHeader(
+                        title = "作品预览",
+                        actionText = "查看全部 ${p.allItems.size} 条 ›",
+                        onAction = { pickerOpen = true }
+                    )
+                    p.allItems.take(HOMEPAGE_GRID_PREVIEW).chunked(3).forEach { rowItems ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             rowItems.forEach { item ->
-                                HomeSelectableCell(
+                                HomeThumbCell(
                                     item = item,
                                     selected = item.id in selectedIds.value,
                                     downloaded = item.id !in newIdSet,
-                                    onToggle = { checked ->
-                                        selectedIds.value =
-                                            if (checked) selectedIds.value + item.id
-                                            else selectedIds.value - item.id
-                                        // 手动勾选即切到「自选」档，保证所见即所得
-                                        selectedRange = HomepageBatchStore.Range.SELECTED
-                                    },
+                                    showCheck = false,
+                                    onClick = { pickerOpen = true },
                                     modifier = Modifier.weight(1f)
                                 )
                             }
                             repeat(3 - rowItems.size) { Spacer(modifier = Modifier.weight(1f)) }
                         }
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
-                    if (p.allItems.size > HOMEPAGE_GRID_PREVIEW) {
-                        Text(
-                            text = if (showAllItems) "收起" else "展开全部 ${p.allItems.size} 条作品",
-                            fontSize = 12.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = accentFg(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable { showAllItems = !showAllItems }
-                                .padding(vertical = 8.dp),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    // 范围选择（列表单选）
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 14.dp,
-                        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceVariant)
-                    ) {
-                        // v3.1.6：`.opt` 行自带 `padding:12px 2px`，容器补 14dp → 圆环距卡片边 16dp（近 sheet 的 18px）
-                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp)) {
-                            HomeRangeRow(
-                                label = stringResource(R.string.home_preview_range_all),
-                                countText = p.allItems.size.toString(),
-                                selected = selectedRange == HomepageBatchStore.Range.ALL
-                            ) { selectedRange = HomepageBatchStore.Range.ALL }
-                            HomeRangeRow(
-                                label = stringResource(R.string.home_preview_range_only_new),
-                                countText = p.newItems.size.toString(),
-                                selected = selectedRange == HomepageBatchStore.Range.ONLY_NEW,
-                                pill = stringResource(R.string.home_preview_recommend)
-                            ) { selectedRange = HomepageBatchStore.Range.ONLY_NEW }
-                            // 网格手选档：勾选集即下载集（忽略 includeImages/skipDownloaded）
-                            HomeRangeRow(
-                                label = "按勾选下载",
-                                countText = selectedIds.value.size.toString(),
-                                selected = selectedRange == HomepageBatchStore.Range.SELECTED
-                            ) { selectedRange = HomepageBatchStore.Range.SELECTED }
-                            // 指定数量行：尾部 −/+ 步进（`.step{margin-left:auto}` 内联在同一行，不再另起一行）
-                            val cappedN = limitN.coerceAtMost(p.allItems.size.coerceAtLeast(1))
-                            HomeRangeRow(
-                                label = stringResource(R.string.home_preview_range_latest),
-                                selected = selectedRange == HomepageBatchStore.Range.LATEST_N,
-                                trailing = {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(9.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        HomeStepButton("−") {
-                                            selectedRange = HomepageBatchStore.Range.LATEST_N
-                                            limitN = (limitN - HOMEPAGE_LIMIT_STEP).coerceAtLeast(HOMEPAGE_LIMIT_STEP)
-                                        }
-                                        Text(
-                                            text = cappedN.toString(),
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MiuixTheme.colorScheme.onSurface,
-                                            modifier = Modifier.width(34.dp),
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                        )
-                                        HomeStepButton("+") {
-                                            selectedRange = HomepageBatchStore.Range.LATEST_N
-                                            limitN = (limitN + HOMEPAGE_LIMIT_STEP)
-                                                .coerceAtMost(p.allItems.size.coerceAtLeast(HOMEPAGE_LIMIT_STEP))
-                                        }
-                                    }
-                                }
-                            ) { selectedRange = HomepageBatchStore.Range.LATEST_N }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    // 开关组
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 14.dp,
-                        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp)) {
-                            HomeSwitchRow(stringResource(R.string.home_opt_include_images), includeImages) {
-                                includeImages = it
-                            }
-                            HomeSwitchRow(stringResource(R.string.home_opt_skip_downloaded), skipDownloaded) {
-                                skipDownloaded = it
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
                     // 主按钮已移入常驻操作条（不再放滚动流末尾——原实现要上滑 5 次才够得着）
                 }
             }
@@ -3914,6 +3915,25 @@ private fun HomepagePage(
                 }
             }
         }
+        // ── S3 调整面板（bottom sheet）：四档单选 + 两个开关从页面整体收进 sheet ──
+        // 「改设置去 sheet」—— 页面里只留一张只读的「下载计划」摘要卡，主路径不再被表单撑长。
+        if (sheetOpen && ready != null) {
+            HomePlanSheet(
+                selectedRange = selectedRange,
+                onSelectRange = { selectedRange = it },
+                limitN = limitN,
+                onLimitN = { limitN = it },
+                maxN = ready.allItems.size,
+                newCount = ready.newItems.size,
+                includeImages = includeImages,
+                onIncludeImages = { includeImages = it },
+                skipDownloaded = skipDownloaded,
+                onSkipDownloaded = { skipDownloaded = it },
+                dockPad = dockPad,
+                onDismiss = { sheetOpen = false }
+            )
+        }
+    }
     }
 }
 
@@ -4292,87 +4312,642 @@ private fun rememberHomeCover(url: String?): android.graphics.Bitmap? {
 }
 
 /**
- * 主页作品勾选单元（v3.1 主页批量改版）：封面图 + 类型角标 + 已下载角标 + 选中描边。
- * 点击回调 checked=切换后的状态；封面缺失时退回底色+图标占位。
+ * 缩略单元 —— **严格对齐 mockup `.th`**（v3.1.7：v3.1 的「86dp 固定高 + 文字角标」改成 4:5 比例 + 胶囊角标）。
+ *
+ * 规范原文（`docs/design/首页下载-交互重构-mockup.html`）：
+ * ```
+ * .th{border-radius:12px;aspect-ratio:4/5;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.35)}
+ * body.dark .th{border-color:rgba(255,255,255,.14)}
+ * .th .bd{left:5px;bottom:5px;font-size:9.5px;padding:2px 6px;border-radius:999px;background:rgba(0,0,0,.42);color:#fff;font-weight:600}
+ * .th .ck{right:5px;top:5px;width:19px;height:19px;border-radius:50%;background:var(--grad);color:#fff;font-size:11px;font-weight:700}
+ * .th .ck.off{background:rgba(0,0,0,.28);border:1.5px solid rgba(255,255,255,.9);color:transparent}
+ * ```
+ *
+ * @param showCheck 主页「作品预览」给 false（预览只是**确认信号**，勾选在 S4 二级页）；
+ *                  选片页给 true，点击即切换勾选。
  */
 @Composable
-private fun HomeSelectableCell(
+private fun HomeThumbCell(
     item: com.neoruaa.xhsdn.douyin.DouyinPostItem,
     selected: Boolean,
     downloaded: Boolean,
-    onToggle: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    showCheck: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {},
+    onToggle: (Boolean) -> Unit = {}
 ) {
+    val dark = isSystemInDarkTheme()
     val isVideo = item.type == com.neoruaa.xhsdn.douyin.DouyinMediaType.VIDEO
     val cover = rememberHomeCover(item.coverUrl ?: item.imageUrls.firstOrNull())
     Box(
         modifier = modifier
-            .height(86.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .aspectRatio(4f / 5f)
+            .clip(RoundedCornerShape(12.dp))
             .background(if (isVideo) Color(0xFFBFD0C6) else Color(0xFFE0A06B))
-            .combinedClickable(onClick = { onToggle(!selected) })
-            // 选中态：小米橙描边 2dp（玻璃态橙同色系）
-            .then(
-                if (selected) Modifier.border(
-                    2.dp, Color(0xE5FF6900), RoundedCornerShape(10.dp)
-                ) else Modifier
+            // `.th` 描边：亮 rgba(255,255,255,.35) / 暗 rgba(255,255,255,.14)
+            .border(
+                1.dp,
+                if (dark) Color(0x24FFFFFF) else Color(0x59FFFFFF),
+                RoundedCornerShape(12.dp)
             )
+            .clickable { if (showCheck) onToggle(!selected) else onClick() }
     ) {
         if (cover != null) {
             Image(
-                bitmap = cover.asImageBitmap(),                contentDescription = item.title,
+                bitmap = cover.asImageBitmap(),
+                contentDescription = item.title,
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
-            // 压暗层：保证角标/勾选态可读
+            // 压暗层：保证角标/勾选环压在封面上仍可读
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = if (selected) 0.22f else 0.10f))
             )
         }
-        // 类型角标（左下）
+        // `.th .bd` 类型角标（左下）
         Box(
             modifier = Modifier
-                .align(androidx.compose.ui.Alignment.BottomStart)
-                .padding(4.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(Color.Black.copy(alpha = 0.45f))
-                .padding(horizontal = 4.dp, vertical = 1.dp)
+                .align(Alignment.BottomStart)
+                .padding(5.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(Color.Black.copy(alpha = 0.42f))
+                .padding(horizontal = 6.dp, vertical = 2.dp)
         ) {
             Text(
-                text = if (isVideo) "视频" else "图集",
-                fontSize = 10.sp,
+                text = if (isVideo) "▶ 视频" else "▣ 图集 ${item.imageUrls.size.coerceAtLeast(1)}",
+                fontSize = 9.5.sp,
+                fontWeight = FontWeight.SemiBold,
                 color = Color.White
             )
         }
-        // 已下载角标（右下）
+        // 已下载标记（左上，规格同 `.dbtag`，字色改用完成态绿以区分语义）
         if (downloaded) {
             Box(
                 modifier = Modifier
-                    .align(androidx.compose.ui.Alignment.BottomEnd)
-                    .padding(4.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                    .align(Alignment.TopStart)
+                    .padding(5.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color.Black.copy(alpha = 0.50f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
             ) {
-                Text(text = "已下", fontSize = 10.sp, color = Color(0xFF9FE8C4))
+                Text(
+                    text = "已下",
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF9FE8C4)
+                )
             }
         }
-        // 选中勾（右上圆点）
-        if (selected) {
+        // `.th .ck` 勾选圆（右上）：19dp；ON = 橙渐变 + 白勾，OFF = 半透黑 + 1.5dp 白描边
+        if (showCheck) {
             Box(
                 modifier = Modifier
-                    .align(androidx.compose.ui.Alignment.TopEnd)
-                    .padding(4.dp)
-                    .size(18.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(Color(0xE5FF6900)),
-                contentAlignment = androidx.compose.ui.Alignment.Center
+                    .align(Alignment.TopEnd)
+                    .padding(5.dp)
+                    .size(19.dp)
+                    .clip(CircleShape)
+                    .then(
+                        if (selected) {
+                            Modifier.background(
+                                androidx.compose.ui.graphics.Brush.linearGradient(
+                                    listOf(GlassTokens.GradientStart, GlassTokens.GradientEnd)
+                                )
+                            )
+                        } else {
+                            Modifier
+                                .background(Color.Black.copy(alpha = 0.28f))
+                                .border(1.5.dp, Color(0xE6FFFFFF), CircleShape)
+                        }
+                    ),
+                contentAlignment = Alignment.Center
             ) {
-                Text("✓", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                if (selected) {
+                    Text("✓", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                }
             }
         }
+    }
+}
+
+/**
+ * 「下载计划」行 —— mockup `.row`：
+ * ```
+ * .row{display:flex;align-items:center;gap:10px;padding:11px 2px;font-size:13.5px}
+ * .row+.row{border-top:1px solid var(--track)}
+ * .row .rv{margin-left:auto;font-weight:650}   .row .rv.mute{color:var(--text2);font-weight:600}
+ * .row .go{margin-left:auto;color:var(--primaryText);font-weight:600;font-size:13px}
+ * ```
+ *
+ * @param showDivider `.row+.row` 的顶部分隔线；首行给 false。
+ * @param goText      右侧计数（「手动挑选作品」已手选时挂条数），有它才渲染 `›`。
+ */
+@Composable
+private fun HomePlanRow(
+    label: String,
+    valueText: String? = null,
+    mute: Boolean = false,
+    goText: String? = null,
+    showDivider: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
+    val dark = isSystemInDarkTheme()
+    val divider = if (dark) GlassTokens.TrackDark else GlassTokens.TrackLight
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (showDivider) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(divider)
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (onClick != null) {
+                        Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onClick)
+                    } else Modifier
+                )
+                .padding(horizontal = 2.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                fontSize = 13.5.sp,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            if (goText != null) {
+                Text(
+                    text = goText,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+            val showChevron = goText != null || onClick != null
+            if (valueText != null && !showChevron) {
+                // `.rv`：非 mute 用主字色 650，mute 用次级色 600
+                Text(
+                    text = valueText,
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (mute) MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            else MiuixTheme.colorScheme.onSurface
+                )
+            } else if (showChevron) {
+                Text(
+                    text = "›",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = accentFg()
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 区块标题 —— mockup `.sec`：
+ * `.sec{display:flex;align-items:baseline;gap:8px;margin:20px 2px 10px}`
+ * `.sec .st{font-size:13.5px;font-weight:650}` / `.sec .sr{margin-left:auto;font-size:12px;color:var(--primaryText);font-weight:600}`
+ */
+@Composable
+private fun HomepageSectionHeader(title: String, actionText: String, onAction: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 2.dp, end = 2.dp, top = 6.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            fontSize = 13.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MiuixTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        Text(
+            text = actionText,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = accentFg(),
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onAction)
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+        )
+    }
+}
+
+/**
+ * S3 调整面板（bottom sheet）—— 严格对齐 mockup：
+ * ```
+ * .scrim{position:absolute;inset:0;background:rgba(16,12,24,.42);z-index:5}
+ * .sheet{left:0;right:0;bottom:0;background:var(--cardHi);border-radius:30px 30px 0 0;
+ *        border-top:1px solid var(--border);box-shadow:inset 0 1px 0 var(--hi);padding:10px 18px 26px}
+ * .sheet .grab{width:38px;height:4px;border-radius:99px;background:var(--text3);margin:0 auto 14px}
+ * .sheet .h{font-size:12px;font-weight:650;color:var(--text2);letter-spacing:.3px;margin:14px 2px 4px}
+ * ```
+ *
+ * 内容顺序严格照 mockup：`下载范围`（仅新增·推荐 / 全部作品 / 最近 N 条）→ `选项`（两个开关）
+ * → `.note` 显式声明「手动挑选时本面板不生效」→ `完成`。
+ * 设计动机：把「策略」（四档）与「枚举」（手选）拆开 —— 手选是独立二级页（S4），不再与此处平铺混排。
+ *
+ * ⚠️ **两处必须偏离 mockup 的地方**（都是渲染能力差异，不是设计变更）：
+ * 1. **底色必须实心**：mockup 用 `--cardHi`（白 62%/18%）+ `backdrop-filter:blur(34px)` 才成立；
+ *    Compose 没有 backdrop-filter，直接铺半透令牌会让**下层页面文字整片穿透**叠在 sheet 上
+ *    （实测：「下载计划 / 新增作品 18」与 sheet 的「下载范围 / 仅新增」完全重叠）。
+ *    故改用 [glassSolid] 实心表面 —— 与铁律 1 同源问题。
+ * 2. **底边要让开 dock**：mockup 里 `.sheet{z-index:6}` 盖在 `.dock` 之上，但本 App 的 dock 由
+ *    MainActivity 画在页面内容**之上**，页内浮层盖不住它 → 必须像常驻操作条一样
+ *    预留 `dockPad`，否则「完成」按钮被 dock 压住（实测首版就是被压住的）。
+ */
+@Composable
+private fun HomePlanSheet(
+    selectedRange: HomepageBatchStore.Range,
+    onSelectRange: (HomepageBatchStore.Range) -> Unit,
+    limitN: Int,
+    onLimitN: (Int) -> Unit,
+    maxN: Int,
+    newCount: Int,
+    includeImages: Boolean,
+    onIncludeImages: (Boolean) -> Unit,
+    skipDownloaded: Boolean,
+    onSkipDownloaded: (Boolean) -> Unit,
+    dockPad: Dp,
+    onDismiss: () -> Unit
+) {
+    val dark = isSystemInDarkTheme()
+    // 实心表面（亮=纯白 97% / 暗=近黑 #151518@96%）：必须压住下层，见上方 ⚠️ 1
+    val sheetBg = glassSolid(lightAlpha = 0.97f, darkAlpha = 0.96f)
+    val tertiary = if (dark) GlassTokens.TextTertiaryDark else GlassTokens.TextTertiaryLight
+    val headColor = MiuixTheme.colorScheme.onSurfaceVariantSummary
+    // 物理返回键先关面板，而不是退出页面
+    BackHandler { onDismiss() }
+    Box(modifier = Modifier.fillMaxSize()) {
+        // ── 遮罩（`.scrim`）：rgba(16,12,24,.42) + 点击关闭 ──
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0x6B100C18))
+                .clickable { onDismiss() }
+        )
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
+                .background(sheetBg)
+                .border(
+                    1.dp,
+                    if (dark) GlassTokens.BorderDark else GlassTokens.BorderLight,
+                    RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)
+                )
+                // `.sheet{padding:10px 18px 26px}`；底部再让开 dock（见上方 ⚠️ 2）
+                .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = dockPad + 14.dp)
+        ) {
+            // `.grab` 抓手条
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(bottom = 14.dp)
+                    .size(width = 38.dp, height = 4.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(tertiary)
+            )
+            HomeSheetHead(text = "下载范围", color = headColor)
+            HomeRangeRow(
+                label = stringResource(R.string.home_preview_range_only_new),
+                countText = newCount.toString(),
+                selected = selectedRange == HomepageBatchStore.Range.ONLY_NEW,
+                pill = stringResource(R.string.home_preview_recommend)
+            ) { onSelectRange(HomepageBatchStore.Range.ONLY_NEW) }
+            HomeRangeRow(
+                label = stringResource(R.string.home_preview_range_all),
+                countText = maxN.toString(),
+                selected = selectedRange == HomepageBatchStore.Range.ALL
+            ) { onSelectRange(HomepageBatchStore.Range.ALL) }
+            // `.step{margin-left:auto}` 内联在同一行（不再另起一行）
+            val cappedN = limitN.coerceAtMost(maxN.coerceAtLeast(1))
+            HomeRangeRow(
+                label = stringResource(R.string.home_preview_range_latest),
+                selected = selectedRange == HomepageBatchStore.Range.LATEST_N,
+                trailing = {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(9.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        HomeStepButton("−") {
+                            onSelectRange(HomepageBatchStore.Range.LATEST_N)
+                            onLimitN((limitN - HOMEPAGE_LIMIT_STEP).coerceAtLeast(HOMEPAGE_LIMIT_STEP))
+                        }
+                        Text(
+                            text = cappedN.toString(),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.width(34.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        HomeStepButton("+") {
+                            onSelectRange(HomepageBatchStore.Range.LATEST_N)
+                            onLimitN(
+                                (limitN + HOMEPAGE_LIMIT_STEP)
+                                    .coerceAtMost(maxN.coerceAtLeast(HOMEPAGE_LIMIT_STEP))
+                            )
+                        }
+                    }
+                }
+            ) { onSelectRange(HomepageBatchStore.Range.LATEST_N) }
+            HomeSheetHead(text = "选项", color = headColor)
+            HomeSwitchRow(
+                stringResource(R.string.home_opt_include_images), includeImages,
+                onChange = onIncludeImages
+            )
+            HomeSwitchRow(
+                stringResource(R.string.home_opt_skip_downloaded), skipDownloaded,
+                onChange = onSkipDownloaded
+            )
+            // `.note{font-size:11px;color:var(--text3);line-height:1.6;margin:14px 2px 12px}`
+            // 把原来「改了没反应」的失效组合改成显式声明（mockup S3 的第三条设计说明）
+            Text(
+                text = "ⓘ 手动挑选作品时，本面板的设置不生效",
+                fontSize = 11.sp,
+                color = tertiary,
+                lineHeight = 17.6.sp,
+                modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = 14.dp, bottom = 12.dp)
+            )
+            // `.btn.primary` 完成 —— 52dp 胶囊，显式高度避免内层 Button 吃 Miuix 默认 ≈41dp
+            GlassPrimaryWrap(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(BtnHeight),
+                cornerRadius = BtnCornerRadius
+            ) {
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth().height(BtnHeight),
+                    colors = ButtonDefaults.buttonColorsPrimary(),
+                    insideMargin = PaddingValues(horizontal = BtnBarPadH, vertical = 0.dp)
+                ) {
+                    Text(
+                        text = "完成",
+                        color = if (dark) GlassTokens.OrangeOnDark else Color.White,
+                        fontSize = BtnFontSize,
+                        fontWeight = BtnFontWeight,
+                        letterSpacing = BtnLetterSpacing
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** `.sheet .h` 小节标题：12sp / 650 / 次级字色 / 字距 .3px / margin 14px 2px 4px。 */
+@Composable
+private fun HomeSheetHead(text: String, color: Color) {
+    Text(
+        text = text,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = color,
+        letterSpacing = 0.3.sp,
+        modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = 14.dp, bottom = 4.dp)
+    )
+}
+
+/**
+ * S4 选片页（二级）—— 严格对齐 mockup：
+ * ```
+ * .topbar .back{font-size:17px;color:var(--text2)}  .topbar .r{margin-left:auto;font-size:13px;color:var(--primaryText);font-weight:600}
+ * .seg{display:flex;gap:8px;margin:4px 0 12px}
+ * .seg span{flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12.5px;font-weight:600;background:var(--card);border:1px solid var(--border);color:var(--text2)}
+ * .seg span.on{background:var(--fill);border-color:transparent;color:var(--primaryText)}
+ * .filters{display:flex;gap:8px;margin-bottom:12px;align-items:center}
+ * .filters .f{font-size:11.5px;padding:5px 11px;border-radius:999px;background:var(--card);border:1px solid var(--border);color:var(--text2)}
+ * .filters .f.on{color:var(--primaryText);border-color:var(--primaryText)}
+ * ```
+ *
+ * 设计动机（mockup S4 三条）：① 网格从主页**下沉**到二级页，主页首屏不再被几十条封面撑长；
+ * ② 分段「全部 / 新增 / 已下载」+ 类型筛选 + 全选/反选；③ **返回不丢选择**，回写 S2 的操作条。
+ * 选择态由父级 [selectedIds] 持有（`remember` 在 HomepagePage 里），所以进出页面天然保留。
+ */
+@Composable
+private fun HomepagePickerPage(
+    items: List<com.neoruaa.xhsdn.douyin.DouyinPostItem>,
+    newIdSet: Set<String>,
+    selectedIds: Set<String>,
+    dockPad: Dp,
+    onToggle: (String, Boolean) -> Unit,
+    onSetSelection: (Set<String>) -> Unit,
+    onBack: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    // 0=全部 / 1=新增 / 2=已下载（`.seg` 三段）
+    var seg by remember { mutableStateOf(1) }
+    // null=全部类型 / true=仅视频 / false=仅图集（`.filters`）
+    var typeFilter by remember { mutableStateOf<Boolean?>(null) }
+    val newItems = items.filter { it.id in newIdSet }
+    val downloadedItems = items.filter { it.id !in newIdSet }
+    val segItems = when (seg) {
+        1 -> newItems
+        2 -> downloadedItems
+        else -> items
+    }
+    val shownItems = when (typeFilter) {
+        true -> segItems.filter { it.type == com.neoruaa.xhsdn.douyin.DouyinMediaType.VIDEO }
+        false -> segItems.filter { it.type != com.neoruaa.xhsdn.douyin.DouyinMediaType.VIDEO }
+        else -> segItems
+    }
+    val videoCount = segItems.count { it.type == com.neoruaa.xhsdn.douyin.DouyinMediaType.VIDEO }
+    val imageCount = segItems.size - videoCount
+    val selectedCount = items.count { it.id in selectedIds }
+    val unselectedCount = items.size - selectedCount
+    BackHandler { onBack() }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // ── 顶栏：`.back` + 标题 + 右侧 `.r`（全选）──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "←",
+                    fontSize = 17.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onBack)
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "挑选作品",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "全选",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = accentFg(),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onSetSelection(shownItems.map { it.id }.toSet()) }
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+            // ── `.seg` 分段：全部 / 新增 / 已下载 ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 4.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PickerSeg("全部 ${items.size}", seg == 0, Modifier.weight(1f)) { seg = 0 }
+                PickerSeg("新增 ${newItems.size}", seg == 1, Modifier.weight(1f)) { seg = 1 }
+                PickerSeg("已下载 ${downloadedItems.size}", seg == 2, Modifier.weight(1f)) { seg = 2 }
+            }
+            // ── `.filters`：类型筛选 + 反选 ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PickerFilter("视频 $videoCount", typeFilter == true) {
+                    typeFilter = if (typeFilter == true) null else true
+                }
+                PickerFilter("图集 $imageCount", typeFilter == false) {
+                    typeFilter = if (typeFilter == false) null else false
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "反选",
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = accentFg(),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            // 反选只作用于**当前筛选出的**这一批，符合「所见即所选」
+                            val visibleIds = shownItems.map { it.id }.toSet()
+                            val keep = selectedIds.filterNot { it in visibleIds }
+                            onSetSelection(keep.toSet() + visibleIds.filterNot { it in selectedIds })
+                        }
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+            // ── 3 列网格（`.thumbs{grid-template-columns:repeat(3,1fr);gap:8px}`）──
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    // ★让位钳在视口（padding 在 `.verticalScroll` 之前）——
+                    //   否则封面会画进操作条/ dock 底下（S2 同款坑，见那边的注释）
+                    .padding(bottom = dockPad + 88.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+            ) {
+                if (shownItems.isEmpty()) {
+                    Text(
+                        text = "这一档没有作品",
+                        fontSize = 13.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        modifier = Modifier.padding(vertical = 24.dp)
+                    )
+                }
+                shownItems.chunked(3).forEach { rowItems ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        rowItems.forEach { item ->
+                            HomeThumbCell(
+                                item = item,
+                                selected = item.id in selectedIds,
+                                downloaded = item.id !in newIdSet,
+                                showCheck = true,
+                                onToggle = { checked -> onToggle(item.id, checked) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        repeat(3 - rowItems.size) { Spacer(modifier = Modifier.weight(1f)) }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+        // ── `.actionbar`：已选 N 个 / M 个未选 + 下载已选 ──
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(bottom = dockPad)
+        ) {
+            HomepageActionBar(
+                label = "已选 $selectedCount 个" +
+                    if (unselectedCount > 0) " · $unselectedCount 个未选" else "",
+                primaryText = stringResource(R.string.home_bar_download_selected),
+                enabled = selectedCount > 0,
+                onPrimary = onConfirm
+            )
+        }
+    }
+}
+
+/** `.seg span` 分段项：flex1 / 居中 / padding 9px 0 / 圆角 14 / 12.5sp / 600。 */
+@Composable
+private fun PickerSeg(text: String, on: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .then(
+                if (on) Modifier.background(accentBg(lightAlpha = 0.16f))   // `.seg span.on{background:var(--fill)}`
+                else Modifier.background(MiuixTheme.colorScheme.surfaceVariant)
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 9.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (on) accentFg() else MiuixTheme.colorScheme.onSurfaceVariantSummary
+        )
+    }
+}
+
+/** `.filters .f` 类型筛选胶囊：11.5sp / padding 5px 11px / 圆角 999 / 选中转橙描边。 */
+@Composable
+private fun PickerFilter(text: String, on: Boolean, onClick: () -> Unit) {
+    val accent = accentFg()
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(MiuixTheme.colorScheme.surfaceVariant)
+            .border(1.dp, if (on) accent else Color.Transparent, RoundedCornerShape(999.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 11.dp, vertical = 5.dp)
+    ) {
+        Text(
+            text = text,
+            fontSize = 11.5.sp,
+            color = if (on) accent else MiuixTheme.colorScheme.onSurfaceVariantSummary
+        )
     }
 }
 
@@ -4473,11 +5048,14 @@ private fun HomeRangeRow(
 /** 主页预览步进小按钮（「最近 N 条」的 − / +）。mockup `.step b{width:32px;height:32px;border-radius:10px;font-size:16px;font-weight:500}` */
 @Composable
 private fun HomeStepButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val dark = isSystemInDarkTheme()
     Box(
         modifier = modifier
             .size(32.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(MiuixTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            // `.step b{background:var(--track)}` —— 亮 rgba(36,31,24,.10) / 暗 rgba(255,255,255,.14)。
+            // 原先写 onSurface.copy(alpha=.08f)，亮色下 0.08 比规范淡、暗色下 direction 也不对（onSurface 暗色是近白）
+            .background(if (dark) GlassTokens.TrackDark else GlassTokens.TrackLight)
             .clickable(onClick = onClick),
         contentAlignment = androidx.compose.ui.Alignment.Center
     ) {
@@ -4508,6 +5086,45 @@ private fun HomeSwitchRow(title: String, checked: Boolean, modifier: Modifier = 
             fontSize = 14.sp,
             color = MiuixTheme.colorScheme.onSurface
         )
-        Switch(checked = checked, onCheckedChange = onChange)
+        HomeSpecSwitch(checked = checked, onChange = onChange)
+    }
+}
+
+/**
+ * mockup `.sw` 规格开关：`44×26` 胶囊 / 圆角 999 / ON = `--grad`（橙→珊瑚粉）/ OFF = `--track`；
+ * 滑块 `20dp` 白圆，ON 靠右 3dp、OFF 靠左 3dp。
+ *
+ * ★不要直接用 Miuix `Switch` —— 它默认约 52×32，比规范宽 8dp、高 6dp，
+ * 摆在 `.opt` 行尾会把 44dp 的行高顶起来（v3.1.7 换成本实现）。
+ */
+@Composable
+private fun HomeSpecSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
+    val dark = isSystemInDarkTheme()
+    val track = if (dark) GlassTokens.TrackDark else GlassTokens.TrackLight
+    Box(
+        modifier = Modifier
+            .size(width = 44.dp, height = 26.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .then(
+                if (checked) {
+                    Modifier.background(
+                        androidx.compose.ui.graphics.Brush.linearGradient(
+                            listOf(GlassTokens.GradientStart, GlassTokens.GradientEnd)
+                        )
+                    )
+                } else {
+                    Modifier.background(track)
+                }
+            )
+            .clickable { onChange(!checked) }
+            .padding(3.dp),
+        contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
+    ) {
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .clip(CircleShape)
+                .background(Color.White)
+        )
     }
 }

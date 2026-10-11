@@ -47,6 +47,23 @@ object GlassTokens {
     val CardLight = Color(0x8CFFFFFF)
     /** 悬浮/浮层内分组：白 58%。 */
     val CardElevatedLight = Color(0x94FFFFFF)
+    /**
+     * 底部面板（`.sheet`）底 —— 对应 mockup `--cardHi`：亮白 62% / 暗白 18%。
+     *
+     * ⚠️ **实测不可直接用于 sheet 底色**：mockup 的 `.sheet` 靠 `backdrop-filter:blur(34px) saturate(1.9)`
+     * 把下层内容糊掉才成立；Compose **没有 backdrop-filter**，直接铺这两个半透令牌会让
+     * 下层页面文字整片穿透叠在面板上（v3.1.7 首版实测：「下载计划 / 新增作品 18」与
+     * sheet 的「下载范围 / 仅新增」完全重叠）→ 面板一律改用 `glassSolid()` 实心表面。
+     * 保留这两个值只为**留档规范真源**，不参与渲染。
+     */
+    val CardHiLight = Color(0x9EFFFFFF)
+    val CardHiDark = Color(0x2EFFFFFF)
+    /**
+     * 轨道底（`--track`）：步进方钮 / 开关关闭态 / 下载计划卡的分隔线。
+     * 亮 `rgba(36,31,24,.10)` / 暗 `rgba(255,255,255,.14)`。★是**中性底**不是橙，别拿 `--fill` 顶替。
+     */
+    val TrackLight = Color(0x1A241F18)
+    val TrackDark = Color(0x24FFFFFF)
 
     // ── 暗色玻璃（白 alpha，深霓虹壁纸之上）──────────────────────────
     val ChromeDark = Color(0x21FFFFFF)      // 白 13%
