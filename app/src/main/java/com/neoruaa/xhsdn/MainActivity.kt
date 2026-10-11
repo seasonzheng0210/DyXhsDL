@@ -166,6 +166,8 @@ import top.yukonga.miuix.kmp.icon.extended.File
 import top.yukonga.miuix.kmp.icon.extended.Link
 import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Download
+import top.yukonga.miuix.kmp.icon.extended.Tasks
+import top.yukonga.miuix.kmp.icon.extended.TopDownloads
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.window.WindowBottomSheet
 
@@ -2287,7 +2289,7 @@ private fun HistoryPage(
         GlassPrimaryWrap(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = navPadding + 66.dp),
+                .padding(end = 16.dp, bottom = navPadding + FabBottomOffset),
             cornerRadius = 30.dp,
             enabled = !uiState.isDownloading
         ) {
@@ -2321,7 +2323,7 @@ private fun HistoryPage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .padding(start = 24.dp, end = 24.dp, bottom = navPadding + 76.dp + 56.dp),
+                    .padding(start = 24.dp, end = 24.dp, bottom = navPadding + ClipBubbleBottomOffset),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 val bubbleLabel = if (detectedPlatform == "douyin")
@@ -3110,6 +3112,16 @@ private fun MainTabBar(
     // 纯半透白会出现「内容滚过 dock 直接穿透」的丑象（用户实测打回）。
     // 提实度到等效磨砂观感：亮≈白91% / 暗≈深灰紫90%，补顶内高光1.5dp+底部投影（对齐 .lg box-shadow）。
     val items = listOf("首页下载", "任务", "设置")
+    // ★2026-10-11 对齐平台规范（用户反馈"底部按钮还是小"，此前只有 11sp 纯文字，
+    // 低于 Material 底部导航标准的 12sp，也没有规范要求的 24dp 图标）：
+    //   Material 1 bottom navigation（icon+label 固定式）：Icon 24×24dp，
+    //     文字 Roboto Regular **12sp（未选）/ 14sp（选中）**，容器高 56dp；
+    //   Material 3 navigation bar：Label Medium = 12sp，且**导航项必须配图标**。
+    // 本项目 dock 是 60dp 级浮起玻璃胶囊（比 56dp 标准容器略大），故取两者中值
+    // **13sp 统一**（不做选中放大，避免切页时字号跳动；强调交给字重 + 颜色）。
+    // 之前只有文字、没有图标，是"看起来小/空"的主因 —— 11sp 在 60dp 胶囊里没有任何
+    // 视觉锚点；补上 22dp 图标后文字恢复成"图标下的第二行"，11sp 才成立。
+    val icons = listOf(MiuixIcons.TopDownloads, MiuixIcons.Tasks, MiuixIcons.Settings)
     val dark = isSystemInDarkTheme()
     val navBg = if (dark) Color(0xE62E283E) else Color(0xE8FFFFFF)          // 等效 blur 后磨砂底
     val navBorder = if (dark) Color(0x33FFFFFF) else Color(0xB8FFFFFF)      // 折射描边
@@ -3152,7 +3164,10 @@ private fun MainTabBar(
                         )
                     )
             )
-            Row(modifier = Modifier.fillMaxWidth().padding(4.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
             items.forEachIndexed { index, label ->
                 val selectedNow = index == selected
                 Box(
@@ -3161,15 +3176,24 @@ private fun MainTabBar(
                         .clip(ContinuousRoundedRectangle(999.dp))
                         .background(if (selectedNow) navOnBg else Color.Transparent)
                         .clickable { onSelected(index) }
-                        .padding(vertical = 6.dp),
+                        .padding(vertical = 5.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = label,
-                        color = if (selectedNow) navOnFg else navFg,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 11.sp
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = icons[index],
+                            contentDescription = null,
+                            tint = if (selectedNow) navOnFg else navFg.copy(alpha = 0.85f),
+                            modifier = Modifier.size(DockIconSize)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = label,
+                            color = if (selectedNow) navOnFg else navFg,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                    }
                 }
             }
             }
@@ -3212,6 +3236,37 @@ private val BtnCornerRadius = 26.dp
 private val BtnBarWidth = 132.dp
 /** .actionbar .btn padding:0 20px。 */
 private val BtnBarPadH = 20.dp
+
+// ── 底部 dock 几何（唯一真源 = docs/design/LiquidGlass-液态玻璃定稿总览-v3.html）────
+//
+//   .nav{position:absolute;left:13px;right:13px;bottom:10px;border-radius:26px;padding:6px 4px}
+//   .nv{flex:1;font-size:11px;font-weight:600;padding:5px 0}
+//   .fab{position:absolute;right:16px;bottom:66px;width:46px;height:46px}
+//   （icon+label 版来自 docs/design/首页下载-交互重构-mockup.html）
+//   .dock{height:64px}  .dock .tab{font-size:11px}
+//   .dock .tab .g{display:block;font-size:17px;margin-bottom:2px}
+//
+// ★ 规范里 .nav 是**纯文字**（高 ≈35px，顶边在 bottom+45.2px），FAB 底在 66px
+//   → **FAB 浮在 dock 上方 20.8px、不重叠**。本 App 的 dock 补了图标后高 ~63dp，
+//   顶边抬到 bottom+73dp，原样沿用 bottom+66dp 的 FAB 就会被 dock 圆角切掉一块
+//   （实测重叠 14px = 5.1dp）。所以 FAB / 剪贴板气泡的偏移必须由这里统一推导，
+//   不能再各写各的常量 —— 改 dock 高度时它们自动跟着走。
+// ──────────────────────────────────────────────────────────────────────────────
+
+/** mockup .dock{height:64px} —— dock 胶囊的目标视觉高度。 */
+private val DockCapsuleH = 64.dp
+/** mockup .nav{bottom:10px} —— 胶囊底边距导航栏（手势条）顶边的内边距。 */
+private val DockBottomInset = 10.dp
+/** dock 胶囊顶边相对导航栏顶边的偏移（FAB / 气泡的最低下界）。 */
+private val DockTopOffset = DockBottomInset + DockCapsuleH
+/** 底部导航项图标尺寸：Material bottom nav 标准 24dp（mockup 用 17px 字号图标）。 */
+private val DockIconSize = 24.dp
+/** 主 FAB 直径（现网实现值；mockup .fab 写的是 46px，历史差异，本次不动）。 */
+private val FabSize = 60.dp
+/** FAB 底边偏移 = 让开 dock 顶边 + 12dp 间隙。 */
+private val FabBottomOffset = DockTopOffset + 12.dp
+/** 剪贴板气泡底边偏移 = FAB 顶边 + 8dp 间隙。 */
+private val ClipBubbleBottomOffset = FabBottomOffset + FabSize + 8.dp
 
 // ── 「橙 chip」色对 ────────────────────────────────────────────────────────────
 // ★暗色陷阱：MiuixTheme.colorScheme.primary 在暗色下是**深棕橙**（实测合成后 ≈ #682C11 级别），
