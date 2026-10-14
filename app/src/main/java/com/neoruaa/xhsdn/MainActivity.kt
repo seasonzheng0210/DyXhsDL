@@ -1841,7 +1841,7 @@ private fun HistoryPage(
     //   FAB 只挂在 HistoryPage（见下方 GlassPrimaryWrap），它占 navbar+FabBottomOffset .. +FabSize 这条竖带。
     //   把**列表视口**底边直接钳到 FAB 上缘 → 内容在滚动过程中也不可能画进 FAB 底下（旧值 56dp 是
     //   v3.1.2 之前 38dp 老 dock 时代的残值：既让内容钻到 dock 胶囊下面 18dp，又把最后一张卡送进 FAB）。
-    val listBottomReserve = GlassSpec.FabBottomOffset + GlassSpec.FabSize   // 91 + 46 = 137dp
+    val listBottomReserve = GlassSpec.FabBottomOffset + GlassSpec.FabSize   // v0.2：91 + 56 = 147dp（FAB 46→56）
     val activeTask = tasks.firstOrNull {
         it.status == com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING || it.status == com.neoruaa.xhsdn.data.TaskStatus.QUEUED
     }
@@ -3154,8 +3154,8 @@ private fun MainTabBar(
     // 视觉锚点；补上 22dp 图标后文字恢复成"图标下的第二行"，11sp 才成立。
     val icons = listOf(MiuixIcons.TopDownloads, MiuixIcons.Tasks, MiuixIcons.Settings)
     val dark = isSystemInDarkTheme()
-    val navBg = if (dark) Color(0xE62E283E) else Color(0xE8FFFFFF)          // 等效 blur 后磨砂底
-    val navBorder = if (dark) Color(0x33FFFFFF) else Color(0xB8FFFFFF)      // 折射描边
+    val navBg = if (dark) GlassTokens.SurfaceControlDark else GlassTokens.SurfaceControlLight   // v0.2 收令牌（值不变）
+    val navBorder = if (dark) GlassTokens.SurfaceControlLineDark else GlassTokens.SurfaceControlLineLight // 折射描边
     val navOnBg = if (dark) Color(0x40FFFFFF) else Color(0x99FFFFFF)        // .nv.on 选中胶囊（在实底上再亮一档）
     val navOnFg = if (dark) Color(0xFFFFB37A) else Color(0xFFE04E10)        // .nv.on 橙字
     val navFg = if (dark) Color(0xFFC6CBD8) else Color(0xFF241F18)          // 未选：近黑/灰白
@@ -3191,7 +3191,7 @@ private fun MainTabBar(
                     .align(Alignment.TopStart)
                     .background(
                         androidx.compose.ui.graphics.Brush.verticalGradient(
-                            listOf(Color.White.copy(alpha = if (dark) 0.22f else 0.95f), Color.Transparent)
+                            listOf(if (dark) GlassTokens.SurfaceControlHiDark else GlassTokens.SurfaceControlHiLight, Color.Transparent)
                         )
                     )
             )

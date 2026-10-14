@@ -18,19 +18,55 @@ import androidx.compose.ui.graphics.Color
  */
 object GlassTokens {
 
-    // ── 壁纸（液态高饱和渐变：亮=粉彩 / 暗=霓虹，对角）─────────────────
+    // ══════════════════════════════════════════════════════════════════════
+    // v0.2 令牌层重写（2026-10-14，「暖砂」配色）
+    //
+    // 结构改动来自 Apple HIG 材质指引：**「不要在内容层中使用 Liquid Glass」** ——
+    // 玻璃只用于**控制与导览层**（顶栏 / dock / 分段 / FAB / 开关），
+    // 内容层一律换成**实心标准材质**，浮层（操作条 / sheet / 对话框）用**最实**材质。
+    // 这一条根治了「表面 6 级 alpha、5 级挤在 12 个百分点内彼此分辨不出」的老病。
+    //
+    // 表面只有 **3 级**：
+    //   ① 控制层玻璃 [SurfaceControl*]  —— 半透，铺在壁纸上
+    //   ② 内容层实心 [CardLight/Dark]    —— 实心，卡片/统计格/缩略图/任务卡
+    //   ③ 浮层最实   [CardElevatedLight/Dark] —— 实心，操作条/sheet/对话框
+    //
+    // ⚠️ **暗色表面梯子必须是亮色侧的镜像**：壁纸最暗 → 内容卡次亮 → 浮层最亮。
+    //    v0.2 稿首版把 dtop 取成 #141210（比 dsurf 还暗）→ 卡片糊成一片、操作条像挖了个洞。
+    // ══════════════════════════════════════════════════════════════════════
+
+    // ── 壁纸（v0.2 暖砂：低饱和三停渐变）──────────────────────────────
+    /**
+     * ★壁纸降饱和**不只是审美选择** —— Compose 没有 `backdrop-filter`，只靠**纯色叠加**做玻璃，
+     * 高饱和壁纸会把每一层半透表面的色相拉飞、也压不住正文。降饱和是没模糊时唯一能做层次的前提。
+     * 真源 = `docs/design/视觉基线稿-v0.1-低饱和玻璃三套.html` 的「暖砂」。
+     */
     val WallpaperLight = listOf(
-        Color(0xFFB7A6FF), // 薰衣草紫
-        Color(0xFFFFB7CC), // 蜜桃粉
-        Color(0xFFA9E0F2), // 雾蓝
-        Color(0xFFFFC9A0)  // 杏橙
+        Color(0xFFEADFCB), // 沙白
+        Color(0xFFD8C9B1), // 暖砂
+        Color(0xFFC4B299)  // 深砂
     )
     val WallpaperDark = listOf(
-        Color(0xFF241B45), // 电紫
-        Color(0xFF3B1E38), // 酒红
-        Color(0xFF14283E), // 深海蓝
-        Color(0xFF3A2415)  // 琥珀
+        Color(0xFF221D18), // 暖褐
+        Color(0xFF1A1613),
+        Color(0xFF131110)  // 近黑暖
     )
+
+    // ── ① 控制层玻璃（v3.0.9 实测：无 backdrop-blur，纯半透会让内容穿透 dock）──
+    /**
+     * 控制层表面：顶栏 / dock / 底部操作条 / 分段容器 / FAB。
+     *
+     * ⚠️ **值必须偏实**：设计稿写的是「白 50%」，那是**在浏览器里有 `backdrop-filter` 的前提下**；
+     * Android 无该能力，v3.0.9 用户实测打回「内容滚过 dock 直接穿透」→ 实测提实到 ≈白 91% / 深 90% 才有等效磨砂观感。
+     * 本令牌就是把当初散落在 `MainActivity` 里的硬编码值**收敛成一个真源**（值本身不变，避免破功）。
+     * 若后续靠「让位铁律」保证内容不滚到控制层下方，可再逐档下调透明度 —— 必须**实机截图验证**，别照抄 50%。
+     */
+    val SurfaceControlLight = Color(0xE8FFFFFF)   // 白 91%
+    val SurfaceControlDark = Color(0xE62E283E)    // 深灰紫 90%
+    val SurfaceControlLineLight = Color(0xB8FFFFFF)
+    val SurfaceControlLineDark = Color(0x33FFFFFF)
+    val SurfaceControlHiLight = Color(0xF2FFFFFF) // 顶部内高光 95%
+    val SurfaceControlHiDark = Color(0x38FFFFFF)  // 22%
 
     // ── Chrome 层玻璃（亮）─────────────────────────────────────────
     /** 顶栏/底栏/分段容器：白 50%（v2 的 70% 下调 → 壁纸色透出）。 */
@@ -40,13 +76,24 @@ object GlassTokens {
     /** 折射描边（亮）：1px 半透白，模拟水珠边缘光。 */
     val BorderLight = Color(0xB8FFFFFF)
 
-    // ── 内容层玻璃（亮）────────────────────────────────────────────
-    /** 页面面板/大容器：白 50%（surface 角色，与 Chrome 同透）。 */
+    // ── ② 内容层：实心标准材质（v0.2 起不再是半透玻璃）────────────────
+    /**
+     * 页面面板（`surface` 角色，Settings / WebView 的整页底）。
+     * ★**全 App 只有这一层保留半透** —— 它本质是「壁纸上的整页薄纱」，变实心会把壁纸整页盖掉。
+     * 卡片级一律走 [CardLight] 的实心材质。
+     */
     val PanelLight = Color(0x80FFFFFF)
-    /** 内容卡（任务卡/预览卡）：白 55%（surfaceVariant 角色），比 v2 透，正文仍可读。 */
-    val CardLight = Color(0x8CFFFFFF)
-    /** 悬浮/浮层内分组：白 58%。 */
-    val CardElevatedLight = Color(0x94FFFFFF)
+    /**
+     * 内容卡（任务卡 / 预览卡 / 统计格 / 缩略图底）—— `surfaceVariant` 角色，
+     * 全 App 11 处 `CardDefaults.defaultColors(color = surfaceVariant)` 都走这里。
+     * ★v0.2 起是**实心暖白**（原白 55% 半透）。Apple HIG：**内容层不使用 Liquid Glass**。真源 `--card #FBF8F2`。
+     */
+    val CardLight = Color(0xFFFBF8F2)
+    /**
+     * 浮层最实（sheet / 对话框 / 常驻操作条）—— 亮 = 纯白。真源 `--top #FFFFFF`。
+     * ★与暗色的 [CardElevatedDark] 一起构成「浮层在三级里最实/最亮」。
+     */
+    val CardElevatedLight = Color(0xFFFFFFFF)
     /**
      * 底部面板（`.sheet`）底 —— 对应 mockup `--cardHi`：亮白 62% / 暗白 18%。
      *
@@ -69,19 +116,32 @@ object GlassTokens {
     val ChromeDark = Color(0x21FFFFFF)      // 白 13%
     val ChromeHighlightDark = Color(0x29FFFFFF) // 白 16%
     val BorderDark = Color(0x33FFFFFF)      // 白 20% 描边
-    val PanelDark = Color(0x24FFFFFF)       // 白 14%
-    val CardDark = Color(0x26FFFFFF)        // 白 15%
-    val CardElevatedDark = Color(0x2BFFFFFF)
+    /** 页面面板（`surface`，暗）—— 同上，保留半透（原白 14% → 白 11%，与「三级」拉开距离）。 */
+    val PanelDark = Color(0x1CFFFFFF)
+    /**
+     * 内容卡（暗）—— ★必须是**实心近黑暖**，且**比壁纸中段/底部都亮**，否则卡片糊进壁纸。
+     * v0.2 稿首版就是在这里写反的（`dsurf #1C1A16` ≈ 壁纸底部）；本轮实机也复现了一次：
+     * 壁纸中段 ≈ `#241F1B` 时，`#282219` 几乎同色 → 空态图标砖在壁纸上「消失」。
+     * 真源 `--card #282219`，但**暗色壁纸同步压到 `#221D18→#131110`** 才成立。
+     */
+    val CardDark = Color(0xFF2A241C)
+    /** 浮层最实（暗）—— ★三级里**最亮**。真源 `--top #332C22` 同理上调。 */
+    val CardElevatedDark = Color(0xFF37302A)
 
     /**
-     * ⚠️ 上面 ChromeDark/PanelDark/CardDark 等**暗色值也是「白色半透」**（白 13~17%），
-     * 它们是**覆盖层**，只能**原样**铺在深壁纸上。
+     * ⚠️ 注意 [ChromeDark] / [PanelDark] **暗色值也是「白色半透」**（白 11~13%），它们是**覆盖层**，
+     * 只能**原样**铺在深壁纸上。（[CardDark] / [CardElevatedDark] 自 v0.2 起已是**实心色**，不受此限。）
      * **绝不要对它们写 `.copy(alpha = X)`** —— `copy(alpha)` 是**替换**不是相乘，
-     * 会把「白@14%」换成「白@X%」：X 一大就变成**一块白板**（实测 `surface.copy(alpha=0.94f)`
+     * 会把「白@13%」换成「白@X%」：X 一大就变成**一块白板**（实测 `surface.copy(alpha=0.94f)`
      * 在暗色下 = 白 94%，状态文字 #F5F6F8 压上去只有 **1.04:1**，完全看不见）。
-     * 需要「实心表面」请用 [SolidDark]（亮色侧用纯白），见 `GlassAccent.glassSolid()`。
+     * 需要「实心表面」请用 `GlassAccent.glassSolid()`（亮色侧纯白 / 暗色侧走 [SolidDark]）。
      */
-    val SolidDark = Color(0xFF151518)       // 实心玻璃基色（暗）：近黑，压在深壁纸上
+    /**
+     * 「实心玻璃」暗色基色 —— 供 `GlassAccent.glassSolid()` 使用。
+     * ★v0.2 起改为**暖调 `#2E2820`**（原近黑 `#151518`）：照「暗色表面梯子 = 亮色侧镜像」，
+     * **浮层必须比内容卡（`#282219`）更亮**；近黑会让常驻操作条 / sheet 像在页面里挖了个洞。
+     */
+    val SolidDark = Color(0xFF37302A)
 
     // ── 主操作：液态渐变（橙→珊瑚粉 120°）───────────────────────────
     val GradientStart = Color(0xFFFF8A3C)   // 渐变起：暖橙

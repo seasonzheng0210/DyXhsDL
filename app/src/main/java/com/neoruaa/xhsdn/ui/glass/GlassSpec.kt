@@ -44,6 +44,26 @@ import androidx.compose.ui.unit.sp
  * 4) 字号并集（三份设计稿取并）= {9.5,10,10.5,11,11.5,12,12.5,13,13.5,14,14.5,15,16,16.5,17,
  *    18,19,20,22,24,26,27,30,34,40}。**代码里真正离轨的只有 9 / 15.5 / 21**（v3.1.5 已收口）。
  *
+ * 5) ★★**v0.2 按钮阶梯（分级放大，2026-10-14 用户拍板）** —— 真源
+ *    `docs/design/视觉基线稿-v0.2-分级按钮-玻璃只留控制层.html`
+ *
+ *    | 层级 | 高度 | 圆角 | 字号 | 水平内边距 | 用途 |
+ *    |---|---|---|---|---|---|
+ *    | **L1 主 CTA** | **60dp** | 30dp | 16sp | 28dp | 确认下载 / 解析作品 / 开始使用 / 完成 |
+ *    | L2 次级 | 52dp | 26dp | 14.5sp | 20dp | 从剪贴板粘贴 / 重试 / 查看文件（＝原 `.btn`） |
+ *    | L3 图标按钮 | **48dp** | 24dp | 图标 24dp | — | 返回 / ✕ / 更多 |
+ *    | FAB | **56dp** | 圆形 | 图标 24dp | — | 右下角主操作 |
+ *
+ *    ★**为什么只涨 L1、不一起涨**：Apple HIG「**使用样式而不是大小在视觉上区分多个选项中的首选项**」
+ *      且「在每个视图中保留一到两个突出的按钮」——把两个不同大小的按钮并排会显得不一致。
+ *      层级靠**颜色与形状**表达，大小只用来把「唯一的主 CTA」抬高一级。
+ *    ★**依据**：Apple HIG 按钮（tap ≥44×44pt、必须带按压态）/ Google 无障碍（触摸目标 ≥48×48dp、
+ *      相邻目标间距 ≥8dp）/ M3 Buttons（默认高 **40dp**，现状 52dp 本来就高于它）/
+ *      M3 Expressive 五档 XS32·S40·M48·L56·XL64（**L1 = XL**）/ NN/g（主 CTA ≈2cm ≈ 最小值的两倍）。
+ *
+ * 6) ★**按压态**（Apple HIG：「始终为自定义按钮包括按压状态」）：
+ *    圆角 30→26（形状形变）、缩放 [BtnPressScale]、内阴影加深；**120ms 进入 / 180ms 回弹**。
+ *
  * ★ 使用陷阱（踩过两次，改按钮前必读）：
  *   1. **`GlassPrimaryWrap` 的内层 Button 必须显式 `.height(BtnHeight)`**。外层是 52dp 的 `Box`，
  *      内层不给高度就按 Miuix 默认（≈41dp）量测，而 `Box` 默认 `contentAlignment = TopStart`
@@ -53,20 +73,20 @@ import androidx.compose.ui.unit.sp
  */
 object GlassSpec {
 
-    // ── .btn（mockup，1:1 设备值）────────────────────────────────────────────
-    /** `.btn` 高度 52px。 */
+    // ── L2 次级动作（＝原 `.btn`，值不变 → 已装机的 3 处主按钮继续保持 52dp）────
+    /** L2 次级动作高度 52dp（＝mockup `.btn` 的 52px）。**本值不参与 L1**。 */
     val BtnHeight = 52.dp
 
-    /** `.btn` 圆角 26px（= 高度一半，正胶囊）。 */
+    /** L2 圆角 26dp（= 高度一半，正胶囊）。 */
     val BtnCornerRadius = 26.dp
 
-    /** `.btn` 字号 14.5px。 */
+    /** L2 字号 14.5sp。 */
     val BtnFontSize = 14.5.sp
 
-    /** `.btn` 字距 .2px。 */
+    /** 字距 0.2sp（L1 / L2 共用）。 */
     val BtnLetterSpacing = 0.2.sp
 
-    /** `.btn` 字重 650（Compose 无 650，取 SemiBold=600）。 */
+    /** 字重 650（Compose 无 650，取 SemiBold=600）。 */
     val BtnFontWeight = FontWeight.SemiBold
 
     /** `.actionbar .btn{min-width:132px}` —— 固定宽度而非 minWidth，避免换文案时宽度跳动。 */
@@ -74,6 +94,51 @@ object GlassSpec {
 
     /** `.actionbar .btn{padding:0 20px}`。 */
     val BtnBarPadH = 20.dp
+
+    // ── ★★L1 主 CTA（v0.2 新档，只有「每个视图唯一的主操作」用它）──────────────
+    /**
+     * L1 主 CTA 高度 **60dp** —— 比 L2 高 8dp。
+     *
+     * 用法（必读）：`GlassPrimaryWrap` 的内层 Button 必须显式 `.height(BtnL1Height)`，
+     * 否则按 Miuix 默认 ≈41dp 量测、外层 Box `contentAlignment=TopStart` 会让**文字整体偏上**。
+     * 真源 = `视觉基线稿-v0.2` 的 `.b1`。
+     */
+    val BtnL1Height = 60.dp
+
+    /** L1 圆角 30dp（正胶囊；按下时形变到 [BtnPressCornerRadius]）。 */
+    val BtnL1CornerRadius = 30.dp
+
+    /** L1 字号 16sp。 */
+    val BtnL1FontSize = 16.sp
+
+    /** L1 水平内边距 28dp。 */
+    val BtnL1PadH = 28.dp
+
+    // ── L3 图标按钮（返回 / ✕ / 更多）───────────────────────────────────────
+    /** L3 图标按钮边长 **48dp** —— Google 无障碍触摸目标底线，不得再小。 */
+    val IconBtnSize = 48.dp
+
+    /** L3 圆角 24dp（正圆内切方形）。 */
+    val IconBtnCornerRadius = 24.dp
+
+    /** L3 图标本身边长 24dp（＝24dp 图标网格的视觉主体在 20dp 那一档的上一级）。 */
+    val IconBtnIconSize = 24.dp
+
+    /** 相邻触摸目标之间的最小间距（Google 无障碍：48×48dp + **≥8dp** 间距）。 */
+    val MinTouchGap = 8.dp
+
+    // ── 按压态（Apple HIG 要求「始终为自定义按钮包括按压状态」）────────────────
+    /** 按下缩放：0.975（`视觉基线稿-v0.2` 的 `.btn.down{transform:scale(.975)}`）。 */
+    const val BtnPressScale = 0.975f
+
+    /** 按下时圆角（= L1 的 30 − 4，制造「方一点」的形状形变）。 */
+    val BtnPressCornerRadius = 26.dp
+
+    /** 按下进入时长（ms）。 */
+    const val BtnPressInMs = 120
+
+    /** 松开回弹时长（ms）。 */
+    const val BtnPressOutMs = 180
 
     // ── dock / FAB（mockup 的 .dock + LGv3 的 .fab）──────────────────────────
     /** mockup `.dock{height:64px}` —— dock 胶囊的目标视觉高度。 */
@@ -88,14 +153,18 @@ object GlassSpec {
     /** 底部导航项图标：Material bottom nav 标准 24dp。实测 mockup `.dock .tab .g` 渲染高正好 24px。 */
     val DockIconSize = 24.dp
 
-    /** LGv3 `.fab{width:46px;height:46px}` —— 圆形（`border-radius:999px`）。 */
-    val FabSize = 46.dp
+    /**
+     * FAB 直径 **56dp** —— M3 FAB regular 标准档（原按 LGv3 `.fab{46px}` 取 46dp，比 M3 小 10dp；
+     * v0.2 按「按钮尽量大」+ M3 规范上调）。
+     * ★改本值会自动带动 [FabBottomOffset] 下游的 `listBottomReserve`/气泡偏移 —— 它们都从 dock/FAB 推导，别写死。
+     */
+    val FabSize = 56.dp
 
     /** LGv3 `.fab{right:16px}`。 */
     val FabEndPadding = 16.dp
 
-    /** LGv3 `.fab{font-size:20px}` —— FAB 内图标约 20~22dp。 */
-    val FabIconSize = 22.dp
+    /** FAB 内图标 24dp（M3 FAB regular 前导图标标准；原 22dp）。 */
+    val FabIconSize = 24.dp
 
     /** FAB 与 dock 顶边的间隙：LGv3 实测 66 - 49 = **17px**。 */
     val FabDockGap = 17.dp

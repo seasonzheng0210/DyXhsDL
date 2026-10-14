@@ -21,10 +21,10 @@ object GlassColorSchemes {
         surface = GlassTokens.PanelLight,
         // 内容卡（任务卡/预览卡/设置分组 surfaceVariant 容器）
         surfaceVariant = GlassTokens.CardLight,
-        // 悬浮/浮层内分组
+        // 悬浮/浮层内分组 —— ③ 浮层级（最实）
         surfaceContainer = GlassTokens.CardElevatedLight,
         surfaceContainerHigh = GlassTokens.CardLight,
-        surfaceContainerHighest = GlassTokens.PanelLight,
+        surfaceContainerHighest = GlassTokens.CardElevatedLight,
         // 主操作（Button/开关/进度走 primary）
         primary = GlassTokens.OrangePrimaryLight,
         onPrimary = GlassTokens.OrangeOnLight,
@@ -40,7 +40,7 @@ object GlassColorSchemes {
         surfaceVariant = GlassTokens.CardDark,
         surfaceContainer = GlassTokens.CardElevatedDark,
         surfaceContainerHigh = GlassTokens.CardDark,
-        surfaceContainerHighest = GlassTokens.PanelDark,
+        surfaceContainerHighest = GlassTokens.CardElevatedDark,
         primary = GlassTokens.OrangePrimaryDark,
         onPrimary = GlassTokens.OrangeOnDark,
         onSurface = GlassTokens.TextPrimaryDark,
