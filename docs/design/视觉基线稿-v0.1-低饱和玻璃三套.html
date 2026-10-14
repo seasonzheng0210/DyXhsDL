@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>视觉基线稿 v0.1 · 低饱和玻璃 + 补顶面层（三套配色）</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+
+/* ══ 页面外壳 ══════════════════════════════════════════ */
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  background:#EFEDE8;color:#241F18;padding:34px 30px 60px;-webkit-font-smoothing:antialiased;
+  line-height:1.6;
+}
+body.dark{background:#100F0D;color:#EDE9E2}
+
+.head{max-width:1300px;margin:0 auto 26px}
+.head h1{font-size:25px;font-weight:650;letter-spacing:-.3px}
+.head .sub{font-size:13.5px;color:#6E6862;margin-top:8px;max-width:920px}
+.head .sub b{color:#C2551B;font-weight:600}
+body.dark .head .sub{color:#9E978E}
+body.dark .head .sub b{color:#F5A46E}
+.note{
+  margin-top:14px;padding:12px 14px;border-radius:12px;font-size:12.5px;
+  background:rgba(194,85,27,.08);border:0.5px solid rgba(194,85,27,.28);color:#8A4A22;
+}
+body.dark .note{background:rgba(245,164,110,.10);border-color:rgba(245,164,110,.30);color:#F0B48A}
+
+.toggle{
+  float:right;margin-top:-46px;padding:8px 16px;border-radius:999px;cursor:pointer;
+  border:0.5px solid rgba(120,110,100,.4);background:transparent;color:inherit;
+  font:inherit;font-size:13px;font-weight:600;
+}
+.toggle:hover{background:rgba(127,127,127,.10)}
+
+.grid{max-width:1300px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:26px;align-items:start}
+
+/* ══ 变体容器 ══════════════════════════════════════════ */
+.v{background:rgba(127,127,127,.055);border-radius:24px;padding:18px 18px 22px}
+body.dark .v{background:rgba(255,255,255,.045)}
+.v h2{font-size:17px;font-weight:650;display:flex;align-items:center;gap:9px}
+.v h2 .badge{font-size:11px;padding:2px 9px;border-radius:999px;background:#C2551B;color:#fff;font-weight:650}
+.v .tagline{font-size:12px;color:#6E6862;margin:5px 0 14px}
+body.dark .v .tagline{color:#9E978E}
+
+.sw{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px;border-radius:14px;padding:9px 9px 4px;
+  background:linear-gradient(150deg,var(--w1),var(--w3))}
+.sw i{display:block;width:100%;height:32px;border-radius:8px;border:.5px solid rgba(127,127,127,.30)}
+.sw .lbl{width:100%;font-size:10.5px;color:rgba(127,120,110,.95);margin-top:-1px;padding-left:2px}
+body.dark .sw .lbl{color:rgba(200,196,190,.85)}
+
+/* ══ 手机 ══════════════════════════════════════════════ */
+.phone{
+  width:390px;height:844px;border-radius:34px;overflow:hidden;position:relative;
+  background:linear-gradient(158deg,var(--w1),var(--w2) 52%,var(--w3));
+  box-shadow:0 16px 38px rgba(60,40,20,.20),0 0 0 1px rgba(0,0,0,.06);
+  display:flex;flex-direction:column;font-size:13px;color:var(--t1);
+  margin-bottom:18px;
+}
+body.dark .phone{box-shadow:0 16px 38px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.07)}
+
+/* ★ 表面只有 3 级，全部是纯色叠加，本页不使用 backdrop-filter */
+.s-chrome{background:var(--chrome);border-bottom:.5px solid var(--line);box-shadow:inset 0 1px 0 var(--hi)}
+.s-card{background:var(--card);border:.5px solid var(--line);border-radius:22px;box-shadow:inset 0 1px 0 var(--hi)}
+.s-top{background:var(--top);border:.5px solid var(--line);border-radius:20px;box-shadow:inset 0 1px 0 var(--hi)}
+
+.nav{flex:none;height:52px;display:flex;align-items:center;gap:10px;padding:0 16px}
+.nav .ttl{font-size:16px;font-weight:650}
+.nav .r{margin-left:auto;font-size:12.5px;font-weight:600;color:var(--brand)}
+
+.body{flex:1;min-height:0;overflow:hidden;padding:12px 16px 0;display:flex;flex-direction:column;gap:10px}
+.pad-b{padding-bottom:52px}
+
+/* 统计格 */
+.stats{display:flex;gap:6px}
+.stat{flex:1;text-align:center;padding:8px 0;border-radius:12px;background:var(--card);
+  border:.5px solid var(--line);box-shadow:inset 0 1px 0 var(--hi)}
+.stat b{display:block;font-size:16px;font-weight:600}
+.stat span{display:block;font-size:10.5px;color:var(--t3);margin-top:1px}
+
+/* 任务卡 */
+.tcard{padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.tcard .r1{display:flex;align-items:center;gap:8px}
+.av{width:26px;height:26px;border-radius:9px;display:grid;place-items:center;font-size:12px;
+  font-weight:650;background:var(--fill);color:var(--brand)}
+.chip{font-size:11px;padding:2px 9px;border-radius:999px;font-weight:600}
+.chip.ok{background:rgba(14,122,82,.14);color:var(--ok)}
+.chip.fail{background:rgba(200,50,50,.13);color:var(--fail)}
+.chip.run{background:var(--fill);color:var(--brand)}
+.chip.wait{background:var(--track);color:var(--t2)}
+.tcard .nm{font-size:14px;font-weight:650}
+.tcard .mt{font-size:11.5px;color:var(--t3);display:flex;gap:8px}
+.tcard .act{display:flex;justify-content:flex-end;gap:8px}
+
+.btn{height:34px;padding:0 16px;border-radius:17px;font-size:13px;font-weight:650;
+  display:inline-grid;place-items:center;border:.5px solid var(--line);background:var(--card);color:var(--t1)}
+.btn.pri{background:linear-gradient(120deg,var(--g1),var(--g2));color:#fff;border-color:transparent;
+  box-shadow:0 4px 12px rgba(200,80,40,.24),inset 0 1px 0 rgba(255,255,255,.3)}
+.btn.sm{height:30px;padding:0 14px;font-size:12.5px}
+
+/* 进度条 */
+.bar-i{height:4px;border-radius:2px;background:var(--track);overflow:hidden}
+.bar-i i{display:block;height:100%;width:62%;background:linear-gradient(90deg,var(--g1),var(--g2))}
+
+/* 输入/作者条 */
+.field{height:52px;border-radius:16px;background:var(--card);border:.5px solid var(--line);
+  box-shadow:inset 0 1px 0 var(--hi);display:flex;align-items:center;gap:10px;padding:0 14px}
+.field .nm{font-size:13px;flex:1}
+.field .ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-size:13px;
+  background:var(--track);color:var(--t2)}
+
+.cap{font-size:12.5px;color:var(--t2)}
+.cap b{color:var(--t1);font-weight:650;font-size:13.5px}
+.warnline{font-size:11.5px;color:var(--warn);display:flex;align-items:center;gap:6px}
+.warnline .go{margin-left:auto;color:var(--brand);font-weight:650}
+
+/* 下载计划卡 */
+.plan{padding:13px}
+.plan .h{display:flex;align-items:center;padding:0 2px 6px}
+.plan .h b{font-size:13.5px;font-weight:650}
+.plan .h span{margin-left:auto;font-size:12.5px;color:var(--brand);font-weight:650}
+.prow{display:flex;align-items:center;padding:9.5px 2px;font-size:13.5px}
+.prow+.prow{border-top:1px solid var(--track)}
+.prow .v2{margin-left:auto;font-weight:650}
+.prow .v2.mute{color:var(--t2);font-weight:600}
+.prow .go{margin-left:auto;color:var(--brand);font-weight:650;font-size:13px}
+
+.sec{display:flex;align-items:baseline;margin:4px 2px 0}
+.sec .t{font-size:13.5px;font-weight:650}
+.sec .a{margin-left:auto;font-size:12px;color:var(--brand);font-weight:650}
+.thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.th{aspect-ratio:4/5;border-radius:12px;position:relative;border:.5px solid rgba(255,255,255,.4)}
+.th .bd{position:absolute;left:5px;bottom:5px;font-size:9.5px;padding:2px 6px;border-radius:999px;
+  background:rgba(0,0,0,.42);color:#fff;font-weight:600}
+.th .ck{position:absolute;right:5px;top:5px;width:19px;height:19px;border-radius:50%;
+  display:grid;place-items:center;font-size:11px;font-weight:700;
+  background:linear-gradient(120deg,var(--g1),var(--g2));color:#fff}
+
+/* 常驻操作条 */
+.actionbar{flex:none;display:flex;align-items:center;gap:12px;padding:12px 16px 14px;margin:0 16px}
+.actionbar .lbl{font-size:13.5px;font-weight:650;line-height:1.35}
+.actionbar .lbl small{display:block;font-size:11px;color:var(--t2);font-weight:500;margin-top:1px}
+.actionbar .btn{margin-left:auto;min-width:132px;height:52px;border-radius:26px;font-size:14.5px;letter-spacing:.2px}
+
+.dock{flex:none;height:74px;margin:0 16px 12px;padding:0 4px;display:flex;align-items:center;
+  border-radius:999px}
+.dock .tab{flex:1;text-align:center;color:var(--t2)}
+.dock .tab.on{color:var(--brand);font-weight:650}
+.dock .g{display:block;font-size:17px;line-height:1.15;margin-bottom:1px}
+.dock .tab span{font-size:11px}
+
+.fab{position:absolute;right:16px;bottom:104px;width:46px;height:46px;border-radius:50%;
+  display:grid;place-items:center;font-size:22px;color:#fff;
+  background:linear-gradient(120deg,var(--g1),var(--g2));
+  box-shadow:0 6px 16px rgba(200,80,40,.30),inset 0 1px 0 rgba(255,255,255,.3)}
+
+.capt{margin:-10px 0 22px;font-size:11.5px;color:#8A837B}
+body.dark .capt{color:#7E776F}
+
+/* ══ 对比表 ════════════════════════════════════════════ */
+.cmp{max-width:1300px;margin:34px auto 0}
+.cmp h3{font-size:16px;font-weight:650;margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{text-align:left;padding:9px 12px;border-bottom:.5px solid rgba(127,127,127,.22)}
+th{font-weight:650;color:var(--t2);font-size:11.5px;letter-spacing:.3px;text-transform:none}
+td:first-child{color:#6E6862}
+body.dark td:first-child{color:#9E978E}
+tr:last-child td{border-bottom:none}
+</style>
+</head>
+<body>
+
+<div class="head">
+  <button class="toggle" onclick="tt()">切换亮 / 暗</button>
+  <h1>视觉基线稿 v0.1 · 低饱和玻璃 + 补顶面层</h1>
+  <div class="sub">
+    已定方向：<b>保留液态玻璃但收干净</b> —— 壁纸降饱和、表面 <b>6 级 → 3 级</b>（chrome / card / top）、
+    文字 <b>5 级 → 3 级</b>、新增实心 <b>SurfaceTop</b> 解决浮层穿透。以下三套是<b>同方向下的配色变体</b>，
+    结构、组件、规格完全一致，只换壁纸色调 / 品牌色 / 表面三级的取值。
+  </div>
+  <div class="note">
+    <b>本页刻意不使用 <code>backdrop-filter</code>。</b>浏览器里加模糊很容易，但 Compose 渲染不出来 ——
+    v3.1.7 的 sheet 穿透就是照搬了「白 62% + blur」才出的事。所以三套稿里所有表面都是<b>纯色叠加</b>，
+    必须靠壁纸降饱和来撑住层次。<br>另外：暗色下品牌色与语义色一律换高亮变体 —— 深色压近黑底只有 2~3:1，这是 v3.1.4 已经踩过的坑。<b>壁纸降饱和不只是审美选择，是没有模糊时唯一能做出层次的前提。</b>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="cmp">
+  <h3>三套的取舍</h3>
+  <table id="cmp"></table>
+</div>
+
+<script>
+/* ═══ 三套配色 ═══════════════════════════════════════════════
+   表面只有三级：--chrome（顶栏/dock/分段）--card（内容卡）--top（浮层/操作条/弹层）
+   文字只有三级：--t1 --t2 --t3                                        */
+const V = [
+{ id:'a', name:'暖砂', badge:'推荐', grad:'保留徕卡暖调血统，饱和度砍到约 1/3',
+  tagline:'延续现有暖调但去饱和 —— 迁移成本最低，品牌橙一字不改',
+  w1:'#EADFCB', w2:'#D8C9B1', w3:'#C4B299',
+  dw1:'#2C2620', dw2:'#1C1815',
+  chrome:'rgba(255,255,255,.50)', card:'rgba(255,255,255,.80)', top:'rgba(255,255,255,.955)',
+  line:'rgba(255,255,255,.72)', hi:'rgba(255,255,255,.92)',
+  dchrome:'rgba(255,255,255,.085)', dcard:'rgba(255,255,255,.145)', dtop:'rgba(26,23,20,.955)',
+  dline:'rgba(255,255,255,.16)', dhi:'rgba(255,255,255,.13)',
+  t1:'#241F18', t2:'rgba(36,31,24,.58)', t3:'rgba(36,31,24,.40)',
+  dt1:'#F2EDE6', dt2:'rgba(242,237,230,.56)', dt3:'rgba(242,237,230,.38)',
+  brand:'#E2560E', ok:'#0E7A52', fail:'#C8322F', warn:'#9C6210', dbrand:'#FFB37A', dok:'#7FD8B4', dfail:'#FF9AA6', dwarn:'#FFC77D', track:'rgba(36,31,24,.09)', dtrack:'rgba(255,255,255,.13)'
+},
+{ id:'b', name:'冷雾', badge:'', grad:'偏冷的雾灰蓝，最“工具”',
+  tagline:'像系统级下载器，冷、干净、暗色对比最好',
+  w1:'#D5DCE6', w2:'#C1CAD8', w3:'#ABB6C7',
+  dw1:'#1A1E25', dw2:'#111419',
+  chrome:'rgba(255,255,255,.48)', card:'rgba(255,255,255,.78)', top:'rgba(255,255,255,.955)',
+  line:'rgba(255,255,255,.72)', hi:'rgba(255,255,255,.92)',
+  dchrome:'rgba(255,255,255,.078)', dcard:'rgba(255,255,255,.135)', dtop:'rgba(21,24,29,.955)',
+  dline:'rgba(255,255,255,.15)', dhi:'rgba(255,255,255,.12)',
+  t1:'#1E2228', t2:'rgba(30,34,40,.58)', t3:'rgba(30,34,40,.40)',
+  dt1:'#EDF0F4', dt2:'rgba(237,240,244,.56)', dt3:'rgba(237,240,244,.38)',
+  brand:'#C2551B', ok:'#0B6E63', fail:'#C0323A', warn:'#8A5A12', dbrand:'#F2A870', dok:'#6FD0C4', dfail:'#FF9AA6', dwarn:'#FFC77D', track:'rgba(30,34,40,.09)', dtrack:'rgba(255,255,255,.125)'
+},
+{ id:'c', name:'墨绿纸感', badge:'', grad:'纸灰绿，最克制',
+  tagline:'接近纸质终端感，视觉噪音最低，长时间看不累',
+  w1:'#E0E5DB', w2:'#CED6C8', w3:'#B9C3B1',
+  dw1:'#171B17', dw2:'#0F120F',
+  chrome:'rgba(255,255,255,.52)', card:'rgba(255,255,255,.82)', top:'rgba(255,255,255,.965)',
+  line:'rgba(255,255,255,.72)', hi:'rgba(255,255,255,.92)',
+  dchrome:'rgba(255,255,255,.088)', dcard:'rgba(255,255,255,.148)', dtop:'rgba(20,23,20,.96)',
+  dline:'rgba(255,255,255,.16)', dhi:'rgba(255,255,255,.13)',
+  t1:'#1E231C', t2:'rgba(30,35,28,.58)', t3:'rgba(30,35,28,.40)',
+  dt1:'#EDF0E9', dt2:'rgba(237,240,233,.56)', dt3:'rgba(237,240,233,.38)',
+  brand:'#B0552A', ok:'#2F6B33', fail:'#B23A32', warn:'#8C5A16', dbrand:'#EFAE7E', dok:'#8FD08C', dfail:'#FF9AA6', dwarn:'#FFC77D', track:'rgba(30,35,28,.09)', dtrack:'rgba(255,255,255,.13)'
+}];
+
+const g1='#FF8A3C', g2='#FF5F6D';
+
+const SCREEN_TASKS = `
+<div class="phone">
+  <div class="nav s-chrome"><span class="ttl">任务</span><span class="r">清除已完成</span></div>
+  <div class="body pad-b">
+    <div class="stats">
+      <div class="stat"><b>4</b><span>抖音</span></div>
+      <div class="stat"><b>0</b><span>小红书</span></div>
+      <div class="stat"><b>0</b><span>快手</span></div>
+      <div class="stat"><b style="color:var(--fail)">3</b><span>失败</span></div>
+    </div>
+    <div class="tcard s-card">
+      <div class="r1"><div class="av">抖</div><span class="chip ok">已完成</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--t3)">10-11 15:10</span></div>
+      <div class="nm">完成任务 D</div>
+      <div class="mt"><span>视频 · 4 个文件</span></div>
+      <div class="act"><span class="btn sm">查看文件</span></div>
+    </div>
+    <div class="tcard s-card">
+      <div class="r1"><div class="av">抖</div><span class="chip fail">下载失败</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--t3)">10-11 15:09</span></div>
+      <div class="nm">失败任务 C</div>
+      <div class="mt"><span>视频 · 2 个文件</span><span>· 2 失败</span></div>
+      <div class="act"><span class="btn sm">重试</span></div>
+    </div>
+    <div class="tcard s-card">
+      <div class="r1"><div class="av">抖</div><span class="chip run">下载中</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--t3)">10-11 15:08</span></div>
+      <div class="nm">活动态任务 A</div>
+      <div class="mt"><span>视频 · 9 个文件</span><span>3.2 MB/s</span></div>
+      <div class="bar-i"><i></i></div>
+    </div>
+  </div>
+  <div class="fab">＋</div>
+  <div class="dock s-top">
+    <div class="tab"><span class="g">⇩</span><span>首页下载</span></div>
+    <div class="tab on"><span class="g">✓</span><span>任务</span></div>
+    <div class="tab"><span class="g">⚙</span><span>设置</span></div>
+  </div>
+</div>`;
+
+const SCREEN_HOME = `
+<div class="phone">
+  <div class="nav s-chrome"><span class="ttl">抖快红下载</span></div>
+  <div class="body" style="gap:7px">
+    <div class="field"><div class="av" style="width:32px;height:32px;border-radius:10px;font-size:14px">佟</div>
+      <span class="nm">佟大为</span><span class="ico">✕</span></div>
+    <div class="cap"><b>共 159 条作品 · 本次可取 18 条</b></div>
+    <div class="warnline">⚠ 匿名上限，登录后可下载更多<span class="go">去登录 ›</span></div>
+    <div class="stats">
+      <div class="stat"><b style="color:var(--brand)">18</b><span>新增</span></div>
+      <div class="stat"><b>0</b><span>已下载</span></div>
+      <div class="stat"><b>159</b><span>全部作品</span></div>
+    </div>
+    <div class="plan s-card">
+      <div class="h"><b>下载计划</b><span>调整</span></div>
+      <div class="prow"><span>新增作品</span><span class="v2">18</span></div>
+      <div class="prow"><span>已下载将跳过</span><span class="v2 mute">0</span></div>
+      <div class="prow"><span>手动挑选作品</span><span class="go">›</span></div>
+    </div>
+    <div class="sec"><span class="t">作品预览</span><span class="a">查看全部 18 条 ›</span></div>
+    <div class="thumbs">
+      <div class="th" style="background:linear-gradient(150deg,#D8C6AE,#B49B7C)"><div class="bd">▶ 视频</div></div>
+      <div class="th" style="background:linear-gradient(150deg,#C3CCDA,#94A3BA)"><div class="bd">▶ 视频</div></div>
+      <div class="th" style="background:linear-gradient(150deg,#D6CFC2,#AEA593)"><div class="ck">✓</div><div class="bd">▣ 图集 6</div></div>
+      <div class="th" style="background:linear-gradient(150deg,#C9D2C1,#9BAA90)"><div class="ck">✓</div><div class="bd">▶ 视频</div></div>
+      <div class="th" style="background:linear-gradient(150deg,#DCD3C6,#B0A292)"><div class="bd">▶ 视频</div></div>
+      <div class="th" style="background:linear-gradient(150deg,#C6CFD9,#98A5B4)"><div class="ck">✓</div><div class="bd">▶ 视频</div></div>
+    </div>
+  </div>
+  <div class="actionbar s-top">
+    <div class="lbl">将下载 18 个<small>跳过 0 个已下载</small></div>
+    <span class="btn pri">确认下载</span>
+  </div>
+  <div class="dock s-top">
+    <div class="tab on"><span class="g">⇩</span><span>首页下载</span></div>
+    <div class="tab"><span class="g">✓</span><span>任务</span></div>
+    <div class="tab"><span class="g">⚙</span><span>设置</span></div>
+  </div>
+</div>`;
+
+function hexA(hex,a){
+  const n=parseInt(hex.slice(1),16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+}
+function vars(v, dark){
+  const brand = dark ? v.dbrand : v.brand;
+  const ok = dark ? v.dok : v.ok;
+  const fail = dark ? v.dfail : v.fail;
+  const warn = dark ? v.dwarn : v.warn;
+  const fill = hexA(brand, dark ? 0.22 : 0.16);
+  const tail = `--brand:${brand};--ok:${ok};--fail:${fail};--warn:${warn};
+    --fill:${fill};--g1:${g1};--g2:${g2};`;
+  if (dark) {
+    return `--w1:${v.dw1};--w2:${v.dw2};--w3:${v.dw2};
+      --chrome:${v.dchrome};--card:${v.dcard};--top:${v.dtop};
+      --line:${v.dline};--hi:${v.dhi};
+      --t1:${v.dt1};--t2:${v.dt2};--t3:${v.dt3};
+      --track:${v.dtrack};${tail}`;
+  }
+  return `--w1:${v.w1};--w2:${v.w2};--w3:${v.w3};
+    --chrome:${v.chrome};--card:${v.card};--top:${v.top};
+    --line:${v.line};--hi:${v.hi};
+    --t1:${v.t1};--t2:${v.t2};--t3:${v.t3};
+    --track:${v.track};${tail}`;
+}
+
+const grid = document.getElementById('grid');
+grid.innerHTML = V.map(v => `
+<section class="v" data-id="${v.id}" style="${vars(v,false)}">
+  <h2>${v.name}${v.badge?`<span class="badge">${v.badge}</span>`:''}</h2>
+  <div class="tagline">${v.tagline}</div>
+  <div class="sw">
+    <div style="flex:1"><i style="background:linear-gradient(150deg,${v.w1},${v.w3})"></i><span class="lbl">壁纸</span></div>
+    <div style="flex:1"><i style="background:${v.brand}"></i><span class="lbl">品牌色</span></div>
+    <div style="flex:1"><i style="background:${v.chrome};border-color:${v.line}"></i><span class="lbl">chrome</span></div>
+    <div style="flex:1"><i style="background:${v.card};border-color:${v.line}"></i><span class="lbl">card</span></div>
+    <div style="flex:1"><i style="background:${v.top};border-color:${v.line}"></i><span class="lbl">top</span></div>
+  </div>
+  ${SCREEN_TASKS}
+  <div class="capt">① 任务列表 · 列表 / 统计格 / 状态胶囊 / 操作按钮 / dock / FAB<br>底部那条空带是有意留的 —— 视口底 = FAB 上缘，否则最后一张卡会被 FAB 压住</div>
+  ${SCREEN_HOME}
+  <div class="capt">② 主页下载就绪 · 输入条 / 计划卡 / 缩略图 / 常驻操作条</div>
+</section>`).join('');
+
+/* 暗色：只换变量，不换结构 */
+function applyDark(){
+  const dark = document.body.classList.contains('dark');
+  document.querySelectorAll('.v').forEach(el=>{
+    const v = V.find(x=>x.id===el.dataset.id);
+    el.style.cssText = vars(v, dark);
+  });
+}
+function tt(){ document.body.classList.toggle('dark'); applyDark();
+  try{localStorage.setItem('vg', document.body.classList.contains('dark')?'1':'0')}catch(e){} }
+if(localStorage.getItem('vg')==='1') document.body.classList.add('dark');
+if(/[?&]dark=1/.test(location.search)) document.body.classList.add('dark');
+
+document.getElementById('cmp').innerHTML = `
+<thead><tr><th>维度</th><th>暖砂</th><th>冷雾</th><th>墨绿纸感</th></tr></thead>
+<tbody>
+<tr><td>与现有设计的距离</td><td>最近（只降饱和）</td><td>中（色相整体转冷）</td><td>远（引入绿相）</td></tr>
+<tr><td>品牌橙</td><td>原样保留 #E2560E</td><td>略降饱和 #C2551B</td><td>转赭 #B0552A</td></tr>
+<tr><td>暗色对比度余量</td><td>中</td><td>最好（冷底 + 近白字反差最大）</td><td>好</td></tr>
+<tr><td>长时间使用疲劳</td><td>低</td><td>低</td><td>最低</td></tr>
+<tr><td>“液态玻璃”观感保留度</td><td>最高</td><td>中</td><td>低（偏纸感）</td></tr>
+<tr><td>三平台来源色（快手橙/小红书红/抖音）</td><td>都能压住</td><td>快手橙略跳</td><td>小红书红略跳</td></tr>
+</tbody>`;
+applyDark();
+</script>
+</body>
+</html>
