@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>视觉基线稿 v0.2 · 分级按钮 + 玻璃只留控制层</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  background:#EFEDE8;color:#241F18;padding:34px 30px 70px;-webkit-font-smoothing:antialiased;line-height:1.6}
+body.dark{background:#100F0D;color:#EDE9E2}
+h1{font-size:25px;font-weight:650;letter-spacing:-.3px}
+h2.s{font-size:18px;font-weight:650;margin:0 0 4px}
+.sub{font-size:13.5px;color:#6E6862;margin-top:8px;max-width:960px}
+body.dark .sub{color:#9E978E}
+.sub b{color:var(--brand);font-weight:600}
+.wrap{max-width:1690px;margin:0 auto}
+.toggle{float:right;margin-top:-44px;padding:8px 16px;border-radius:999px;cursor:pointer;
+  border:.5px solid rgba(120,110,100,.4);background:transparent;color:inherit;font:inherit;font-size:13px;font-weight:600}
+.sec{margin-top:40px}
+.lede{font-size:13px;color:#6E6862;margin-bottom:14px;max-width:960px}
+body.dark .lede{color:#9E978E}
+
+table{width:100%;max-width:1180px;border-collapse:collapse;font-size:12.5px;background:rgba(255,255,255,.35);
+  border-radius:14px;overflow:hidden}
+body.dark table{background:rgba(255,255,255,.04)}
+th,td{text-align:left;padding:9px 13px;border-bottom:.5px solid rgba(127,127,127,.22);vertical-align:top}
+th{font-weight:650;color:#6E6862;font-size:11.5px;letter-spacing:.2px}
+body.dark th{color:#9E978E}
+tr:last-child td{border-bottom:none}
+td small{color:#8A837B}
+body.dark td small{color:#7E776F}
+mark{background:rgba(226,86,14,.16);color:inherit;border-radius:4px;padding:0 5px;font-weight:600}
+body.dark mark{background:rgba(255,179,122,.20)}
+
+/* 阶段卡 */
+.stage{background:rgba(255,255,255,.45);border-radius:18px;padding:20px 22px;margin-top:14px}
+body.dark .stage{background:rgba(255,255,255,.045)}
+.dec{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.dec span{font-size:11.5px;padding:3px 10px;border-radius:999px;background:rgba(194,85,27,.12);
+  color:#8A4A22;font-weight:600}
+body.dark .dec span{background:rgba(245,164,110,.14);color:#F0B48A}
+
+/* ══ 手机 ══ */
+.phones{display:flex;gap:22px;flex-wrap:wrap}
+.phone{width:390px;height:844px;border-radius:34px;overflow:hidden;position:relative;
+  background:linear-gradient(158deg,var(--w1),var(--w2) 52%,var(--w3));
+  box-shadow:0 16px 38px rgba(60,40,20,.20),0 0 0 1px rgba(0,0,0,.06);
+  display:flex;flex-direction:column;font-size:13px;color:var(--t1);flex:none}
+body.dark .phone{box-shadow:0 16px 38px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.07)}
+.capt{width:390px;font-size:11.5px;color:#8A837B;margin:10px 0 22px;line-height:1.55}
+body.dark .capt{color:#7E776F}
+
+/* ★ 材质分配：控制层=玻璃 / 内容层=标准材质（实心） */
+.m-glass{background:var(--glass);border:.5px solid var(--glass-line);box-shadow:inset 0 1px 0 var(--glass-hi)}
+.m-surf{background:var(--surf);border:.5px solid var(--surf-line);box-shadow:none}
+.m-top{background:var(--top);border:.5px solid var(--top-line);box-shadow:0 8px 24px rgba(40,25,10,.14)}
+body.dark .m-top{box-shadow:0 10px 28px rgba(0,0,0,.5)}
+
+.nav{flex:none;height:52px;display:flex;align-items:center;gap:10px;padding:0 16px;
+  border-bottom:.5px solid var(--glass-line)}
+.nav .ttl{font-size:16px;font-weight:650}
+.nav .r{margin-left:auto;font-size:12.5px;font-weight:600;color:var(--brand)}
+/* ★ 内容层子项一律 flex:none —— 否则 flex 会把卡片压扁（v0.2 首版真事故：计划卡只剩 1 行） */
+.body{flex:1;min-height:0;overflow:hidden;padding:12px 16px 0;display:flex;flex-direction:column;gap:10px;
+  -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 32px),transparent);
+  mask-image:linear-gradient(to bottom,#000 calc(100% - 32px),transparent)}
+.body>*{flex:none}
+.pad-fab{padding-bottom:76px}
+.pad-bar{padding-bottom:96px}
+
+/* 卡片（标准材质：实心、无高光） */
+.card{border-radius:22px;overflow:hidden}
+.stat{flex:1;text-align:center;padding:9px 0;border-radius:12px}
+.stat b{display:block;font-size:16px;font-weight:600}
+.stat span{display:block;font-size:10.5px;color:var(--t3);margin-top:1px}
+.tcard{padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.tcard .r1{display:flex;align-items:center;gap:8px}
+.av{width:26px;height:26px;border-radius:9px;display:grid;place-items:center;font-size:12px;
+  font-weight:650;background:var(--fill);color:var(--brand)}
+.chip{font-size:11px;padding:2px 9px;border-radius:999px;font-weight:600}
+.chip.ok{background:rgba(14,122,82,.13);color:var(--ok)}
+.chip.fail{background:rgba(200,50,50,.12);color:var(--fail)}
+.chip.run{background:var(--fill);color:var(--brand)}
+.chip.wait{background:var(--track);color:var(--t2)}
+.tcard .nm{font-size:14px;font-weight:650}
+.tcard .mt{font-size:11.5px;color:var(--t3);display:flex;gap:8px}
+.tcard .act{display:flex;justify-content:flex-end;gap:8px}
+
+/* ══ 按钮阶梯 ══ */
+.btn{display:inline-grid;place-items:center;border:none;cursor:default;font:inherit;
+  color:var(--t1);background:var(--surf);box-shadow:inset 0 1px 0 var(--glass-hi)}
+.btn.ghost{background:transparent;border:.5px solid var(--surf-line);box-shadow:none}
+.btn.pri{background:linear-gradient(120deg,var(--g1),var(--g2));color:#fff;
+  box-shadow:0 6px 18px rgba(200,80,40,.26),inset 0 1px 0 rgba(255,255,255,.34)}
+.btn.down{background:linear-gradient(120deg,var(--g1),var(--g2));color:#fff;transform:scale(.975);
+  border-radius:26px;box-shadow:inset 0 2px 6px rgba(0,0,0,.22)}
+.btn.dis{background:var(--track);color:var(--t3);box-shadow:none}
+.b1{height:60px;border-radius:30px;font-size:16px;font-weight:650;letter-spacing:.2px;padding:0 28px}
+.b2{height:52px;border-radius:26px;font-size:14.5px;font-weight:650;letter-spacing:.2px;padding:0 20px}
+.b3{height:48px;border-radius:24px;font-size:14px;font-weight:650;padding:0 18px}
+.bi{width:48px;height:48px;border-radius:24px;font-size:22px}
+.tier5{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.tier5 .btn{border-radius:999px;font-weight:650}
+.tier-xs{height:32px;font-size:12px;padding:0 14px;border-radius:999px;background:var(--surf);border:.5px solid var(--surf-line);box-shadow:none}
+.tier-s{height:40px;font-size:13px;padding:0 16px;border-radius:999px;background:var(--surf);border:.5px solid var(--surf-line);box-shadow:none}
+.tier-m{height:48px;font-size:14px;padding:0 24px;border-radius:999px;background:var(--surf);border:.5px solid var(--surf-line);box-shadow:none}
+.tier-l{height:56px;font-size:15px;padding:0 28px;border-radius:999px;background:linear-gradient(120deg,var(--g1),var(--g2));color:#fff}
+.tier-xl{height:64px;font-size:17px;padding:0 34px;border-radius:999px;background:linear-gradient(120deg,var(--g1),var(--g2));color:#fff}
+
+.bar-i{height:4px;border-radius:2px;background:var(--track);overflow:hidden}
+.bar-i i{display:block;height:100%;width:62%;background:linear-gradient(90deg,var(--g1),var(--g2))}
+
+/* 内容件 */
+.field{height:56px;border-radius:16px;display:flex;align-items:center;gap:10px;padding:0 14px}
+.field .nm{font-size:13px;flex:1}
+.field .ico{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:17px;
+  background:var(--track);color:var(--t2)}
+.cap-l{font-size:12.5px;color:var(--t2)}
+.cap-l b{color:var(--t1);font-weight:650;font-size:13.5px}
+.warnline{font-size:11.5px;color:var(--warn);display:flex;align-items:center;gap:6px}
+.warnline .go{margin-left:auto;color:var(--brand);font-weight:650}
+.stats{display:flex;gap:6px}
+.plan{padding:14px}
+.plan .h{display:flex;align-items:center;padding:0 2px 8px}
+.plan .h b{font-size:13.5px;font-weight:650}
+.plan .h span{margin-left:auto;font-size:12.5px;color:var(--brand);font-weight:650}
+.prow{display:flex;align-items:center;padding:12px 2px;font-size:13.5px}
+.prow+.prow{border-top:1px solid var(--track)}
+.prow .v2{margin-left:auto;font-weight:650}
+.prow .v2.mute{color:var(--t2);font-weight:600}
+.prow .go{margin-left:auto;color:var(--brand);font-weight:650;font-size:13px}
+.opt{display:flex;align-items:center;gap:11px;padding:13px 2px;font-size:14px}
+.opt .rd{width:20px;height:20px;border-radius:50%;border:2px solid var(--t3);flex:none;display:grid;place-items:center}
+.opt.on .rd{border-color:var(--brand)}
+.opt.on .rd::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--brand)}
+.opt.on .lb{font-weight:650}
+.opt .lb{}
+.opt .rec{font-size:10px;padding:2px 7px;border-radius:999px;background:var(--fill);color:var(--brand);
+  font-weight:650;margin-left:7px}
+.opt .rv{margin-left:auto;font-size:13px;color:var(--t2)}
+.opt .step{display:flex;align-items:center;gap:9px;margin-left:auto}
+.opt .step b{width:40px;height:40px;border-radius:12px;background:var(--track);display:grid;place-items:center;
+  font-size:18px;font-weight:500}
+.opt .step span{width:34px;text-align:center;font-size:14px;font-weight:650}
+.sw{margin-left:auto;width:48px;height:28px;border-radius:999px;position:relative;flex:none;
+  background:linear-gradient(120deg,var(--g1),var(--g2));box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.sw::after{content:"";position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;
+  background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.sw.off{background:var(--track)}
+.sw.off::after{right:auto;left:4px}
+.note{font-size:11px;color:var(--t3);line-height:1.6;margin:14px 2px 12px;display:flex;gap:6px}
+.sec2{display:flex;align-items:baseline;margin:6px 2px 0}
+.sec2 .t{font-size:13.5px;font-weight:650}
+.sec2 .a{margin-left:auto;font-size:12px;color:var(--brand);font-weight:650}
+.thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.th{aspect-ratio:4/5;border-radius:12px;position:relative;border:.5px solid var(--line2)}
+/* ★ 暗色下缩略图必须压暗 —— 否则亮色作品图在近黑卡上刺眼（v3.1.4 同类缺陷）。只压底、不压角标。 */
+.th::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none}
+body.dark .th::after{background:rgba(0,0,0,.46)}
+.th .bd,.th .ck{z-index:2}
+.th .bd{position:absolute;left:5px;bottom:5px;font-size:9.5px;padding:2px 6px;border-radius:999px;
+  background:rgba(0,0,0,.42);color:#fff;font-weight:600}
+.th .ck{position:absolute;right:5px;top:5px;width:20px;height:20px;border-radius:50%;display:grid;
+  place-items:center;font-size:11px;font-weight:700;background:linear-gradient(120deg,var(--g1),var(--g2));color:#fff}
+.th .ck.off{background:rgba(0,0,0,.28);border:1.5px solid rgba(255,255,255,.9);color:transparent}
+.actionbar{flex:none;display:flex;align-items:center;gap:12px;padding:12px 16px 14px;margin:0 16px}
+.actionbar .lbl{font-size:13.5px;font-weight:650;line-height:1.35}
+.actionbar .lbl small{display:block;font-size:11px;color:var(--t2);font-weight:500;margin-top:1px}
+/* ★ dock / 操作条必须能压住页内浮层 —— 本 App 的 dock 由 MainActivity 画在页面之上，页内 sheet 盖不住它 */
+.dock{flex:none;height:74px;margin:0 16px 12px;padding:0 4px;display:flex;align-items:center;border-radius:999px;
+  position:relative;z-index:3}
+.dock .tab{flex:1;text-align:center;color:var(--t2)}
+.dock .tab.on{color:var(--brand);font-weight:650}
+.dock .g{display:block;font-size:22px;line-height:1.1;margin-bottom:2px}
+.dock .tab span{font-size:11px}
+.fab{position:absolute;right:16px;bottom:104px;width:56px;height:56px;border-radius:50%;
+  display:grid;place-items:center;font-size:26px;color:#fff;
+  background:linear-gradient(120deg,var(--g1),var(--g2));
+  box-shadow:0 8px 20px rgba(200,80,40,.32),inset 0 1px 0 rgba(255,255,255,.3)}
+
+/* sheet */
+.scrim{position:absolute;inset:0;background:rgba(16,12,24,.42)}
+.sheet{position:absolute;left:0;right:0;bottom:0;border-radius:30px 30px 0 0;padding:10px 18px 26px}
+.sheet .grab{width:40px;height:4px;border-radius:99px;background:var(--t3);margin:0 auto 16px}
+.sheet .h{font-size:12px;font-weight:650;color:var(--t2);letter-spacing:.3px;margin:14px 2px 4px}
+
+/* 配色对照 */
+.sw2{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px;border-radius:14px;padding:9px 9px 4px;
+  background:linear-gradient(150deg,var(--w1),var(--w3))}
+.sw2 i{display:block;width:100%;height:30px;border-radius:8px;border:.5px solid rgba(127,127,127,.30)}
+.sw2 .lbl{display:block;font-size:10.5px;color:rgba(127,120,110,.95);padding-left:2px}
+body.dark .sw2 .lbl{color:rgba(200,196,190,.85)}
+/* ★ 列宽必须走 class —— apply() 用 cssText 写变量，会冲掉 inline style 里的宽度 */
+.altcol{width:390px;flex:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+<button class="toggle" onclick="tt()">切换亮 / 暗</button>
+<h1>视觉基线稿 v0.2 · 分级按钮 + 玻璃只留控制层</h1>
+<div class="sub">
+  v0.1 定的方向（低饱和玻璃 + 补顶面层）不变，本稿把四项决定落成可执行规格：
+  <b>分级放大</b>（主 CTA 60 / 次级 52 / 图标 48 / FAB 56）· <b>按压态与形状形变</b> ·
+  <b>M3E 五档尺寸</b> · <b>统一图标体系</b> · <b>玻璃只留控制层</b>。
+  拇指热区不动 —— 现有主 CTA 在底部操作条、dock 在底、FAB 右下，本来就落在自然区。
+</div>
+<div class="sub" style="margin-top:10px">
+  ★最关键的一处结构变化：照 <b>Apple HIG 材质指引</b>「不要在内容层中使用 Liquid Glass」，
+  把<b>玻璃收进控制/导览层</b>（dock / 顶栏 / FAB / 开关 / 分段 / 常驻操作条），
+  <b>内容层一律换成实心标准材质</b>（卡片 / 统计格 / 计划卡 / 缩略图）。这直接根治了
+  「6 级 alpha、5 级挤在 12 个百分点内」那个病。开关与滑块是 Apple 明确列出的例外，仍保留玻璃。
+</div>
+
+<div class="stage">
+  <div class="dec">
+    <span>尺寸：分级放大</span><span>按压态 + 形状形变</span><span>M3E 五档尺寸</span>
+    <span>统一图标体系</span><span>玻璃只留控制层</span><span>拇指热区不动</span>
+  </div>
+  <div class="lede" style="margin:8px 0 0">依据均为官方一手：Apple HIG 按钮/材质、Material 3 Buttons、
+  Google 无障碍触摸目标。二手参考：M3 Expressive（五档尺寸）、NN/g（主 CTA ≈2cm）、Hoober（拇指热区）。</div>
+</div>
+
+<!-- ══ 1 材质分配 ══ -->
+<div class="sec">
+  <h2 class="s">1 · 材质分配表（这次重设计的结构改动）</h2>
+  <div class="lede">左列是层，右列是该层用哪种材质。玻璃只出现在「控制与导览」和「瞬态交互控件」上。</div>
+  <table id="t1"></table>
+</div>
+
+<!-- ══ 2 按钮阶梯 ══ -->
+<div class="sec">
+  <h2 class="s">2 · 按钮阶梯（分级放大）</h2>
+  <div class="lede">层级靠<b>颜色与形状</b>表达，不靠大小 —— Apple HIG 明确：「将两个不同大小的按钮放在一起
+  可能会让界面看起来令人困惑且不一致」。所以只有主 CTA 涨到 60dp，次级保持 52dp。</div>
+  <table id="t2"></table>
+  <div id="ladder"></div>
+  <div class="stage" style="margin-top:18px">
+    <h2 class="s" style="font-size:15px">M3 Expressive 五档尺寸（框架取自官方，逐档 dp 自行定档）</h2>
+    <div class="lede">M3E 把按钮扩到 XS/S/M/L/XL 五档并支持 round/square 两形，按压时形状形变。
+    官方未逐档公布 dp 值，这里按「48dp 触摸底线 + 视觉层级」自定档，并让 L1 = XL。</div>
+    <div id="tier5" class="tier5"></div>
+  </div>
+  <div class="stage">
+    <h2 class="s" style="font-size:15px">按压态三态对照</h2>
+    <div class="lede">Apple HIG 要求「始终为自定义按钮包括按压状态」。按下时：全圆角 30 → 26（方圆）、
+    缩放 0.975、内阴影加深，120ms 进入 / 180ms 回弹。</div>
+    <div id="states"></div>
+  </div>
+</div>
+
+<!-- ══ 3 图标 ══ -->
+<div class="sec">
+  <h2 class="s">3 · 图标体系</h2>
+  <div class="lede">现状是 14 个 Miuix 图标 + 自绘 <code>.sw</code>/<code>.ck</code>/<code>.step</code> 混用，
+  没有统一规格。这里定一套 24dp 网格、2dp 线宽的规格，并列出缺的功能图标。</div>
+  <div id="icons"></div>
+  <table id="t3" style="margin-top:14px"></table>
+</div>
+
+<!-- ══ 4 四屏 ══ -->
+<div class="sec">
+  <h2 class="s">4 · 四屏（暖砂配色承载新体系）</h2>
+  <div class="lede">任务列表 / 主页就绪 S2 / 调整面板 S3 / 选片页 S4。</div>
+  <div id="phones" class="phones"></div>
+</div>
+
+<!-- ══ 5 配色对照 ══ -->
+<div class="sec">
+  <h2 class="s">5 · 另两套配色（沿用 v0.1，材质分配已同步）</h2>
+  <div id="alt"></div>
+</div>
+</div>
+
+<script>
+const g1='#FF8A3C', g2='#FF5F6D';
+/* ★ 暗色表面梯子必须是「壁纸最暗 → 内容卡次亮 → 浮层最亮」（亮色侧的镜像）。
+   v0.2 首版 dsurf #1C1A16 与壁纸底部 #1C1815 几乎同色，dtop #141210 反而更暗 —— 卡片糊成一片、操作条像挖了个洞。 */
+const V=[
+{id:'a',name:'暖砂',
+ w1:'#EADFCB',w2:'#D8C9B1',w3:'#C4B299', dw1:'#2C2620',dw2:'#1C1815',
+ surf:'#FBF8F2', dsurf:'#282219', surfLine:'rgba(120,105,85,.20)', dsurfLine:'rgba(255,255,255,.13)',
+ top:'#FFFFFF', dtop:'#332C22', topLine:'rgba(120,105,85,.22)', dtopLine:'rgba(255,255,255,.15)',
+ glass:'rgba(255,255,255,.52)', dglass:'rgba(255,255,255,.085)',
+ glassLine:'rgba(255,255,255,.70)', dglassLine:'rgba(255,255,255,.17)',
+ glassHi:'rgba(255,255,255,.90)', dglassHi:'rgba(255,255,255,.13)',
+ t1:'#241F18',t2:'rgba(36,31,24,.58)',t3:'rgba(36,31,24,.40)',
+ dt1:'#F2EDE6',dt2:'rgba(242,237,230,.58)',dt3:'rgba(242,237,230,.40)',
+ brand:'#E2560E',dbrand:'#FFB37A', ok:'#0E7A52',dok:'#7FD8B4', fail:'#C8322F',dfail:'#FF9AA6',
+ warn:'#9C6210',dwarn:'#FFC77D', track:'rgba(36,31,24,.09)', dtrack:'rgba(255,255,255,.13)'},
+{id:'b',name:'冷雾',
+ w1:'#D5DCE6',w2:'#C1CAD8',w3:'#ABB6C7', dw1:'#1A1E25',dw2:'#111419',
+ surf:'#FAFBFD', dsurf:'#212530', surfLine:'rgba(95,105,125,.20)', dsurfLine:'rgba(255,255,255,.13)',
+ top:'#FFFFFF', dtop:'#2C313C', topLine:'rgba(95,105,125,.22)', dtopLine:'rgba(255,255,255,.15)',
+ glass:'rgba(255,255,255,.50)', dglass:'rgba(255,255,255,.08)',
+ glassLine:'rgba(255,255,255,.70)', dglassLine:'rgba(255,255,255,.16)',
+ glassHi:'rgba(255,255,255,.90)', dglassHi:'rgba(255,255,255,.12)',
+ t1:'#1E2228',t2:'rgba(30,34,40,.58)',t3:'rgba(30,34,40,.40)',
+ dt1:'#EDF0F4',dt2:'rgba(237,240,244,.58)',dt3:'rgba(237,240,244,.40)',
+ brand:'#C2551B',dbrand:'#F2A870', ok:'#0B6E63',dok:'#6FD0C4', fail:'#C0323A',dfail:'#FF9AA6',
+ warn:'#8A5A12',dwarn:'#FFC77D', track:'rgba(30,34,40,.09)', dtrack:'rgba(255,255,255,.125)'},
+{id:'c',name:'墨绿纸感',
+ w1:'#E0E5DB',w2:'#CED6C8',w3:'#B9C3B1', dw1:'#171B17',dw2:'#0F120F',
+ surf:'#FAFBF8', dsurf:'#212619', surfLine:'rgba(95,105,85,.20)', dsurfLine:'rgba(255,255,255,.13)',
+ top:'#FFFFFF', dtop:'#2C3324', topLine:'rgba(95,105,85,.22)', dtopLine:'rgba(255,255,255,.15)',
+ glass:'rgba(255,255,255,.54)', dglass:'rgba(255,255,255,.09)',
+ glassLine:'rgba(255,255,255,.70)', dglassLine:'rgba(255,255,255,.17)',
+ glassHi:'rgba(255,255,255,.90)', dglassHi:'rgba(255,255,255,.13)',
+ t1:'#1E231C',t2:'rgba(30,35,28,.58)',t3:'rgba(30,35,28,.40)',
+ dt1:'#EDF0E9',dt2:'rgba(237,240,233,.58)',dt3:'rgba(237,240,233,.40)',
+ brand:'#B0552A',dbrand:'#EFAE7E', ok:'#2F6B33',dok:'#8FD08C', fail:'#B23A32',dfail:'#FF9AA6',
+ warn:'#8C5A16',dwarn:'#FFC77D', track:'rgba(30,35,28,.09)', dtrack:'rgba(255,255,255,.13)'}
+];
+const hexA=(h,a)=>{const n=parseInt(h.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`};
+function vars(v,dark){
+  const g=k=>dark?v['d'+k]:v[k];
+  const brand=g('brand'),fill=hexA(brand,dark?.22:.16);
+  return `--w1:${g('w1')};--w2:${g('w2')};--w3:${g('w3')};
+--surf:${g('surf')};--surf-line:${g('surfLine')};--top:${g('top')};--top-line:${g('topLine')};
+--glass:${g('glass')};--glass-line:${g('glassLine')};--glass-hi:${g('glassHi')};
+--t1:${g('t1')};--t2:${g('t2')};--t3:${g('t3')};--line2:${g('surfLine')};
+--brand:${brand};--ok:${g('ok')};--fail:${g('fail')};--warn:${g('warn')};--track:${g('track')};
+--fill:${fill};--g1:${g1};--g2:${g2};`;
+}
+
+/* ── 表 ── */
+document.getElementById('t1').innerHTML=`<thead><tr><th>层</th><th>材质</th><th>取值（亮 / 暗）</th><th>依据</th></tr></thead><tbody>
+<tr><td>壁纸</td><td>低饱和渐变</td><td>3 停 / 2 停</td><td><small>没有 backdrop-filter 时，降饱和是唯一能做层次的前提</small></td></tr>
+<tr><td>顶栏 · dock · 分段 · FAB · 开关</td><td><mark>玻璃</mark></td><td>白 50~54% / 白 8~9%</td><td><small>Apple HIG：Liquid Glass 用于控制与导览层</small></td></tr>
+<tr><td>卡片 · 统计格 · 计划卡 · 缩略图 · 任务卡</td><td><mark>标准材质（实心）</mark></td><td>暖白 #FBF8F2 / 暗 <b>#282219</b></td><td><small>Apple HIG：「不要在内容层中使用 Liquid Glass」</small></td></tr>
+<tr><td>常驻操作条 · sheet · 对话框</td><td>浮层材质（最实）</td><td>纯白 #FFFFFF / 暗 <b>#332C22</b></td><td><small>必须压住下层内容，这是 v3.1.7 sheet 穿透的根治</small></td></tr>
+<tr><td colspan="4"><b>★ 暗色表面梯子必须是亮色侧的镜像</b>：壁纸最暗 → 内容卡次亮 → 浮层最亮。
+  <small>v0.2 首版把 dtop 取成 #141210（比 dsurf 还暗）、dsurf 又和壁纸底部同色 → 卡片糊成一片、操作条像挖了个洞。这跟 v3.1.4「暗色侧才是真缺陷」是同一类错。</small></td></tr>
+<tr><td>描边</td><td>1px 折射边</td><td>白 70% / 白 12~17%</td><td><small>玻璃层加顶部 1px 内高光，保住玻璃感</small></td></tr>
+<tr><td>文字</td><td>3 级</td><td>primary / 55% / 40%</td><td><small>从 5 级收到 3 级</small></td></tr>
+</tbody>`;
+
+document.getElementById('t2').innerHTML=`<thead><tr><th>层级</th><th>高度</th><th>圆角</th><th>字号</th><th>水平内边距</th><th>触摸区域</th><th>依据</th></tr></thead><tbody>
+<tr><td><mark>L1 主 CTA</mark>（确认下载 / 解析作品 / 开始使用）</td><td><b>60dp</b></td><td>30dp 全圆角</td><td>16sp</td><td>28dp</td><td>60×60dp</td><td><small>NN/g：主 CTA 该比最小值大一倍（≈2cm）；远超 48dp 底线</small></td></tr>
+<tr><td>L2 次级动作（粘贴 / 重试 / 完成 / 查看文件）</td><td>52dp</td><td>26dp 全圆角</td><td>14.5sp</td><td>20dp</td><td>52×52dp</td><td><small>维持 v3.1.5 现状；已高于 M3 默认 40dp</small></td></tr>
+<tr><td>L3 图标按钮（返回 / ✕ / 更多）</td><td>48dp</td><td>24dp</td><td>图标 24dp</td><td>—</td><td><b>48×48dp</b></td><td><small>M3：图标按钮触摸目标至少 48dp，即使嵌套</small></td></tr>
+<tr><td>FAB</td><td><b>56dp</b></td><td>圆形</td><td>图标 24dp</td><td>—</td><td>56×56dp</td><td><small>M3 FAB regular 56dp（现 46dp，小了 10dp）</small></td></tr>
+<tr><td>控件间距</td><td colspan="3">相邻触摸目标之间留 <b>≥8dp</b></td><td>—</td><td>—</td><td><small>Google 无障碍：48×48dp + 8dp 间距</small></td></tr>
+</tbody>`;
+
+document.getElementById('t3').innerHTML=`<thead><tr><th>项</th><th>规格</th><th>说明</th></tr></thead><tbody>
+<tr><td>网格</td><td>24×24dp</td><td>安全区 2dp，视觉主体 20dp</td></tr>
+<tr><td>线宽</td><td><b>2dp</b></td><td>与 M3 前置图标 20dp、按钮字号 14.5sp 同量级</td></tr>
+<tr><td>端点</td><td>圆头圆角</td><td>与全圆角按钮语言一致</td></tr>
+<tr><td>光学对齐</td><td>圆形图标视觉放大 ≈5%</td><td>同尺寸下圆形显得小</td></tr>
+<tr><td>颜色</td><td>跟随文字三级</td><td>不用品牌色，除非该图标本身就是 CTA</td></tr>
+</tbody>`;
+
+/* ── 按钮阶梯实拍 ── */
+document.getElementById('ladder').innerHTML=`
+<div class="stage" style="display:flex;gap:26px;align-items:flex-end;flex-wrap:wrap">
+  <div style="text-align:center">
+    <button class="btn b1 pri">确认下载</button>
+    <div style="font-size:11px;color:var(--t3);margin-top:7px">L1 · 60dp · 主 CTA</div>
+  </div>
+  <div style="text-align:center">
+    <button class="btn b1 pri">解析作品</button>
+    <div style="font-size:11px;color:var(--t3);margin-top:7px">L1 · 60dp（短文案）</div>
+  </div>
+  <div style="text-align:center">
+    <button class="btn b2">从剪贴板粘贴</button>
+    <div style="font-size:11px;color:var(--t3);margin-top:7px">L2 · 52dp · 次级</div>
+  </div>
+  <div style="text-align:center">
+    <div style="display:flex;gap:10px">
+      <div class="btn bi">✕</div><div class="btn bi">↺</div><div class="btn bi">⋯</div>
+    </div>
+    <div style="font-size:11px;color:var(--t3);margin-top:7px">L3 · 48dp · 图标（间距 ≥10dp）</div>
+  </div>
+  <div style="text-align:center">
+    <div class="fab" style="position:static">＋</div>
+    <div style="font-size:11px;color:var(--t3);margin-top:7px">FAB · 56dp</div>
+  </div>
+</div>`;
+
+document.getElementById('tier5').innerHTML=`
+<div style="text-align:center"><button class="tier-xs">XS</button><div style="font-size:10.5px;color:var(--t3);margin-top:6px">32</div></div>
+<div style="text-align:center"><button class="tier-s">Small</button><div style="font-size:10.5px;color:var(--t3);margin-top:6px">40（M3 默认）</div></div>
+<div style="text-align:center"><button class="tier-m">Medium</button><div style="font-size:10.5px;color:var(--t3);margin-top:6px">48</div></div>
+<div style="text-align:center"><button class="tier-l">Large</button><div style="font-size:10.5px;color:var(--t3);margin-top:6px">56</div></div>
+<div style="text-align:center"><button class="tier-xl">Extra large</button><div style="font-size:10.5px;color:var(--t3);margin-top:6px">64 = 主 CTA</div></div>
+`;
+
+document.getElementById('states').innerHTML=`
+<div style="display:flex;gap:22px;align-items:center;flex-wrap:wrap">
+  <div style="text-align:center"><button class="btn b1 pri">确认下载</button><div style="font-size:11px;color:var(--t3);margin-top:7px">常态</div></div>
+  <div style="text-align:center"><button class="btn down">确认下载</button><div style="font-size:11px;color:var(--t3);margin-top:7px">按下 · 圆角 30→26 · 缩放 .975</div></div>
+  <div style="text-align:center"><button class="btn b1 dis">确认下载</button><div style="font-size:11px;color:var(--t3);margin-top:7px">禁用 · 去掉渐变</div></div>
+</div>`;
+
+document.getElementById('icons').innerHTML=`<div style="display:flex;gap:26px;flex-wrap:wrap">
+${['⇩','✓','⚙','＋','✕','↺','↗','▤','⋯','⇅','⤓','☑'].map(s=>`
+<div style="text-align:center;width:74px">
+  <div style="width:56px;height:56px;border-radius:16px;display:grid;place-items:center;font-size:26px;
+    background:var(--surf);border:.5px solid var(--surf-line);margin:0 auto">${s}</div>
+  <div style="font-size:10.5px;color:var(--t3);margin-top:6px">24dp 网格<br>2dp 线宽</div>
+</div>`).join('')}
+</div>`;
+
+/* ── 四屏 ── */
+const SCR={
+tasks:`
+<div class="phone">
+  <div class="nav m-glass"><span class="ttl">任务</span><span class="r">清除已完成</span></div>
+  <div class="body pad-fab">
+    <div class="stats">
+      <div class="stat m-surf"><b>4</b><span>抖音</span></div>
+      <div class="stat m-surf"><b>0</b><span>小红书</span></div>
+      <div class="stat m-surf"><b>0</b><span>快手</span></div>
+      <div class="stat m-surf"><b style="color:var(--fail)">3</b><span>失败</span></div>
+    </div>
+    <div class="tcard m-surf card">
+      <div class="r1"><div class="av">抖</div><span class="chip ok">已完成</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--t3)">10-11 15:10</span></div>
+      <div class="nm">完成任务 D</div><div class="mt"><span>视频 · 4 个文件</span></div>
+      <div class="act"><button class="btn b2 ghost">查看文件</button></div>
+    </div>
+    <div class="tcard m-surf card">
+      <div class="r1"><div class="av">抖</div><span class="chip fail">下载失败</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--t3)">10-11 15:09</span></div>
+      <div class="nm">失败任务 C</div><div class="mt"><span>视频 · 2 个文件</span><span>· 2 失败</span></div>
+      <div class="act"><button class="btn b2">重试</button></div>
+    </div>
+    <div class="tcard m-surf card">
+      <div class="r1"><div class="av">抖</div><span class="chip run">下载中</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--t3)">10-11 15:08</span></div>
+      <div class="nm">活动态任务 A</div><div class="mt"><span>视频 · 9 个文件</span><span>3.2 MB/s</span></div>
+      <div class="bar-i"><i></i></div>
+    </div>
+  </div>
+  <div class="fab">＋</div>
+  <div class="dock m-glass">
+    <div class="tab"><span class="g">⇩</span><span>首页下载</span></div>
+    <div class="tab on"><span class="g">✓</span><span>任务</span></div>
+    <div class="tab"><span class="g">⚙</span><span>设置</span></div>
+  </div>
+</div>`,
+home:`
+<div class="phone">
+  <div class="nav m-glass"><span class="ttl">抖快红下载</span></div>
+  <div class="body" style="gap:7px">
+    <div class="field m-surf"><div class="av" style="width:34px;height:34px;border-radius:11px;font-size:14px">佟</div>
+      <span class="nm">佟大为</span><span class="ico">✕</span></div>
+    <div class="cap-l"><b>共 159 条作品 · 本次可取 18 条</b></div>
+    <div class="warnline">⚠ 匿名上限，登录后可下载更多<span class="go">去登录 ›</span></div>
+    <div class="stats">
+      <div class="stat m-surf"><b style="color:var(--brand)">18</b><span>新增</span></div>
+      <div class="stat m-surf"><b>0</b><span>已下载</span></div>
+      <div class="stat m-surf"><b>159</b><span>全部作品</span></div>
+    </div>
+    <div class="plan m-surf card">
+      <div class="h"><b>下载计划</b><span>调整</span></div>
+      <div class="prow"><span>新增作品</span><span class="v2">18</span></div>
+      <div class="prow"><span>已下载将跳过</span><span class="v2 mute">0</span></div>
+      <div class="prow"><span>手动挑选作品</span><span class="go">›</span></div>
+    </div>
+    <div class="sec2"><span class="t">作品预览</span><span class="a">查看全部 18 条 ›</span></div>
+    <div class="thumbs">
+      <div class="th" style="background:linear-gradient(150deg,#D8C6AE,#B49B7C)"><div class="bd">▶ 视频</div></div>
+      <div class="th" style="background:linear-gradient(150deg,#C3CCDA,#94A3BA)"><div class="bd">▶ 视频</div></div>
+      <div class="th" style="background:linear-gradient(150deg,#D6CFC2,#AEA593)"><div class="ck">✓</div><div class="bd">▣ 图集 6</div></div>
+      <div class="th" style="background:linear-gradient(150deg,#C9D2C1,#9BAA90)"><div class="ck">✓</div><div class="bd">▶ 视频</div></div>
+      <div class="th" style="background:linear-gradient(150deg,#DCD3C6,#B0A292)"><div class="bd">▶ 视频</div></div>
+      <div class="th" style="background:linear-gradient(150deg,#C6CFD9,#98A5B4)"><div class="ck">✓</div><div class="bd">▶ 视频</div></div>
+    </div>
+  </div>
+  <div class="actionbar m-top">
+    <div class="lbl">将下载 18 个<small>跳过 0 个已下载</small></div>
+    <button class="btn b1 pri">确认下载</button>
+  </div>
+  <div class="dock m-glass">
+    <div class="tab on"><span class="g">⇩</span><span>首页下载</span></div>
+    <div class="tab"><span class="g">✓</span><span>任务</span></div>
+    <div class="tab"><span class="g">⚙</span><span>设置</span></div>
+  </div>
+</div>`,
+sheet:`
+<div class="phone">
+  <div class="nav m-glass"><span class="ttl">抖快红下载</span></div>
+  <div class="body" style="gap:7px">
+    <div class="field m-surf"><div class="av" style="width:34px;height:34px;border-radius:11px;font-size:14px">佟</div>
+      <span class="nm">佟大为</span><span class="ico">✕</span></div>
+    <div class="cap-l"><b>共 159 条作品</b></div>
+  </div>
+  <div class="scrim"></div>
+  <div class="sheet m-top" style="padding-bottom:100px">
+    <div class="grab"></div>
+    <div class="h">下载范围</div>
+    <div class="opt on"><div class="rd"></div><span class="lb">仅新增</span><span class="rec">推荐</span><span class="rv">18</span></div>
+    <div class="opt"><div class="rd"></div><span class="lb">全部作品</span><span class="rv">18</span></div>
+    <div class="opt"><div class="rd"></div><span class="lb">最近 N 条</span>
+      <span class="step"><b>−</b><span>18</span><b>+</b></span></div>
+    <div class="h">选项</div>
+    <div class="opt"><span class="lb">包含图文作品</span><span class="sw"></span></div>
+    <div class="opt" style="padding-top:6px"><span class="lb">跳过已下载</span><span class="sw"></span></div>
+    <div class="note">ⓘ 手动挑选作品时，本面板的设置不生效</div>
+    <button class="btn b1 pri" style="width:100%">完成</button>
+  </div>
+  <div class="dock m-glass">
+    <div class="tab on"><span class="g">⇩</span><span>首页下载</span></div>
+    <div class="tab"><span class="g">✓</span><span>任务</span></div>
+    <div class="tab"><span class="g">⚙</span><span>设置</span></div>
+  </div>
+</div>`,
+picker:`
+<div class="phone">
+  <div class="nav m-glass"><span style="font-size:17px;color:var(--t2);margin-right:2px">←</span>
+    <span class="ttl">挑选作品</span><span class="r">全选</span></div>
+  <div class="body" style="gap:8px">
+    <div style="display:flex;gap:8px">
+      <div class="m-surf" style="flex:1;text-align:center;padding:10px 0;border-radius:14px;font-size:12.5px;color:var(--t2)">全部 18</div>
+      <div class="m-glass" style="flex:1;text-align:center;padding:10px 0;border-radius:14px;font-size:12.5px;
+        font-weight:650;color:var(--brand);background:var(--fill);border-color:transparent">新增 18</div>
+      <div class="m-surf" style="flex:1;text-align:center;padding:10px 0;border-radius:14px;font-size:12.5px;color:var(--t2)">已下载 0</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="m-surf" style="font-size:11.5px;padding:6px 12px;border-radius:999px;color:var(--brand);
+        border:.5px solid var(--brand)">视频 18</span>
+      <span class="m-surf" style="font-size:11.5px;padding:6px 12px;border-radius:999px;color:var(--t2)">图集 0</span>
+      <span style="margin-left:auto;font-size:11.5px;font-weight:650;color:var(--brand)">反选</span>
+    </div>
+    <div class="thumbs pad-bar">
+      <div class="th" style="background:linear-gradient(150deg,#D8C6AE,#B49B7C)"><div class="ck">✓</div><div class="bd">▶ 视频</div></div>
+      <div class="th" style="background:linear-gradient(150deg,#C3CCDA,#94A3BA)"><div class="ck">✓</div><div class="bd">▶ 视频</div></div>
+      <div class="th" style="background:linear-gradient(150deg,#D6CFC2,#AEA593)"><div class="ck off"></div><div class="bd">▶ 视频</div></div>
+      <div class="th" style="background:linear-gradient(150deg,#C9D2C1,#9BAA90)"><div class="ck">✓</div><div class="bd">▣ 图集 6</div></div>
+      <div class="th" style="background:linear-gradient(150deg,#DCD3C6,#B0A292)"><div class="ck">✓</div><div class="bd">▶ 视频</div></div>
+      <div class="th" style="background:linear-gradient(150deg,#C6CFD9,#98A5B4)"><div class="ck off"></div><div class="bd">▶ 视频</div></div>
+    </div>
+  </div>
+  <div class="actionbar m-top">
+    <div class="lbl">已选 16 个<small>2 个未选</small></div>
+    <button class="btn b1 pri">下载已选</button>
+  </div>
+  <div class="dock m-glass">
+    <div class="tab on"><span class="g">⇩</span><span>首页下载</span></div>
+    <div class="tab"><span class="g">✓</span><span>任务</span></div>
+    <div class="tab"><span class="g">⚙</span><span>设置</span></div>
+  </div>
+</div>`
+};
+
+document.getElementById('phones').innerHTML=[
+  ['① 任务列表 · 内容层已是实心材质，dock/FAB 才是玻璃',SCR.tasks],
+  ['② 主页就绪 S2 · 主 CTA 升到 60dp（对比 v0.1 的 52dp）。内容高于视口，底部渐隐 = 真机此处可滚动',SCR.home],
+  ['③ 调整面板 S3 · 开关与滑块是 Apple 明确列出的玻璃例外。底部 100px 留白 = 让开 dock（真机 dock 画在页面之上，sheet 盖不住）',SCR.sheet],
+  ['④ 选片页 S4 · 二级页，网格 + 常驻操作条',SCR.picker]
+].map(([c,h])=>`<div>${h}<div class="capt">${c}</div></div>`).join('');
+
+document.getElementById('alt').innerHTML=`<div class="phones">`+[V[1],V[2]].map(v=>`
+<div class="altcol" data-id="${v.id}">
+  <div class="sw2">
+    <div style="flex:1"><i style="background:linear-gradient(150deg,${v.w1},${v.w3})"></i><span class="lbl">壁纸</span></div>
+    <div style="flex:1"><i style="background:${v.brand};border-color:${v.surfLine}"></i><span class="lbl">品牌色</span></div>
+    <div style="flex:1"><i style="background:${v.surf};border-color:${v.surfLine}"></i><span class="lbl">surf 实心</span></div>
+    <div style="flex:1"><i style="background:${v.top};border-color:${v.topLine}"></i><span class="lbl">top 浮层</span></div>
+    <div style="flex:1"><i style="background:${v.glass};border-color:${v.glassLine}"></i><span class="lbl">glass 玻璃</span></div>
+  </div>
+  ${SCR.tasks}
+  <div class="capt">${v.name} · 材质分配与 v0.1 一致（玻璃只在顶栏 / dock / FAB / 开关）</div>
+</div>`).join('')+`</div>`;
+
+function apply(){
+  const dark=document.body.classList.contains('dark');
+  document.querySelectorAll('[data-id]').forEach(el=>{
+    const v=V.find(x=>x.id===el.dataset.id); el.style.cssText=vars(v,dark);
+  });
+  document.body.style.setProperty('--w1',vars(V[0],dark).match(/--w1:([^;]+)/)[1]);
+  document.body.style.setProperty('--w2',vars(V[0],dark).match(/--w2:([^;]+)/)[1]);
+  document.body.style.setProperty('--w3',vars(V[0],dark).match(/--w3:([^;]+)/)[1]);
+  ['surf','surf-line','top','top-line','glass','glass-line','glass-hi','t1','t2','t3','line2','brand','ok','fail','warn','track','fill','g1','g2']
+    .forEach(k=>{const m=vars(V[0],dark).match(new RegExp('--'+k.replace(/[-]/g,'\\-')+':([^;]+)'));if(m)document.body.style.setProperty('--'+k,m[1]);});
+}
+function tt(){document.body.classList.toggle('dark');apply();
+  try{localStorage.setItem('vg2',document.body.classList.contains('dark')?'1':'0')}catch(e){}}
+if(localStorage.getItem('vg2')==='1')document.body.classList.add('dark');
+if(/[?&]dark=1/.test(location.search))document.body.classList.add('dark');
+apply();
+</script>
+</body>
+</html>
