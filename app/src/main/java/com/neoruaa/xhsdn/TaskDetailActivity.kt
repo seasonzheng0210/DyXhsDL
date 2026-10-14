@@ -336,7 +336,7 @@ private fun TaskDetailScreen(
                         imageVector = MiuixIcons.Back,
                         contentDescription = "返回",
                         tint = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(24.dp) // v3.2.1 图标网格统一 22→24
                     )
                 }
                 // 居中标题
@@ -431,7 +431,7 @@ private fun AuthorHomeEntryCard(
                     imageVector = MiuixIcons.ContactsCircle,
                     contentDescription = null,
                     tint = accentFg(),
-                    modifier = Modifier.size(19.dp)
+                    modifier = Modifier.size(20.dp) // v3.2.1 图标网格统一 19→20
                 )
             }
             Spacer(Modifier.width(12.dp))

@@ -149,6 +149,8 @@ import com.neoruaa.xhsdn.ui.SelectableMediaWaterfall
 import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
 import com.neoruaa.xhsdn.ui.glass.GlassDialog
 import com.neoruaa.xhsdn.ui.glass.GlassLogBody
+import com.neoruaa.xhsdn.ui.glass.GlassBtnTier
+import com.neoruaa.xhsdn.ui.glass.GlassPrimaryButton
 import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
 import com.neoruaa.xhsdn.ui.glass.GlassTokens
 import com.neoruaa.xhsdn.ui.glass.GlassSpec
@@ -1718,7 +1720,7 @@ private fun SelectiveDownloadSheet(
                 Icon(
                     imageVector = MiuixIcons.Close,
                     contentDescription = stringResource(R.string.cancel),
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(24.dp) // v3.2.1 图标网格统一 22→24
                 )
             }
         },
@@ -1730,7 +1732,7 @@ private fun SelectiveDownloadSheet(
                 Icon(
                     imageVector = MiuixIcons.Download,
                     contentDescription = stringResource(R.string.download_button),
-                    modifier = Modifier.size(26.dp),
+                    modifier = Modifier.size(24.dp), // v3.2.1 图标网格统一 26→24
                     // ★橙色图标不要用 primary（半透明，暗色下压成深棕 ~1.9:1）；
                     //   禁用态也别硬编码 Color.Gray，跟随主题次级文字色
                     tint = if (canSave) accentFg() else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.38f)
@@ -2169,23 +2171,12 @@ private fun HistoryPage(
                                 EventTracker.track(emptyCtx, "empty_paste", mapOf("where" to "tasks"))
                                 if (manualInputLinks) onShowInputDialogChange(true) else onDownload()
                             }
-                            GlassPrimaryWrap(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(BtnHeight),
-                                cornerRadius = BtnCornerRadius
-                            ) {
-                                Button(
-                                    onClick = pasteAction,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(BtnHeight),
-                                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                                insideMargin = PaddingValues(horizontal = BtnBarPadH, vertical = 0.dp)
-                                ) {
-                                    Text("粘贴链接", color = Color.White, fontSize = BtnFontSize, fontWeight = BtnFontWeight, letterSpacing = BtnLetterSpacing)
-                                }
-                            }
+                            // v3.2.1：空态页唯一的主操作 → L1 60dp
+                            GlassPrimaryButton(
+                                text = "粘贴链接",
+                                onClick = pasteAction,
+                                tier = GlassBtnTier.L1
+                            )
                             Spacer(Modifier.height(12.dp))
                             // 次级玻璃按钮：批量下载博主主页（同 .btn 尺寸，只有底不同 —— 规范里
                             // .btn.ghost 与 .btn.primary 高度/圆角/字号完全一致）
@@ -4024,7 +4015,7 @@ private fun HomepageSourceBar(entryFrom: String, onReturn: () -> Unit) {
             imageVector = MiuixIcons.Link,
             contentDescription = null,
             tint = accentFg(),
-            modifier = Modifier.size(15.dp)
+            modifier = Modifier.size(16.dp) // v3.2.1 图标网格统一 15→16（行内小图标档）
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
@@ -4092,47 +4083,16 @@ private fun HomepageActionBar(
         // 尺寸完全一致，保证"位置稳定 > 省空间"这一原则在禁用态也成立。
         // 排版同样对齐 .btn：14.5sp / 650 / .2px —— 此前 14sp/Medium 比同页的「解析作品」
         // 小一档，同一屏里上下两个主按钮大小不一致（用户直接指出的问题）。
-        if (enabled) {
-            GlassPrimaryWrap(
-                modifier = Modifier
-                    .height(BtnHeight)
-                    .width(BtnBarWidth),
-                cornerRadius = BtnCornerRadius
-            ) {
-                Button(
-                    onClick = onPrimary,
-                    modifier = Modifier.fillMaxWidth().height(BtnHeight),
-                    colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                    insideMargin = PaddingValues(horizontal = BtnBarPadH, vertical = 0.dp)
-                ) {
-                    Text(
-                        text = primaryText,
-                        color = Color.White,
-                        fontSize = BtnFontSize,
-                        fontWeight = BtnFontWeight,
-                        letterSpacing = BtnLetterSpacing,
-                        maxLines = 1
-                    )
-                }
-            }
-        } else {
-            Button(
-                onClick = { },
-                enabled = false,
-                modifier = Modifier
-                    .height(BtnHeight)
-                    .width(BtnBarWidth),
-                cornerRadius = BtnCornerRadius
-            ) {
-                Text(
-                    text = primaryText,
-                    fontSize = BtnFontSize,
-                    fontWeight = BtnFontWeight,
-                    letterSpacing = BtnLetterSpacing,
-                    maxLines = 1
-                )
-            }
-        }
+        // v3.2.1：主 CTA 升到 **L1 60dp**（v0.2 阶梯），并统一走 `GlassPrimaryButton` ——
+        // 顺带拿到之前完全没有的按压态（Apple HIG：「始终为自定义按钮包括按压状态」）。
+        // 宽度仍固定 `BtnBarWidth`，换文案时宽度不跳动。
+        GlassPrimaryButton(
+            text = primaryText,
+            onClick = onPrimary,
+            tier = GlassBtnTier.L1,
+            enabled = enabled,
+            barWidth = BtnBarWidth
+        )
     }
 }
 
@@ -4684,28 +4644,8 @@ private fun HomePlanSheet(
                 lineHeight = 17.6.sp,
                 modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = 14.dp, bottom = 12.dp)
             )
-            // `.btn.primary` 完成 —— 52dp 胶囊，显式高度避免内层 Button 吃 Miuix 默认 ≈41dp
-            GlassPrimaryWrap(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(BtnHeight),
-                cornerRadius = BtnCornerRadius
-            ) {
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth().height(BtnHeight),
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                    insideMargin = PaddingValues(horizontal = BtnBarPadH, vertical = 0.dp)
-                ) {
-                    Text(
-                        text = "完成",
-                        color = if (dark) GlassTokens.OrangeOnDark else Color.White,
-                        fontSize = BtnFontSize,
-                        fontWeight = BtnFontWeight,
-                        letterSpacing = BtnLetterSpacing
-                    )
-                }
-            }
+            // v3.2.1：面板「完成」= 该视图唯一的主操作 → L1 60dp（`GlassPrimaryButton` 含按压态）
+            GlassPrimaryButton(text = "完成", onClick = onDismiss, tier = GlassBtnTier.L1)
         }
     }
 }

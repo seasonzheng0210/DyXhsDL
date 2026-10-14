@@ -35,6 +35,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.neoruaa.xhsdn.ui.glass.GlassBtnTier
+import com.neoruaa.xhsdn.ui.glass.GlassPrimaryButton
 import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
 import com.neoruaa.xhsdn.ui.glass.GlassSpec
 import com.neoruaa.xhsdn.ui.glass.GlassTokens
@@ -160,41 +162,24 @@ fun OnboardingScreen(
                     }
                 }
                 Spacer(Modifier.height(22.dp))
-                GlassPrimaryWrap(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    cornerRadius = 26.dp
-                ) {
-                    Button(
-                        onClick = {
-                            when (page) {
-                                0 -> page = 1
-                                1 -> page = 2
-                                else -> onDone()
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        colors = ButtonDefaults.buttonColorsPrimary()
-                    ) {
-                        Text(
-                            text = when (page) {
-                                0 -> "了解能力"
-                                1 -> "下一步"
-                                else -> "开始使用"
-                            },
-                            color = if (dark) GlassTokens.OrangeOnDark else Color.White,
-                            // v3.1.7：16sp/Medium → 收口到 `.btn` 规范 14.5sp/650/.2px。
-                            // 它是 52dp 高、26dp 圆角的**同一颗** `.btn`，字号却是全 App 唯一一处 16sp，
-                            // 与其它主按钮并列看会明显偏大。真源见 GlassSpec。
-                            fontSize = GlassSpec.BtnFontSize,
-                            fontWeight = GlassSpec.BtnFontWeight,
-                            letterSpacing = GlassSpec.BtnLetterSpacing
-                        )
-                    }
-                }
+                // v3.2.1：引导页每页只有这一颗主按钮 → L1 60dp / 16sp（v0.2 阶梯）。
+                // 注意：v3.1.7 曾把它从 16sp 收口到 14.5sp，理由是「同页并列时偏大」；
+                // 现在它**升成 L1 档**、同页没有第二颗按钮可并列，16sp 就是该档的规范字号，不再算离轨。
+                GlassPrimaryButton(
+                    text = when (page) {
+                        0 -> "了解能力"
+                        1 -> "下一步"
+                        else -> "开始使用"
+                    },
+                    onClick = {
+                        when (page) {
+                            0 -> page = 1
+                            1 -> page = 2
+                            else -> onDone()
+                        }
+                    },
+                    tier = GlassBtnTier.L1
+                )
             }
         }
     }
@@ -303,7 +288,7 @@ private fun SkillRow(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    modifier = Modifier.size(23.dp),
+                    modifier = Modifier.size(24.dp), // v3.2.1 图标网格统一 23→24
                     tint = accentFg()
                 )
             }
@@ -380,7 +365,7 @@ private fun PermRow(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(24.dp), // v3.2.1 图标网格统一 22→24
                 tint = accentFg()
             )
             Spacer(Modifier.width(12.dp))
