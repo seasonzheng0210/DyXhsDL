@@ -336,7 +336,8 @@ private fun WebViewScreen(
                         imageVector = MiuixIcons.Back,
                         contentDescription = "返回",
                         modifier = Modifier
-                            .padding(start = 12.dp)
+                            // v3.2.3：12 → 16dp，与内容边距统一
+                            .padding(start = 16.dp)
                             .clickable { onBack() }
                     )
                 },

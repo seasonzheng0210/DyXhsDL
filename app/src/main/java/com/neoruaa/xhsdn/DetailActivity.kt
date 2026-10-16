@@ -289,14 +289,16 @@ private fun DetailScreen(
                         imageVector = MiuixIcons.Back,
                         contentDescription = stringResource(R.string.back_content_description),
                         modifier = Modifier
-                            .padding(start = 12.dp)
+                            // v3.2.3：12 → 16dp，与内容边距统一
+                            .padding(start = 16.dp)
                             .clickable { onBack() }
                     )
                 },
                 actions = {
                     Box(
                         modifier = Modifier
-                                .padding(end = 12.dp)
+                                // v3.2.3：12 → 16dp，与内容边距统一
+                                .padding(end = 16.dp)
                                 .clickable { menuExpanded = true },
                             contentAlignment = Alignment.Center
                     ) {

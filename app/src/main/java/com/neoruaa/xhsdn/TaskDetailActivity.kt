@@ -330,7 +330,8 @@ private fun TaskDetailScreen(
                     .fillMaxWidth()
                     .background(Color.Transparent)
                     .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    // v3.2.3：12 → 16dp，顶栏返回钮与页面内容边距一致
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
                     .height(48.dp)
             ) {
                 // 圆形玻璃返回钮（r = 48/2）

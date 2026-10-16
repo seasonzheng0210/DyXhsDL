@@ -3157,7 +3157,11 @@ private fun MainTabBar(
             .fillMaxWidth()
             .background(Color.Transparent)
             .padding(
-                start = 13.dp, end = 13.dp,
+                start = 16.dp, end = 16.dp,
+                // v3.2.3：13 → 16dp —— dock 胶囊左右与页面内容（16dp）对齐；旧 13dp 让 dock
+                // 比上面的卡片更"贴边"，用户反馈「下方悬浮标签栏没有外边距」。
+                // bottom 的 DockBottomInset=10dp 是 dock 纵向节奏真源（FabBottomOffset 等都从它
+                // 推导），勿随本轮联动修改。
                 top = 6.dp,
                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 10.dp
             )

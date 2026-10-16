@@ -395,7 +395,8 @@ internal fun SettingsScreen(
                                 imageVector = MiuixIcons.Back,
                                 contentDescription = stringResource(R.string.back),
                                 modifier = Modifier
-                                    .padding(start = 12.dp)
+                                    // v3.2.3：12 → 16dp，与内容边距统一
+                                    .padding(start = 16.dp)
                                     .clickable { onBack() }
                             )
                         }
@@ -795,7 +796,9 @@ private fun SettingsGroup(
 ) {
     Card(
         modifier = Modifier
-            .padding(horizontal = 12.dp)
+            // v3.2.3：12 → 16dp —— 与首页/任务页/任务详情的内容边距统一（mockup .body 标准 16px）。
+            // 旧 12dp 让设置卡比别的页"贴边"，也和 dock（16dp）错位，用户反馈「边距不对」。
+            .padding(horizontal = 16.dp)
             .padding(bottom = 12.dp)
     ) {
         Text(
