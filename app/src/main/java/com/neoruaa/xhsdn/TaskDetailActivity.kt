@@ -31,6 +31,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -45,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -69,6 +72,7 @@ import com.neoruaa.xhsdn.ui.glass.GlassTokens
 import com.neoruaa.xhsdn.ui.glass.accentBg
 import com.neoruaa.xhsdn.ui.glass.accentFg
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
+import com.neoruaa.xhsdn.ui.glass.glassSolid
 import com.neoruaa.xhsdn.ui.glass.GlassSpec
 import com.neoruaa.xhsdn.ui.glass.platformBrandColor
 import com.neoruaa.xhsdn.ui.glass.platformLabel
@@ -83,6 +87,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Link
 import top.yukonga.miuix.kmp.icon.extended.ContactsCircle
 import top.yukonga.miuix.kmp.icon.extended.Play
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
@@ -101,6 +106,13 @@ import java.util.Locale
  * 点击任务卡进入；已完成态内点「查看文件」进 DetailActivity 文件浏览页。
  * 玻璃皮肤与全 App 一致（WallpaperLayer 底 + 内容层玻璃卡 + 玻璃态橙主按钮）。
  */
+
+/**
+ * 悬浮「复制链接」胶囊占掉的底部空间（navbar 之外）：底距 16 + 胶囊高 52 + 呼吸 16。
+ * ★页面必须让位这么多，否则滚动到底时末项会被胶囊压住（同 FAB 让位铁律）。
+ */
+private val CopyCapsuleReserve = 84.dp
+
 class TaskDetailActivity : ComponentActivity() {
 
     companion object {
@@ -357,34 +369,107 @@ private fun TaskDetailScreen(
             }
             return@Scaffold
         }
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            HeaderCard(task, tp, ts, cardBg)
-            Spacer(Modifier.height(12.dp))
-            when (task.status) {
-                TaskStatus.DOWNLOADING, TaskStatus.QUEUED -> ActiveCard(
-                    task, tp, ts, cardBg, dark, onStop, onRedownload,
-                    showPauseHint = task.status == TaskStatus.QUEUED, waiting = false
-                )
-                TaskStatus.WAITING_FOR_USER -> ActiveCard(
-                    task, tp, ts, cardBg, dark, onStop, onRedownload,
-                    showPauseHint = false, waiting = true
-                )
-                TaskStatus.COMPLETED -> CompletedCard(task, tp, ts, cardBg, dark, onOpenFirst, onBrowseFiles, onCopyUrl, onDelete)
-                TaskStatus.FAILED -> FailedCard(task, tp, ts, cardBg, dark, onRetry, onCopyUrl, onShowFailureLog, onDelete)
-            }
-            // E7：作者主页入口（三态通用）。原实现只有一句"请去首页重新解析"的 toast，
-            // 把用户赶去手工操作；这里给出真正可用的一键入口。
-            if (task.source == "douyin" || task.source == "douyin_home" || task.source == "kuaishou") {
+        // v3.2.2：CompletedCard / FailedCard 的 `onCopyUrl` 参数已移除 —— 复制链接从卡片里
+        // 挪到了本页底部的**悬浮胶囊**（用户反馈：和「删除任务」挤在一排很突兀）。
+        val showCopy = task.status == TaskStatus.COMPLETED || task.status == TaskStatus.FAILED
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    // ★底部让位铁律：悬浮胶囊会压住滚动内容，且 padding 必须写在滚动容器**自身**
+                    //（写 contentPadding 只在滚到底时留白，途中照样被压）
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .then(if (showCopy) Modifier.padding(bottom = CopyCapsuleReserve) else Modifier)
+            ) {
+                HeaderCard(task, tp, ts, cardBg)
                 Spacer(Modifier.height(12.dp))
-                AuthorHomeEntryCard(task, tp, ts, cardBg, dark, onOpenAuthorHome)
+                when (task.status) {
+                    TaskStatus.DOWNLOADING, TaskStatus.QUEUED -> ActiveCard(
+                        task, tp, ts, cardBg, dark, onStop, onRedownload,
+                        showPauseHint = task.status == TaskStatus.QUEUED, waiting = false
+                    )
+                    TaskStatus.WAITING_FOR_USER -> ActiveCard(
+                        task, tp, ts, cardBg, dark, onStop, onRedownload,
+                        showPauseHint = false, waiting = true
+                    )
+                    TaskStatus.COMPLETED -> CompletedCard(task, tp, ts, cardBg, dark, onOpenFirst, onBrowseFiles, onDelete)
+                    TaskStatus.FAILED -> FailedCard(task, tp, ts, cardBg, dark, onRetry, onShowFailureLog, onDelete)
+                }
+                // E7：作者主页入口（三态通用）。原实现只有一句"请去首页重新解析"的 toast，
+                // 把用户赶去手工操作；这里给出真正可用的一键入口。
+                if (task.source == "douyin" || task.source == "douyin_home" || task.source == "kuaishou") {
+                    Spacer(Modifier.height(12.dp))
+                    AuthorHomeEntryCard(task, tp, ts, cardBg, dark, onOpenAuthorHome)
+                }
+                Spacer(Modifier.height(24.dp))
             }
-            Spacer(Modifier.height(24.dp))
+            if (showCopy) {
+                CopyLinkCapsule(
+                    onClick = onCopyUrl,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 16.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * ★悬浮「复制链接」胶囊（v3.2.2）。
+ *
+ * 用户反馈：原来它是 `CompletedCard` / `FailedCard` 里一排 TextButton 的第一项，
+ * 和「删除任务」同排 —— 一个复制、一个删除，视觉权重却一样，而且被埋在卡片内容里很突兀。
+ * 现在把它提升为**浮在本页最上层**的胶囊：独立于任何卡片，底部居中，带阴影抬起。
+ *
+ * 为什么用「实心表面 + 阴影」而不是另一种卡片：
+ *  浮在上面的一切都要能压住下层 —— Android 没有 backdrop-blur，半透会让下层文字穿透
+ *  （v3.0.9 dock 的老病因）。所以这里走 `glassSolid()` 实心 + 6dp 阴影 + 1px 折射边。
+ *
+ * 高度 52dp = 按钮阶梯的 L2（不是每个视图的主操作，不能占 L1 的 60dp）。
+ */
+@Composable
+private fun CopyLinkCapsule(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val dark = isSystemInDarkTheme()
+    Box(
+        modifier = modifier
+            .shadow(
+                elevation = 6.dp,
+                shape = RoundedCornerShape(GlassSpec.BtnCornerRadius),
+                ambientColor = Color(0x26000000),
+                spotColor = if (dark) Color(0x33000000) else Color(0x4D000000)
+            )
+            .clip(RoundedCornerShape(GlassSpec.BtnCornerRadius))
+            .background(glassSolid(0.97f, 0.96f))
+            .border(
+                1.dp,
+                if (dark) GlassTokens.SurfaceControlLineDark else GlassTokens.SurfaceControlLineLight,
+                RoundedCornerShape(GlassSpec.BtnCornerRadius)
+            )
+            .height(GlassSpec.BtnHeight)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = MiuixIcons.Link,
+                contentDescription = null,
+                tint = accentFg(),
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "复制链接",
+                color = accentFg(),
+                fontSize = GlassSpec.BtnFontSize,
+                fontWeight = GlassSpec.BtnFontWeight,
+                letterSpacing = GlassSpec.BtnLetterSpacing
+            )
         }
     }
 }
@@ -658,7 +743,6 @@ private fun CompletedCard(
     tp: Color, ts: Color, cardBg: Color, dark: Boolean,
     onOpenFirst: () -> Unit,
     onBrowseFiles: () -> Unit,
-    onCopyUrl: () -> Unit,
     onDelete: () -> Unit
 ) {
     val fg = if (dark) GlassTokens.OrangeOnDark else Color.White
@@ -706,7 +790,6 @@ private fun CompletedCard(
             }
             Spacer(Modifier.height(14.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                TextButton(text = "复制链接", onClick = onCopyUrl)
                 TextButton(text = "删除任务", onClick = onDelete)
             }
         }
@@ -719,7 +802,6 @@ private fun FailedCard(
     task: DownloadTask,
     tp: Color, ts: Color, cardBg: Color, dark: Boolean,
     onRetry: (DownloadTask) -> Unit,
-    onCopyUrl: () -> Unit,
     onShowFailureLog: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -768,7 +850,6 @@ private fun FailedCard(
             }
             Spacer(Modifier.height(10.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                TextButton(text = "复制链接", onClick = onCopyUrl)
                 TextButton(text = "查看失败日志", onClick = onShowFailureLog, colors = ButtonDefaults.textButtonColorsPrimary())
                 TextButton(text = "删除", onClick = onDelete)
             }

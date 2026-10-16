@@ -71,7 +71,6 @@ import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -82,6 +81,7 @@ import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Refresh
+import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
@@ -90,7 +90,17 @@ import com.neoruaa.xhsdn.ui.glass.GlassColorSchemes
 import com.neoruaa.xhsdn.ui.glass.GlassDialog
 import com.neoruaa.xhsdn.ui.glass.GlassLogBody
 import com.neoruaa.xhsdn.ui.glass.GlassSpec
+import com.neoruaa.xhsdn.ui.glass.GlassThemeState
+import com.neoruaa.xhsdn.ui.glass.GlassThemes
+import com.neoruaa.xhsdn.ui.glass.ThemeId
+import com.neoruaa.xhsdn.ui.glass.accentFg
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import com.neoruaa.xhsdn.utils.DownloadLogger
 import com.neoruaa.xhsdn.utils.EventTracker
 import androidx.compose.ui.graphics.Color
@@ -353,6 +363,9 @@ internal fun SettingsScreen(
     topBarState: TopAppBarState
 ) {
     val context = LocalContext.current
+    // 读它是 Compose 快照态 → 选主题后本页自动重组合，不用重启
+    val currentTheme = GlassThemeState.current
+    val dark = isSystemInDarkTheme()
     val scrollBehavior = top.yukonga.miuix.kmp.basic.MiuixScrollBehavior(state = topBarState)
     val contentInsets = if (embedded) {
         WindowInsets(0, 0, 0, 0)
@@ -428,16 +441,30 @@ internal fun SettingsScreen(
                 Spacer(modifier = Modifier.size(12.dp))
             }
 
+            // ★v3.2.2：主题分组 —— 五套配色可直接切换。
+            // 旧版「暖砂」是写死在 GlassTokens 里的单一配色，用户不喜欢也没有退路。
             item {
-                SmallTitle(stringResource(R.string.download_options))
+                SettingsGroup(stringResource(R.string.theme_group_title)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        ThemeId.entries.forEach { id ->
+                            ThemeSwatch(
+                                id = id,
+                                selected = currentTheme == id,
+                                onClick = { GlassThemeState.select(id, context) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
             }
 
             item {
-                Card(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 12.dp)
-                ) {
+                SettingsGroup(stringResource(R.string.download_options)) {
                     MiuixSwitchWidget(
                         title = stringResource(R.string.create_live_photos),
                         description = stringResource(R.string.create_live_photos_desc),
@@ -469,15 +496,7 @@ internal fun SettingsScreen(
             }
 
             item {
-                SmallTitle(stringResource(R.string.clipboard))
-            }
-
-            item {
-                Card(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 12.dp)
-                ) {
+                SettingsGroup(stringResource(R.string.clipboard)) {
                     MiuixSwitchWidget(
                         title = stringResource(R.string.manual_input_links),
                         description = stringResource(R.string.manual_input_links_desc),
@@ -504,15 +523,7 @@ internal fun SettingsScreen(
             }
 
             item {
-                SmallTitle(stringResource(R.string.file_naming))
-            }
-
-            item {
-                Card(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 12.dp)
-                ) {
+                SettingsGroup(stringResource(R.string.file_naming)) {
                     MiuixSwitchWidget(
                         title = stringResource(R.string.enable_custom_naming),
                         description = stringResource(R.string.enable_custom_naming_desc),
@@ -583,15 +594,7 @@ internal fun SettingsScreen(
             }
 
             item {
-                SmallTitle(stringResource(R.string.notification_group_title))
-            }
-
-            item {
-                Card(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 12.dp)
-                ) {
+                SettingsGroup(stringResource(R.string.notification_group_title)) {
                     MiuixSwitchWidget(
                         title = stringResource(R.string.download_complete_notification),
                         description = stringResource(R.string.download_complete_notification_desc),
@@ -602,15 +605,7 @@ internal fun SettingsScreen(
             }
 
             item {
-                SmallTitle(stringResource(R.string.diagnostics_group_title))
-            }
-
-            item {
-                Card(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 12.dp)
-                ) {
+                SettingsGroup(stringResource(R.string.diagnostics_group_title)) {
                     BasicComponent(
                         title = stringResource(R.string.failure_log_title),
                         summary = stringResource(R.string.failure_log_settings_desc),
@@ -630,15 +625,7 @@ internal fun SettingsScreen(
             }
 
             item {
-                SmallTitle(stringResource(R.string.about))
-            }
-
-            item {
-                Card(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 12.dp)
-                ) {
+                SettingsGroup(stringResource(R.string.about)) {
                     BasicComponent(
                         title = stringResource(R.string.version),
                         summary = stringResource(R.string.version_with_prefix, BuildConfig.VERSION_NAME),
@@ -788,6 +775,89 @@ internal fun SettingsScreen(
                 )
             }
         }
+    }
+}
+
+/**
+ * ★v3.2.2：分组容器 —— **标题并入容器内**，成为组内第一行。
+ *
+ * 旧实现是 `SmallTitle` 单独一个 item **浮在页面背景上**、下面再跟一个**实心** `Card`：
+ * 标题处没有容器、容器上面没有标题，两块材质不同 → 用户反馈的「割裂感」。
+ * 现在标题与所有行同在一个容器、同一种材质，看上去是一整组。
+ *
+ * 标题用强调色（跟随主题）：MIUI 设置的分节标题就是这么做的 —— 标题比正文小一档时，
+ * 用颜色拉开层级比用留白更清楚。
+ */
+@Composable
+private fun SettingsGroup(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .padding(horizontal = 12.dp)
+            .padding(bottom = 12.dp)
+    ) {
+        Text(
+            text = title,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = accentFg(),
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp)
+        )
+        content()
+    }
+}
+
+/**
+ * 主题色卡：渐变方块 + 名字。选中态 = 白勾 + 加粗 + 强调色。
+ *
+ * ★5 张卡横排：屏宽 360dp − 卡左右各 16 = 328dp，减去 4 个 10dp 间距，
+ * 每张 ≈57.6dp —— 单看色块宽 > 48dp 达标；高度上色块 44dp + 标签 ≈ 68dp 整体可点。
+ */
+@Composable
+private fun ThemeSwatch(
+    id: ThemeId,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val p = GlassThemes.of(id)
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Brush.linearGradient(listOf(p.gradientStart, p.gradientEnd)))
+                .then(
+                    if (selected) Modifier.border(2.dp, Color.White, RoundedCornerShape(12.dp))
+                    else Modifier
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (selected) {
+                Icon(
+                    imageVector = MiuixIcons.Ok,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = id.label,
+            fontSize = 11.5.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) accentFg() else MiuixTheme.colorScheme.onSurfaceVariantSummary
+        )
     }
 }
 

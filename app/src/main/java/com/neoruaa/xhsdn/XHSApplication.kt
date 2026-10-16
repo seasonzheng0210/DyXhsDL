@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.accessibility.AccessibilityManager
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
+import com.neoruaa.xhsdn.ui.glass.GlassThemeState
 import com.neoruaa.xhsdn.utils.NotificationHelper
 import android.content.Context
 import android.util.Log
@@ -19,6 +20,9 @@ class XHSApplication : Application() {
         runCatching {
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("zh-CN"))
         }
+        // v3.2.2：恢复用户选择的主题（写在 XHSDownloaderPrefs/ui_theme）。
+        // 必须在任何 Composition 之前完成，否则首帧会闪一下默认主题「晨雾蓝」。
+        GlassThemeState.init(this)
     }
 
     companion object {

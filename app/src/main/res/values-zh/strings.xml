@@ -71,6 +71,7 @@
     <string name="accessibility_service_description">启用此服务以允许小红书下载器在后台监听您的剪贴板，自动检测小红书链接并开始下载。</string>
 
     <!-- Settings category titles -->
+    <string name="theme_group_title">主题</string>
     <string name="download_options">下载选项</string>
     <string name="clipboard">剪贴板</string>
     <string name="file_naming">文件命名</string>

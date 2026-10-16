@@ -3148,8 +3148,10 @@ private fun MainTabBar(
     val navBg = if (dark) GlassTokens.SurfaceControlDark else GlassTokens.SurfaceControlLight   // v0.2 收令牌（值不变）
     val navBorder = if (dark) GlassTokens.SurfaceControlLineDark else GlassTokens.SurfaceControlLineLight // 折射描边
     val navOnBg = if (dark) Color(0x40FFFFFF) else Color(0x99FFFFFF)        // .nv.on 选中胶囊（在实底上再亮一档）
-    val navOnFg = if (dark) Color(0xFFFFB37A) else Color(0xFFE04E10)        // .nv.on 橙字
-    val navFg = if (dark) Color(0xFFC6CBD8) else Color(0xFF241F18)          // 未选：近黑/灰白
+    // v3.2.2：dock 选中/未选中字色跟随主题（旧：硬编码橙 #E04E10/#FFB37A 与近黑 #241F18，
+    // 主题换色后 dock 还停在暖砂时代的颜色，和强调色打架）
+    val navOnFg = accentFg()                                                // .nv.on 选中字（强调色）
+    val navFg = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight // 未选：正文一级
     Column(
         modifier = modifier
             .fillMaxWidth()
