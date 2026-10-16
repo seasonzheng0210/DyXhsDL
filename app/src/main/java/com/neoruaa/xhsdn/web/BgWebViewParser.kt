@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -63,6 +64,20 @@ class BgWebViewParser(private val appContext: Context) {
         val imageUrls: MutableSet<String> = Collections.synchronizedSet(mutableSetOf())
         @Volatile
         var done: Boolean = false
+
+        // region 失败归因字段（v3.2.5）
+        /** onPageFinished 时间戳（0 = 未触发）。用于区分「页面没加载出来」与「页面加载了但没媒体」。 */
+        @Volatile
+        var pageFinishedAt: Long = 0L
+
+        /** 轮询期间是否曾见到任何媒体候选（直链或图片）。 */
+        @Volatile
+        var sawAnyCandidate: Boolean = false
+
+        /** 硬失败原因（主文档加载失败 / 渲染进程被回收），非空时优先作为失败归因。 */
+        @Volatile
+        var hardFail: String? = null
+        // endregion
     }
 
     /** 主页作品列表嗅探结果（L2a）。 */
@@ -94,6 +109,28 @@ class BgWebViewParser(private val appContext: Context) {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val mutex = Mutex()
+
+    /**
+     * 最近一次 [parse] 的失败原因（v3.2.5）。
+     * 旧行为：超时 / 无媒体 / 页面加载失败一律返回 null，上层只能报「WebView 未取到媒体」，
+     * 用户和开发者都无法区分「页面根本没打开」「页面是风控空页」「渲染进程被系统回收」。
+     * [parse] 由 [mutex] 串行化，故单字段 + @Volatile 足够。
+     */
+    @Volatile
+    private var lastFailReason: String = ""
+
+    /** 最近一次 [parse] 的失败原因；成功或尚未解析时为空串。 */
+    fun lastFailReason(): String = lastFailReason
+
+    /** 把会话状态汇总成一句可诊断的失败原因（v3.2.5）。 */
+    private fun buildFailReason(session: Session): String {
+        session.hardFail?.let { return it }
+        return when {
+            session.pageFinishedAt == 0L -> "页面在超时前未加载完成（可能网络不可达/该域名被拦截）"
+            !session.sawAnyCandidate -> "页面已加载但未产出任何媒体候选（疑似抖音风控页/登录墙）"
+            else -> "页面已加载且出现过候选，但未凑齐可用媒体（疑似提取器选择器失配）"
+        }
+    }
 
     /** 串行复用的单 WebView；只在主线程访问。 */
     private var webView: WebView? = null
@@ -173,6 +210,7 @@ class BgWebViewParser(private val appContext: Context) {
         return mutex.withLock {
             suspendCancellableCoroutine { cont ->
                 mainHandler.post {
+                    lastFailReason = ""
                     val session = Session(source)
                     activeSession = session
                     try {
@@ -199,7 +237,8 @@ class BgWebViewParser(private val appContext: Context) {
                             if (!session.done) {
                                 session.done = true
                                 activeSession = null
-                                Log.w(TAG, "后台解析超时(${TOTAL_TIMEOUT_MS}ms): url=$url")
+                                lastFailReason = buildFailReason(session)
+                                Log.w(TAG, "后台解析超时(${TOTAL_TIMEOUT_MS}ms): url=$url reason=$lastFailReason")
                                 if (cont.isActive) cont.resume(null)
                             }
                         }, TOTAL_TIMEOUT_MS)
@@ -208,6 +247,7 @@ class BgWebViewParser(private val appContext: Context) {
                         if (!session.done) {
                             session.done = true
                             activeSession = null
+                            lastFailReason = "解析异常: ${e.message}"
                             if (cont.isActive) cont.resume(null)
                         }
                     }
@@ -524,6 +564,8 @@ class BgWebViewParser(private val appContext: Context) {
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 Log.d(TAG, "onPageFinished: ${url?.takeLast(60)}")
+                // 记首次就绪时间：失败归因与「无候选早退」都依赖它（v3.2.5）
+                if (session.pageFinishedAt == 0L) session.pageFinishedAt = System.currentTimeMillis()
                 // 文档就绪后重新注入：SPA 页面跳转会清掉早先注入的钩子；
                 // 抖音/快手视频数据由页面 JS 在 onPageFinished 后才 XHR/fetch 拉取
                 injectJs(view, "web_inject.js")
@@ -538,6 +580,18 @@ class BgWebViewParser(private val appContext: Context) {
                         pollExtract(wv, session, pageUrl, source, onDone, PAGE_READY_DELAY_MS)
                     }
                 }, PAGE_READY_DELAY_MS)
+            }
+
+            /** 主文档加载失败（域名不可达等）：记硬失败原因，供失败归因（v3.2.5）。 */
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?
+            ) {
+                if (request?.isForMainFrame == true) {
+                    session.hardFail = "主文档加载失败: ${error?.description ?: error?.errorCode ?: "未知"}"
+                    Log.w(TAG, "onReceivedError(main): ${error?.description}")
+                }
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -564,6 +618,13 @@ class BgWebViewParser(private val appContext: Context) {
             @RequiresApi(android.os.Build.VERSION_CODES.O)
             override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
                 Log.w(TAG, "WebView 渲染进程 gone(crash=${detail?.didCrash()})，接管：结束解析并重建，不杀宿主")
+                // v3.2.5：归因到「被系统回收(OOM)」——2026-10-16 模拟器实测 lowmemorykiller 杀
+                // webview_service 后旧代码不留任何痕迹，上层只看到一句「WebView 未取到媒体」
+                session.hardFail = if (detail?.didCrash() == true) {
+                    "WebView 渲染进程崩溃"
+                } else {
+                    "WebView 渲染进程被系统回收（设备内存不足）"
+                }
                 // 与 pollExtract 同理：不预置 session.done，由 parse() 完成 lambda 统一置位，
                 // 否则 resume 永不执行 → parse() 永久挂起（完成态所有权问题，2026-09-05 实锤）
                 onDone(null)
@@ -597,6 +658,18 @@ class BgWebViewParser(private val appContext: Context) {
         if (session.done) return
         mainHandler.postDelayed({
             if (session.done) return@postDelayed
+            // 无候选早退（v3.2.5）：页面就绪后连续 EARLY_GIVEUP_AFTER_READY_MS 仍未见任何候选，
+            // 基本可判定是风控空页/登录墙，没必要让用户干等到 TOTAL_TIMEOUT_MS(60s)。
+            // ⚠️ 只要见到过候选就不早退 —— 那属于「提取慢」，继续等才有价值。
+            val readyAt = session.pageFinishedAt
+            if (readyAt > 0L && !session.sawAnyCandidate &&
+                System.currentTimeMillis() - readyAt >= EARLY_GIVEUP_AFTER_READY_MS
+            ) {
+                lastFailReason = buildFailReason(session)
+                Log.w(TAG, "无候选早退(${EARLY_GIVEUP_AFTER_READY_MS}ms): url=$pageUrl reason=$lastFailReason")
+                onDone(null)
+                return@postDelayed
+            }
             val jsName = if (source == "douyin") "douyin_extractor.js" else "kuaishou_extractor.js"
             val js = readAssetFile(jsName)
             if (js == null) {
@@ -643,6 +716,7 @@ class BgWebViewParser(private val appContext: Context) {
                     // lambda 的 if (!session.done) 恒假 → cont.resume 永不执行 → parse() 永久
                     // 挂起且 Mutex 永久占用（真机/模拟器快手取证 2026-09-05 实锤：提取成功已
                     // 打日志，但下游既无「解析成功」也无失败记录，任务卡 DOWNLOADING）。
+                    if (videos.isNotEmpty() || images.isNotEmpty()) session.sawAnyCandidate = true
                     if (lockedVideos.isNotEmpty() || images.isNotEmpty()) {
                         Log.i(TAG, "提取成功 source=$source videos=${lockedVideos.size} images=${images.size} title=${title.take(40)}")
                         onDone(Result(lockedVideos, images, contentText, title, pageUrl))
@@ -726,6 +800,11 @@ class BgWebViewParser(private val appContext: Context) {
         private const val POLL_INTERVAL_MS = 800L
         /** 单次解析总超时（含页面加载 + 轮询窗口）。 */
         private const val TOTAL_TIMEOUT_MS = 60_000L
+        /**
+         * 页面就绪后「始终零候选」的早退阈值（v3.2.5）：
+         * 风控空页/登录墙常年零候选，继续等只白耗用户时间；一旦见到过候选则不再早退。
+         */
+        private const val EARLY_GIVEUP_AFTER_READY_MS = 25_000L
         /** warmup：onPageFinished 后等 JS 种 cookie 的窗口（React 水合 + 风控壳，实证 ~5s 够）。 */
         private const val WARMUP_SETTLE_MS = 6_000L
         /** warmup 总超时兜底（页面卡死/无 onPageFinished 时也返回已有 cookie）。 */

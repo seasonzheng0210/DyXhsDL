@@ -514,9 +514,18 @@ class DownloadService : Service() {
 
         reasons += "转后台 WebView 兜底"
         DownloadLogger.logInfo(this@DownloadService, "douyin", targetUrl, "HTTP 直解未取到媒体，转后台 WebView 解析…")
-        val bg = bgParser.parse(targetUrl, "douyin")
+        // v3.2.5：首轮失败常见诱因是 WebView 渲染进程被系统回收 / 内存抖动 / 首次水合慢
+        // （2026-10-16 模拟器 lowmemorykiller 杀 webview_service 实测），隔 1.5s 重试一次往往即可成功
+        val bg = bgParser.parse(targetUrl, "douyin") ?: run {
+            val whyFirst = bgParser.lastFailReason().ifBlank { "原因未知" }
+            DownloadLogger.logInfo(
+                this@DownloadService, "douyin", targetUrl, "WebView 兜底首轮失败（$whyFirst），1.5s 后重试一次…"
+            )
+            kotlinx.coroutines.delay(1500)
+            bgParser.parse(targetUrl, "douyin")
+        }
         if (bg == null) {
-            reasons += "WebView 未取到媒体"
+            reasons += "WebView 未取到媒体（${bgParser.lastFailReason().ifBlank { "原因未知" }}）"
             return null to reasons.joinToString("; ")
         }
         val id = extractDouyinId(targetUrl)
@@ -602,9 +611,17 @@ class DownloadService : Service() {
             .find(targetUrl)?.groupValues?.getOrNull(1)
             ?: runCatching { KuaishouParser.resolvePhotoId(targetUrl) }.getOrNull()?.takeIf { it.isNotBlank() }
         val webviewUrl = ksPhotoId?.let { "https://www.kuaishou.com/short-video/$it" } ?: targetUrl
-        val bg = bgParser.parse(webviewUrl, "kuaishou")
+        // v3.2.5：与抖音同款「首轮失败重试一次」（渲染进程被回收/内存抖动/水合慢）
+        val bg = bgParser.parse(webviewUrl, "kuaishou") ?: run {
+            val whyFirst = bgParser.lastFailReason().ifBlank { "原因未知" }
+            DownloadLogger.logInfo(
+                this@DownloadService, "kuaishou", targetUrl, "WebView 兜底首轮失败（$whyFirst），1.5s 后重试一次…"
+            )
+            kotlinx.coroutines.delay(1500)
+            bgParser.parse(webviewUrl, "kuaishou")
+        }
         if (bg == null) {
-            reasons += "WebView 未取到媒体"
+            reasons += "WebView 未取到媒体（${bgParser.lastFailReason().ifBlank { "原因未知" }}）"
             return null to reasons.joinToString("; ")
         }
         val id = ksPhotoId?.takeIf { it.isNotBlank() }
