@@ -1408,8 +1408,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             withContext(Dispatchers.Main) {
                 if (!success) {
-                    DownloadLogger.logFailure(getApplication(), "douyin", info.videoUrl ?: targetUrl, "下载失败(返回false)")
-                    appendStatus("❌ 抖音下载失败，日志已保存至: ${DownloadLogger.getLogFilePath(getApplication())}")
+                    // v3.2.3：带上具体原因（HTTP code）；原先只有"返回false"，365yg 直链过期无从判断
+                    val why = downloader.lastError.ifBlank { "未取到响应码" }
+                    DownloadLogger.logFailure(getApplication(), "douyin", info.videoUrl ?: targetUrl, "下载失败(返回false)：$why")
+                    appendStatus("❌ 抖音下载失败($why)，日志已保存至: ${DownloadLogger.getLogFilePath(getApplication())}")
                 } else {
                     appendStatus("✅ 抖音下载完成")
                     DownloadLogger.logInfo(getApplication(), "douyin", targetUrl, "下载完成(成功): ${info.title}")

@@ -39,6 +39,20 @@ public class FileDownloader {
     private Context context;
     private DownloadCallback callback;
     private volatile okhttp3.Call activeCall;
+    /**
+     * 最近一次下载失败的具体原因（v3.2.3）。
+     *  - 旧行为：downloadFileCore 失败只写 Log.e 再返回 false，调用方只能埋「下载失败(返回false)」，
+     *    连 HTTP code 都没有 —— 2026-09~10 的 365yg 直链失败（6 条）因此无法区分「签名过期 403」
+     *    与「网络/其它」。
+     *  - 现在：三条失败分支（非 2xx / 非媒体 Content-Type / IO 或安全异常）都写入本字段，
+     *    调用方读取后进失败埋点与任务 reason。
+     */
+    private volatile String lastError = "";
+
+    /** 最近一次下载失败的详细原因（含 HTTP code）；成功时清空。 */
+    public String getLastError() {
+        return lastError;
+    }
 
     private static OkHttpClient createSharedHttpClient() {
         Dispatcher dispatcher = new Dispatcher();
@@ -227,6 +241,7 @@ public class FileDownloader {
     private boolean downloadFileCore(String url, String fileName, String timestamp, boolean notifyErrors,
                                      String referer, String userAgent, String prefix) {
         try {
+            lastError = "";
             Log.d(TAG, "on downloadFile: " + fileName);
             Request.Builder requestBuilder = new Request.Builder()
                     .url(url)
@@ -246,6 +261,7 @@ public class FileDownloader {
                     String contentType = response.header("Content-Type", "");
                     if (isNonMediaContentType(contentType)) {
                         Log.e(TAG, "Rejecting non-media response. Content-Type: " + contentType + ", url: " + url);
+                        lastError = "HTTP " + response.code() + " 非媒体响应(Content-Type: " + contentType + ")";
                         if (notifyErrors && callback != null) {
                             callback.onDownloadError("Download failed. Non-media response received", url);
                         }
@@ -291,6 +307,9 @@ public class FileDownloader {
                     }
                 } else {
                     Log.e(TAG, "Download failed. Response code: " + response.code());
+                    // 403/404 对 CDN 直链（365yg / zjcdn / douyinpic 等）几乎必然是签名过期
+                    lastError = "HTTP " + response.code()
+                            + (response.code() == 403 || response.code() == 404 ? "（CDN 直链签名已过期或无权限）" : "");
                     if (notifyErrors && callback != null) {
                         callback.onDownloadError("Download failed. Response code: " + response.code(), url);
                     }
@@ -299,6 +318,7 @@ public class FileDownloader {
         } catch (IOException e) {
             Log.e(TAG, "Error downloading file: " + e.getMessage());
             e.printStackTrace();
+            lastError = "IO异常: " + e.getMessage();
 
             if (notifyErrors && callback != null) {
                 callback.onDownloadError("IO Error downloading file: " + e.getMessage(), url);
@@ -306,6 +326,7 @@ public class FileDownloader {
         } catch (SecurityException e) {
             Log.e(TAG, "Security exception while downloading file: " + e.getMessage());
             e.printStackTrace();
+            lastError = "安全异常: " + e.getMessage();
 
             if (notifyErrors && callback != null) {
                 callback.onDownloadError("Security exception while downloading file: " + e.getMessage(), url);

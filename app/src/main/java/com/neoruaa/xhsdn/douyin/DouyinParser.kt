@@ -134,6 +134,40 @@ object DouyinParser {
         return url.contains("douyin.com") || url.contains("iesdouyin.com")
     }
 
+    // region 候选链诊断（v3.2.3）
+    /**
+     * 单次 [parse] 的候选链诊断缓冲。
+     *  - **为什么需要**：六候选里任意一个失败都不一定抛异常（多数返回 null），而最终异常只携带
+     *    「最后一个抛异常的候选」的文案 → 用户看到的失败原因经常指向无关候选（例：
+     *    `End of input at character 0 of` 其实来自候选 3 的空 body，却被后置候选的文案顶掉）。
+     *    2026-10-16 实测（curl 直连 + 模拟器双重复现）：六候选 5 条已失效，唯一活路是 WebView 兜底，
+     *    但旧日志完全看不出是哪一步死的。
+     *  - **ThreadLocal**：主页批量下载会并发跑 parse()，共享一个 buffer 会互相串扰。
+     *  - 不用 ThreadLocal.withInitial（Java 8 API，需 API 26+，本工程 minSdk 24）。
+     */
+    private val diagBuf = ThreadLocal<MutableList<String>>()
+
+    private fun diagList(): MutableList<String> {
+        var l = diagBuf.get()
+        if (l == null) {
+            l = mutableListOf()
+            diagBuf.set(l)
+        }
+        return l
+    }
+
+    /** 开一次诊断（parse 入口调用）。 */
+    private fun diagStart() = diagList().clear()
+
+    /** 记一条诊断：进 buffer（拼进最终异常文案）同时单独打日志（便于 adb logcat 直接抓）。 */
+    private fun diagAdd(line: String) {
+        diagList().add(line)
+        Log.w(TAG, "diag $line")
+    }
+
+    private fun diagText(): String = diagList().joinToString(" ")
+    // endregion
+
     /**
      * 从单个视频链接反查作者主页 URL（https://www.douyin.com/user/{sec_uid}）。
      *  - 解析重定向拿 aweme_id → 调移动端 aweme/v1/feed 接口（不触发 Argus、无需 a_bogus）
@@ -196,6 +230,7 @@ object DouyinParser {
     }
 
     suspend fun parse(url: String): DouyinMediaInfo = withContext(Dispatchers.IO) {
+        diagStart()
         val ua = randomUserAgent()
         val finalUrl = resolveRedirects(url, ua)
         // 主页分享短链（v.douyin 短链 302 → iesdouyin.com/share/user/{sec_uid} 或 /user/）：
@@ -215,29 +250,46 @@ object DouyinParser {
         //  3) 官方 iteminfo 接口（返回干净结构化 JSON，图集字段为 images[]）；
         //  4/5) 分享页 _ROUTER_DATA（share/video、share/note）；
         //  6) note 页初始 HTML 抠图（React Flight pace 负载 biz_tag=aweme_images）。
-        val attempts: List<() -> DouyinMediaInfo?> = listOf(
-            {
+        // ⚠️ 2026-10-16 实测（curl 直连 + 模拟器 v3.2.2 双重复现，结论一致）：**1/3/4/5/6 已全部失效**，
+        //    只剩 2 号 detail 有救（需预热 cookie），另加 WebView 兜底可用：
+        //      1) feed：HTTP 200 但 aweme_id 参数被忽略，恒返 5 条泛推荐流，一条都不含目标 id（匿名不可用）
+        //      3) itemInfo：HTTP 200 + **0 字节空 body**（→ 旧日志 "End of input at character 0 of" 的真身）
+        //      4/5) share/{video,note}：HTTP 200 / 32~33KB，页面**有** _ROUTER_DATA 但**无** item_list/play_addr
+        //      6) note 页：返回 JSVM 保护壳（_$jsvmprt），不含 biz_tag=aweme_images
+        //    → 每个候选的 HTTP code/长度/命中情况见 [diagBuf]（失败原因会带上完整诊断链）
+        val attempts: List<Pair<String, () -> DouyinMediaInfo?>> = listOf(
+            "feed" to {
                 parseFromMobileFeed(
                     "https://aweme.snssdk.com/aweme/v1/feed/?type=7&aweme_id=$id&iid=0&device_id=0&version_code=27.0.0&version_name=27.0.0",
                     ua, id
                 )
             },
-            { fetchWebDetail(id) },
-            { parseFromItemInfo("https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids=$id", ua, id) },
-            { parseFromShare("https://www.iesdouyin.com/share/video/$id", ua, id) },
-            { parseFromShare("https://www.iesdouyin.com/share/note/$id", ua, id) },
-            { parseFromNoteHtml("https://www.douyin.com/note/$id", ua, id) },
+            "webDetail" to { fetchWebDetail(id) },
+            "itemInfo" to { parseFromItemInfo("https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids=$id", ua, id) },
+            "shareVideo" to { parseFromShare("https://www.iesdouyin.com/share/video/$id", ua, id) },
+            "shareNote" to { parseFromShare("https://www.iesdouyin.com/share/note/$id", ua, id) },
+            "noteHtml" to { parseFromNoteHtml("https://www.douyin.com/note/$id", ua, id) },
         )
         var lastErr: String? = null
-        for (attempt in attempts) {
+        for ((name, attempt) in attempts) {
             try {
-                attempt()?.let { return@withContext it }
+                val media = attempt()
+                if (media != null) {
+                    diagAdd("$name=OK")
+                    return@withContext media
+                }
+                // 返回 null = 请求通了但本候选取不到目标媒体（不抛异常），旧代码此处无任何痕迹
+                diagAdd("$name=null")
             } catch (e: Exception) {
                 lastErr = e.message
+                diagAdd("$name=ERR(${e.message?.take(80)})")
                 Log.w(TAG, "解析失败 err=${e.message}")
             }
         }
-        throw Exception(lastErr ?: "抖音解析失败：未在接口或分享页找到视频/图片")
+        // 诊断链一并带进异常：DownloadLogger 落盘的失败原因即可看出是哪一步死的
+        throw Exception(
+            "抖音解析失败(6候选全败)；末因: ${lastErr ?: "未在接口或分享页找到视频/图片"}；链: ${diagText()}"
+        )
     }
 
     /**
@@ -324,12 +376,17 @@ object DouyinParser {
         if (!cookie.isNullOrBlank()) builder.header("Cookie", cookie)
 
         return client.newCall(builder.build()).execute().use { resp ->
+            val code = resp.code
+            val bodyText = resp.body.string()
+            // detail/post 需要完整浏览器指纹 cookie（UIFID/ttwid/__ac_signature…）；
+            // 缺 → 抖音回 403/461 或 200 + 空 body（2026-10-16 实测 403）
+            diagAdd("detail:HTTP=$code/len=${bodyText.length}")
             // 403/461 为 Argus 风控（缺 UIFID 指纹或签名异常）——可预热后重试
-            if (resp.code == 403 || resp.code == 461) {
-                throw WebDetailBlockedException("detail 接口 HTTP ${resp.code}（Argus 风控/缺 UIFID 指纹）")
+            if (code == 403 || code == 461) {
+                throw WebDetailBlockedException("detail 接口 HTTP $code（Argus 风控/缺 UIFID 指纹）")
             }
-            if (!resp.isSuccessful) throw Exception("detail 接口失败: HTTP ${resp.code}")
-            resp.body.string()
+            if (code !in 200..299) throw Exception("detail 接口失败: HTTP $code")
+            bodyText
         }
     }
 
@@ -533,10 +590,13 @@ object DouyinParser {
             .header("Referer", REFERER)
             .build()
 
-        val body = client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw Exception("iteminfo 接口失败: HTTP ${response.code}")
-            response.body.string()
+        val (code, body) = client.newCall(request).execute().use { response ->
+            response.code to response.body.string()
         }
+        // 2026-10-16 实测：该端点恒返 HTTP 200 + 0 字节空 body（已失效），即旧日志里
+        // "End of input at character 0 of" 的真身
+        diagAdd("itemInfo:HTTP=$code/len=${body.length}")
+        if (code !in 200..299) throw Exception("iteminfo 接口失败: HTTP $code")
 
         val json = JSONObject(body)
         val itemList = json.optJSONArray("item_list")
@@ -583,10 +643,13 @@ object DouyinParser {
             .header("Referer", "https://www.iesdouyin.com/")
             .build()
 
-        val body = client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw Exception("mobile feed 接口失败: HTTP ${response.code}")
-            response.body.string()
+        val (code, body) = client.newCall(request).execute().use { response ->
+            response.code to response.body.string()
         }
+        // 空 body（len=0）是抖音对「缺指纹 cookie / 出口被软风控」的典型软失败：旧代码在此被
+        // JSONObject("") 直接抛成 "End of input at character 0 of"，看起来像 JSON 解析 bug 而非风控
+        diagAdd("feed:HTTP=$code/len=${body.length}")
+        if (code !in 200..299) throw Exception("mobile feed 接口失败: HTTP $code")
 
         val json = JSONObject(body)
         val list = json.optJSONArray("aweme_list")
@@ -605,7 +668,14 @@ object DouyinParser {
                 if (it.optString("aweme_id", "") == id) return@run it
             }
             null
-        } ?: return null
+        }
+        if (data == null) {
+            // 2026-10-16 实测：匿名请求下 aweme_id 参数已被抖音忽略，恒返泛推荐流（5 条随机热门作品），
+            // 一条都不含目标 id → 本候选在任何网络环境下都已失效，且返回 null 不留任何日志
+            diagAdd("feed:list=${list.length()} 无目标id(泛推荐流)")
+            return null
+        }
+        diagAdd("feed:命中目标id list=${list.length()}")
         val safeTitle = safeTitleOf(data.optString("desc", "").trim().ifEmpty { "douyin_$id" }, id)
 
         // 图集优先
@@ -641,10 +711,17 @@ object DouyinParser {
             .header("User-Agent", ua)
             .build()
 
-        val html = client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw Exception("获取抖音页面失败: HTTP ${response.code}")
-            response.body.string()
+        val (code, html) = client.newCall(request).execute().use { response ->
+            response.code to response.body.string()
         }
+        // hasRouter=页面含 window._ROUTER_DATA；hasItemList=含媒体列表字段。
+        // 2026-10-16 实测：匿名会话下页面**有** _ROUTER_DATA 但**无** item_list/play_addr
+        // → 旧代码在 pageKey 查找失败处静默 return null；出口被风控时则整页变成 argus 拦截页（两者要分开）
+        diagAdd(
+            "share(${shareUrl.substringAfter("/share/").take(10)}):HTTP=$code/len=${html.length}" +
+                "/router=${html.contains("_ROUTER_DATA")}/itemList=${html.contains("item_list")}"
+        )
+        if (code !in 200..299) throw Exception("获取抖音页面失败: HTTP $code")
 
         val pattern = Regex("""window\._ROUTER_DATA\s*=\s*(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
         val match = pattern.find(html) ?: throw Exception(
@@ -713,12 +790,14 @@ object DouyinParser {
             .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
             .build()
 
-        val html = client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw Exception("获取抖音 note 页失败: HTTP ${response.code}")
-            response.body.string()
+        val (code, html) = client.newCall(request).execute().use { response ->
+            response.code to response.body.string()
         }
+        if (code !in 200..299) throw Exception("获取抖音 note 页失败: HTTP $code")
 
         val imageUrls = extractNoteGalleryFromHtml(html)
+        // 2026-10-16 实测：note 页初始 HTML 是 JSVM 保护壳（_$jsvmprt），根本不含 biz_tag=aweme_images
+        diagAdd("noteHtml:HTTP=$code/len=${html.length}/图集=${imageUrls.size}/jsvm=${html.contains("jsvmprt")}")
         if (imageUrls.isEmpty()) {
             Log.w(TAG, "note 页未提取到图集(可能登录墙/风控): noteUrl=$noteUrl")
             return null

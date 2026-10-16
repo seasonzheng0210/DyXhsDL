@@ -398,7 +398,16 @@ class DownloadService : Service() {
                         false
                     }.also { ok ->
                         if (!ok) {
-                            DownloadLogger.logFailure(this@DownloadService, "douyin", info.videoUrl ?: targetUrl, "下载失败(返回false)")
+                            // v3.2.3：带上 HTTP code / 具体原因（原先只有"返回false"，2026-10 的
+                            // 365yg 直链失败因此完全无法判断是签名过期 403 还是网络问题）
+                            val why = downloader.lastError.ifBlank { "未取到响应码" }
+                            DownloadLogger.logFailure(
+                                this@DownloadService, "douyin", info.videoUrl ?: targetUrl,
+                                "下载失败(返回false)：$why" +
+                                    if (isCdnVideoDirectLink(info.videoUrl)) {
+                                        "；该链接是 CDN 播放直链（带时效签名，过期即 403），请改用作品分享链接"
+                                    } else ""
+                            )
                         }
                     }
                 }
@@ -413,7 +422,9 @@ class DownloadService : Service() {
                 }
 
                 TaskManager.completeTask(myTaskId, success,
-                    if (success) null else "下载失败")
+                    if (success) null
+                    else if (info.type == DouyinMediaType.VIDEO && isCdnVideoDirectLink(info.videoUrl))
+                        "该直链已过期（播放直链带时效签名，有效期很短），请改用作品分享链接" else "下载失败")
                 updateNotification(
                     if (success) getString(R.string.download_completed_notification_title)
                     else getString(R.string.download_failed_notification_title),
@@ -459,7 +470,10 @@ class DownloadService : Service() {
             }
             if (!ok) {
                 okAll = false
-                DownloadLogger.logFailure(this@DownloadService, "douyin", url, "图片下载失败(返回false)")
+                DownloadLogger.logFailure(
+                    this@DownloadService, "douyin", url,
+                    "图片下载失败(返回false)：${downloader.lastError.ifBlank { "未取到响应码" }}"
+                )
             }
         }
         return okAll
@@ -642,6 +656,22 @@ class DownloadService : Service() {
         .trim(' ', '.')
         .take(80)
         .ifBlank { "download" }
+
+    /**
+     * 是否是抖音 CDN **播放直链**（v3.2.3）。
+     *  - 这类链接来自 play_addr（形如 `v5-se-ex-mc-default.365yg.com/...?ft=...&rc=...&mtime=...`），
+     *    带时效签名，**有效期通常只有几十分钟**，过期后 CDN 直接 403 → 下载必失败；
+     *  - 与「作品分享链接」（v.douyin.com / douyin.com/video|note/…）区分开，后者可重新解析拿新鲜直链；
+     *  - 失败文案据此给出「请改用分享链接」的明确指引（2026-10 有 6 条此类失败无法自诊断）。
+     */
+    private fun isCdnVideoDirectLink(url: String?): Boolean {
+        if (url.isNullOrBlank()) return false
+        // 作品页/分享页不是直链
+        if (Regex("""(?:douyin|iesdouyin)\.com/(?:video|note|share|user|discover)/""").containsMatchIn(url)) return false
+        val u = url.lowercase()
+        return u.contains("365yg.com") || u.contains("zjcdn.com") ||
+            u.contains("douyinvod.com") || u.contains("amemv.com")
+    }
 
     // endregion
 
