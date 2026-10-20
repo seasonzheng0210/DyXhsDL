@@ -1849,7 +1849,10 @@ private fun HistoryPage(
     //   FAB 只挂在 HistoryPage（见下方 GlassPrimaryWrap），它占 navbar+FabBottomOffset .. +FabSize 这条竖带。
     //   把**列表视口**底边直接钳到 FAB 上缘 → 内容在滚动过程中也不可能画进 FAB 底下（旧值 56dp 是
     //   v3.1.2 之前 38dp 老 dock 时代的残值：既让内容钻到 dock 胶囊下面 18dp，又把最后一张卡送进 FAB）。
-    val listBottomReserve = GlassSpec.FabBottomOffset + GlassSpec.FabSize   // v0.2：91 + 56 = 147dp（FAB 46→56）
+    val listBottomReserve = GlassSpec.FabBottomOffset + GlassSpec.FabSize   // 91 + 56 = 147dp（FAB 上缘，滚到底让位用）
+    // v3.2.7：视口钳位降到 **dock 上缘**（10 + 64 = 74dp）。FAB 是覆盖层不再占视口——
+    // 内容滚动时从 FAB 下穿过（真悬浮），只有实心 dock 胶囊必须钳住；滚到底的 FAB 让位走 contentPadding。
+    val dockTopReserve = GlassSpec.DockBottomInset + GlassSpec.DockCapsuleH
     val activeTask = tasks.firstOrNull {
         it.status == com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING || it.status == com.neoruaa.xhsdn.data.TaskStatus.QUEUED
     }
@@ -2252,9 +2255,8 @@ private fun HistoryPage(
                         }
                     }
 
-                    // v3.2.6 半卡渐隐：列表视口钳在 FAB 上缘（见下 padding），滚动中间态时下一张卡
-                    // 会贴着 FAB 顶被硬切成两半，观感像「内容被 dock 吃掉」（真机截图用户指认）。
-                    // 解法 = 内容仍被裁，但底部 26dp 加 alpha 渐隐带：offscreen layer + BlendMode.DstIn
+                    // v3.2.6 半卡渐隐：视口底被钳住，滚动中间态时下一张卡会在钳位线被硬切成两半。
+                    // 解法 = 底部 26dp alpha 渐隐带：offscreen layer + BlendMode.DstIn
                     // （壁纸是渐变图，任何实色 scrim 都会有色块边界；alpha mask 是唯一无色差的淡出）。
                     // ★只在「下面还有内容」时启用（canScrollForward），滚到底自动关闭 → 最后一张卡完整。
                     val listCanScrollForward by remember {
@@ -2270,21 +2272,24 @@ private fun HistoryPage(
                         contentPadding = PaddingValues(
                             start = 16.dp,
                             end = 16.dp,
-                            // v3.1.6：仅留呼吸余量。底部让位已由外层视口（navPadding + listBottomReserve）负责，
-                            // 这里原先再叠一层 `navPadding + 96.dp` 属重复预留，滚到底时会白白空掉 63dp。
-                            bottom = 12.dp
+                            // v3.2.7：视口已放开到 dock 上缘（FAB 纯悬浮，内容从其下穿过），
+                            // 「滚到底最后一张卡停在 FAB 上方」改由 contentPadding 保证：
+                            // (FAB 上缘 147 - dock 上缘 74) + 12dp 呼吸 = 85dp。
+                            bottom = listBottomReserve - dockTopReserve + 12.dp
                         ),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         // v3.0.9：列表在 dock 上缘截断（padding 同时限制布局与绘制）。
                         // 设计稿用 backdrop-blur 遮住滚进 dock 区的内容；本项目无 blur，
                         // 穿透文字会直接堆在 dock 下方手势区（用户实测打回）→ 内容到 dock 上缘为止。
-                        // v3.1.6：上缘进一步收到 **FAB 上缘**（navPadding + 137dp），见 listBottomReserve 注释。
+                        // v3.2.7：视口从「FAB 上缘」放开回 **dock 上缘**（navPadding + 74dp）——
+                        // 用户反馈 FAB「悬浮按钮却占位」：147dp 钳位让底部永远空一条带、半卡悬在 FAB 顶。
+                        // FAB 是圆角覆盖层，内容穿其下才是标准悬浮交互；dock 是实心胶囊仍必须钳住。
                         modifier = (if (nestedScrollConnection != null) {
                             Modifier.fillMaxSize()
-                                .padding(bottom = navPadding + listBottomReserve)
+                                .padding(bottom = navPadding + dockTopReserve)
                                 .nestedScroll(nestedScrollConnection)
                         } else {
-                            Modifier.fillMaxSize().padding(bottom = navPadding + listBottomReserve)
+                            Modifier.fillMaxSize().padding(bottom = navPadding + dockTopReserve)
                         })
                             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                             .drawWithContent {
