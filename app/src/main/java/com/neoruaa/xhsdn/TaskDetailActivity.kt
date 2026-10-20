@@ -40,6 +40,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -75,6 +76,7 @@ import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
 import com.neoruaa.xhsdn.ui.glass.glassSolid
 import com.neoruaa.xhsdn.ui.glass.GlassSpec
 import com.neoruaa.xhsdn.ui.glass.platformBrandColor
+import com.neoruaa.xhsdn.web.BgWebViewParser
 import com.neoruaa.xhsdn.ui.glass.platformLabel
 import com.neoruaa.xhsdn.utils.DownloadLogger
 import top.yukonga.miuix.kmp.basic.Button
@@ -151,6 +153,24 @@ class TaskDetailActivity : ComponentActivity() {
             val tasks by TaskManager.getAllTasks().collectAsStateWithLifecycle(initialValue = emptyList())
             val task = tasks.find { it.id == taskId }
             var showLogDialog by remember { mutableStateOf(false) }
+
+            // v3.2.6 旧任务标题回填：老数据 noteTitle 为空 → 列表/详情显示裸短链。
+            // 打开详情时静默走一次后台 WebView 解析拿标题写回（列表自动刷新）；
+            // 只试一次、失败不打扰（当前六候选 HTTP 链已死，标题只能来自 WebView，见 ARCH.md）。
+            // 不做批量回填：200 条逐条解析必触发风控，代价不成比例。
+            if (task != null && task.noteTitle.isNullOrBlank() &&
+                task.source.startsWith("douyin")
+            ) {
+                // LaunchedEffect 随组合进入/离开自动启停：Activity 销毁时解析协程一并取消
+                LaunchedEffect(task.id) {
+                    val r = BgWebViewParser(applicationContext).parse(task.noteUrl, "douyin")
+                    if (r != null && r.title.isNotBlank()) {
+                        TaskManager.updateTask(task.id) { t ->
+                            t.copy(noteTitle = r.title.trim().take(60))
+                        }
+                    }
+                }
+            }
 
             MiuixTheme(controller = controller) {
                 Box(modifier = Modifier.fillMaxSize()) {
