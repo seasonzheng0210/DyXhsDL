@@ -888,7 +888,9 @@ private fun InfoLine(label: String, value: String, tp: Color, ts: Color, maxLine
             fontSize = 12.5.sp,
             maxLines = maxLines,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
+            // v3.2.9：+12dp 起始间距——此前值列紧贴 64dp 标签列右缘（0 间距），
+            // 「总大小—」直接粘住标签（巡检截图墨迹测量：标签右缘 275px → 值墨迹 278px）
+            modifier = Modifier.weight(1f).padding(start = 12.dp)
         )
     }
 }
