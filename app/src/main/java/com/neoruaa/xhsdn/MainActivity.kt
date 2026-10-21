@@ -2865,8 +2865,10 @@ private fun TaskCell(
         }
 
         // 操作按钮行（mockup .btns gap:7；已完成无按钮=无此段）
+        // v3.2.8：+8dp 顶距——真机截图墨迹测量：meta 行→重试按钮渐变顶仅 4.7dp，
+        // 而卡内其他行距 13.7~17.7dp，按钮几乎贴住上方文字（用户指认）。+8dp 后视觉 ≈12.7dp 归队。
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             val isDownloading = task.status == com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING ||
@@ -2893,12 +2895,12 @@ private fun TaskCell(
                 // 等待用户选择状态 (显示 坚持下载/网页爬取)
                 if (task.status == com.neoruaa.xhsdn.data.TaskStatus.WAITING_FOR_USER) {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        // 提示语
+                        // 提示语（v3.2.8：bottom 8dp 删除——按钮行统一 +8dp 顶距后此处会叠成 23dp）
                         Text(
                             text = stringResource(R.string.official_limitation_tip),
                             fontSize = 12.sp,
                             color = Color.Gray,
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                         Row(
