@@ -1018,6 +1018,13 @@ class MainActivity : ComponentActivity() {
             showToast(getString(R.string.invalid_link_please_reenter))
             return
         }
+        // ★平台路由（v3.3.0）：小红书主页走独立链（user_posted 旁路嗅探 + explore 逐条详情），
+        // 与抖音 post API 链完全不同源，提前分流（xhslink 短链是单作品分享，不走此分支）
+        Regex("""xiaohongshu\.com/user/profile/([0-9A-Za-z]+)""")
+            .find(cleanUrl)?.groupValues?.getOrNull(1)?.let { xhsUserId ->
+                fetchXhsHomePreview(xhsUserId)
+                return
+            }
         ensureStoragePermission {
             homeParseJob?.cancel()
             homeParseStage = 0
@@ -1144,6 +1151,74 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
+     * 小红书主页下载预览（v3.3.0 P0）：加载 xhs 作者主页，旁路嗅探 user_posted 列表
+     * （含 xsec_token，无直链），转 DouyinPostItem 复用预览 UI/批次结构；
+     * 媒体直链由批量阶段逐条 explore 页解析（DownloadService.xhs 分支）。
+     * HomeRepo 账本 key = "xhs_$userId"（与抖音 secUid 命名空间隔离，函数签名零改动）。
+     */
+    private fun fetchXhsHomePreview(userId: String) {
+        val homepageUrl = "https://www.xiaohongshu.com/user/profile/$userId"
+        ensureStoragePermission {
+            homeParseJob?.cancel()
+            homeParseStage = 0
+            homePreview = HomePreviewState.Loading
+            homeParseJob = lifecycleScope.launch {
+                try {
+                    val repoKey = "xhs_$userId"
+                    homeParseStage = 1
+                    val sniff = withContext(Dispatchers.IO) {
+                        BgWebViewParser(applicationContext).sniffXhsHomepage(userId)
+                    }
+                    val tokens = sniff.items.associate { it.id to it.xsecToken }
+                    val items = sniff.items.map { x ->
+                        DouyinPostItem(
+                            id = x.id,
+                            type = if (x.isVideo) DouyinMediaType.VIDEO else DouyinMediaType.IMAGE,
+                            title = x.title.ifBlank { "小红书笔记 ${x.id.take(12)}" },
+                            // 列表阶段无直链：批量阶段逐条 explore 页解析补齐
+                            videoUrl = null,
+                            imageUrls = emptyList(),
+                            createTime = 0L,
+                            coverUrl = x.coverUrl
+                        )
+                    }
+                    if (items.isEmpty()) {
+                        trackEvent("homepage_provider_result", mapOf("provider" to "xhs_l2x", "items" to "0"))
+                        // 小红书未登录时主页作品列表可能被服务端截断为空 → 引导登录（与抖音同文案语义）
+                        homePreview = HomePreviewState.Error(getString(R.string.home_preview_need_login), true)
+                        return@launch
+                    }
+                    val nickname = (sniff.nickname ?: HomeRepo.nickname(this@MainActivity, repoKey))
+                        ?: getString(R.string.home_preview_default_author)
+                    trackEvent(
+                        "homepage_provider_result",
+                        mapOf("provider" to "xhs_l2x", "items" to items.size.toString(),
+                            "total" to sniff.totalCount.toString(), "hasMore" to sniff.hasMore.toString())
+                    )
+                    if (sniff.totalCount > 0 && items.size < sniff.totalCount) {
+                        showToast(getString(R.string.home_preview_partial, items.size, sniff.totalCount))
+                    }
+                    val lastSync = HomeRepo.lastSync(this@MainActivity, repoKey)
+                    val newItems = HomeRepo.filterNew(this@MainActivity, repoKey, items)
+                    HomeRepo.touch(this@MainActivity, repoKey, sniff.nickname ?: "")
+                    homeParseStage = 2
+                    homePreview = HomePreviewState.Ready(
+                        repoKey, nickname, homepageUrl, items, newItems,
+                        sniff.totalCount, lastSync,
+                        platform = "xhs", xhsTokens = tokens
+                    )
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    homePreview = HomePreviewState.Error(
+                        getString(R.string.home_preview_failed, e.message ?: "unknown"), false
+                    )
+                }
+            }
+        }
+    }
+
+    /**
      * 取消解析：立即回 Idle 并中断协程。**保留已填链接**（用户可微调后重试），
      * 这是「不弹确认条」方案成立的关键 —— 误触的成本从"白等 14 秒"降到"点一下取消"。
      */
@@ -1172,7 +1247,8 @@ class MainActivity : ComponentActivity() {
         val token = HomepageBatchStore.put(
             HomepageBatchStore.Batch(
                 state.secUid, state.nickname, state.homepageUrl, range, latestN,
-                includeImages, skipDownloaded, chosen
+                includeImages, skipDownloaded, chosen,
+                platform = state.platform, xhsTokens = state.xhsTokens
             )
         )
         com.neoruaa.xhsdn.DownloadService.startHomepageBatch(this, token)
@@ -3383,7 +3459,11 @@ private sealed interface HomePreviewState {
         val newItems: List<DouyinPostItem>,
         /** 该账号作品总数（来自 user/profile/other 的 aweme_count）。0 = 未知。 */
         val totalCount: Int = 0,
-        val lastSync: Long
+        val lastSync: Long,
+        /** 平台标记（v3.3.0）：douyin=post 直链批；xhs=explore 逐条解析批。 */
+        val platform: String = "douyin",
+        /** 小红书批次：noteId → xsec_token（explore 详情页必需）。抖音批次恒空。 */
+        val xhsTokens: Map<String, String> = emptyMap()
     ) : HomePreviewState
     data class Error(val message: String, val needLogin: Boolean) : HomePreviewState
 }

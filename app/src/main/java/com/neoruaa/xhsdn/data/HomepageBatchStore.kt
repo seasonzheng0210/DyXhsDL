@@ -21,7 +21,11 @@ object HomepageBatchStore {
         val latestN: Int,
         val includeImages: Boolean,
         val skipDownloaded: Boolean,
-        val items: List<DouyinPostItem>
+        val items: List<DouyinPostItem>,
+        /** 平台标记（v3.3.0）：douyin=post 直链批；xhs=explore 逐条解析批。 */
+        val platform: String = "douyin",
+        /** 小红书批次：noteId → xsec_token（explore 详情页必需参数）。抖音批次恒空。 */
+        val xhsTokens: Map<String, String> = emptyMap()
     )
 
     private val pending = HashMap<String, Batch>()

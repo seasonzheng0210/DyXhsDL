@@ -107,6 +107,43 @@ class BgWebViewParser(private val appContext: Context) {
         val logs: MutableList<String> = Collections.synchronizedList(mutableListOf())
     }
 
+    /**
+     * 小红书主页嗅探：单条作品（[XHS_SNIFF_ASSET] 裁剪版）。
+     * user_posted 列表**不带媒体直链**，只有封面/标题/xsec_token——详情由原生侧
+     * 逐条 `explore/{id}?xsec_token=` 页获取（v3.3.0 P0，见 DownloadService.xhs 批量）。
+     */
+    data class XhsPostItem(
+        val id: String,
+        val xsecToken: String,
+        val title: String,
+        val isVideo: Boolean,
+        val coverUrl: String?
+    )
+
+    /** 小红书主页嗅探结果（L2x-1）。 */
+    data class XhsHomepageSniff(
+        val items: List<XhsPostItem>,
+        val nickname: String?,
+        val totalCount: Int,
+        val hasMore: Boolean,
+        val logTail: String
+    ) {
+        val isNotEmpty: Boolean get() = items.isNotEmpty()
+    }
+
+    /** 小红书主页嗅探会话（同 [SniffSession]，条目为 [XhsPostItem]）。 */
+    private class XhsSniffSession {
+        val items: MutableList<XhsPostItem> = Collections.synchronizedList(mutableListOf())
+
+        @Volatile var nickname: String? = null
+        @Volatile var totalCount: Int = 0
+        @Volatile var hasMore: Boolean = false
+        @Volatile var done: Boolean = false
+        /** 最近一次新增条目的时间戳：连续 [XHS_PAGE_QUIET_MS] 无新增 = 滚动翻页已尽。 */
+        @Volatile var lastItemAt: Long = 0L
+        val logs: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    }
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private val mutex = Mutex()
 
@@ -139,6 +176,10 @@ class BgWebViewParser(private val appContext: Context) {
     /** 主页嗅探会话（主线程赋值/清空；bridge 在 WebView 线程读取）。 */
     @Volatile
     private var sniffSession: SniffSession? = null
+
+    /** 小红书主页嗅探会话（主线程赋值/清空；bridge 在 WebView 线程读取）。 */
+    @Volatile
+    private var xhsSniffSession: XhsSniffSession? = null
 
     private val cookieManager: CookieManager by lazy {
         CookieManager.getInstance().apply { setAcceptCookie(true) }
@@ -195,6 +236,51 @@ class BgWebViewParser(private val appContext: Context) {
             sniffSession?.logs?.add(msg)
             Log.d(TAG, "sniff js: $msg")
         }
+
+        /**
+         * 小红书主页嗅探：一页作品（xhs_home_sniff.js 裁剪后回传）。
+         * payload = { notes:[{id,xsec_token,title,type,cover}], has_more, cursor, total, page }。
+         * JS 侧已按 noteId 跨页去重，此处再防御一次（无 Set，线性查 ≤ 数百条可接受）。
+         */
+        @JavascriptInterface
+        fun onXhsPosted(json: String) {
+            val s = xhsSniffSession ?: return
+            runCatching {
+                val o = JSONObject(json)
+                val arr = o.optJSONArray("notes") ?: return
+                s.hasMore = o.optBoolean("has_more", false)
+                val t = o.optInt("total", 0)
+                if (t > 0) s.totalCount = maxOf(s.totalCount, t)
+                for (i in 0 until arr.length()) {
+                    val n = arr.optJSONObject(i) ?: continue
+                    val id = n.optString("id").takeIf { it.isNotBlank() } ?: continue
+                    if (s.items.any { it.id == id }) continue
+                    s.items.add(
+                        XhsPostItem(
+                            id = id,
+                            xsecToken = n.optString("xsec_token"),
+                            title = n.optString("title"),
+                            isVideo = n.optString("type") == "video",
+                            coverUrl = n.optString("cover").takeIf { it.isNotBlank() }
+                        )
+                    )
+                    s.lastItemAt = System.currentTimeMillis()
+                }
+            }.onFailure { Log.w(TAG, "xhs posted 解析失败: ${it.message}") }
+        }
+
+        /** 小红书主页嗅探：作者档案（user/other → data.nickname / data.notes=作品总数）。 */
+        @JavascriptInterface
+        fun onXhsProfile(json: String) {
+            val s = xhsSniffSession ?: return
+            runCatching {
+                val o = JSONObject(json)
+                val n = o.optString("nickname", "").takeIf { it.isNotBlank() }
+                val c = o.optInt("total", 0)
+                if (n != null) s.nickname = s.nickname ?: n
+                if (c > 0) s.totalCount = maxOf(s.totalCount, c)
+            }.onFailure { Log.w(TAG, "xhs profile 解析失败: ${it.message}") }
+        }
     }
 
     /**
@@ -203,10 +289,11 @@ class BgWebViewParser(private val appContext: Context) {
      *
      * @param url    分享链接或作品页 URL（v.douyin.com 短链 / www.douyin.com/video|note/{id} /
      *               www.kuaishou.com 作品链接均可，内部按桌面页改写规则处理）
-     * @param source "douyin" | "kuaishou"
+     * @param source "douyin" | "kuaishou" | "xhs"
+     *               （xhs = 小红书 explore/{noteId}?xsec_token=… 详情页，提取脚本 [XHS_NOTE_EXTRACTOR_ASSET]）
      */
     suspend fun parse(url: String, source: String): Result? {
-        if (source != "douyin" && source != "kuaishou") return null
+        if (source != "douyin" && source != "kuaishou" && source != "xhs") return null
         return mutex.withLock {
             suspendCancellableCoroutine { cont ->
                 mainHandler.post {
@@ -499,6 +586,115 @@ class BgWebViewParser(private val appContext: Context) {
             }
     }
 
+    /**
+     * L2x-1 · 小红书作者主页作品列表响应嗅探（v3.3.0 P0）。
+     *
+     * 原理：加载 `https://www.xiaohongshu.com/user/profile/{userId}`，用 [XHS_SNIFF_ASSET]
+     * 旁路 hook 页面 fetch/XHR，把**页面自己发出的** `/api/sns/web/v1/user_posted` 响应
+     * 裁剪后回传（列表含 id/xsec_token/标题/封面，**不含媒体直链**）。
+     * 不重算任何签名——`x-s` / `x-s-common` 只能由页面 xhs.js 产出，与抖音 secsdk 同理。
+     *
+     * 翻页：cursor 翻页由页面滚动触发，JS 侧 t+4s/7s 自动滚动兜底；原生侧以
+     * 「连续 [XHS_PAGE_QUIET_MS] 无新增条目」为收口条件（与抖音「首屏即返回」不同——
+     * 小红书匿名状态下滚动翻页**可能**放出多页，值得多等一个静默窗）。
+     *
+     * @return 嗅探结果；预算内未嗅到任何作品返回**空结果**（items 为空，调用方判 isNotEmpty）。
+     */
+    suspend fun sniffXhsHomepage(userId: String, budgetMs: Long = SNIFF_BUDGET_MS): XhsHomepageSniff {
+        if (userId.isBlank()) return XhsHomepageSniff(emptyList(), null, 0, false, "")
+        return mutex.withLock { sniffXhsOnce(userId, budgetMs) }
+    }
+
+    /** 小红书单轮嗅探（调用方需持有 [mutex]）。 */
+    private suspend fun sniffXhsOnce(userId: String, budgetMs: Long): XhsHomepageSniff {
+        val url = "https://www.xiaohongshu.com/user/profile/$userId"
+        return suspendCancellableCoroutine { cont ->
+            mainHandler.post {
+                val session = XhsSniffSession()
+                xhsSniffSession = session
+                val startedAt = System.currentTimeMillis()
+                var finished = false
+                val finish: () -> Unit = {
+                    if (!finished) {
+                        finished = true
+                        xhsSniffSession = null
+                        if (cont.isActive) {
+                            val snapshot = XhsHomepageSniff(
+                                items = session.items.toList(),
+                                nickname = session.nickname,
+                                totalCount = session.totalCount,
+                                hasMore = session.hasMore,
+                                logTail = session.logs.toList().joinToString(" ; ")
+                            )
+                            Log.i(TAG, "xhs sniff 结束 items=${snapshot.items.size} total=${snapshot.totalCount} " +
+                                "hasMore=${snapshot.hasMore} log=${snapshot.logTail}")
+                            cont.resume(snapshot)
+                        }
+                    }
+                }
+                val poll: Runnable = object : Runnable {
+                    override fun run() {
+                        if (finished) return
+                        // 静默收口：已有条目且连续 QUIET_MS 无新增（滚动翻页已尽/被登录墙截断）
+                        val quiet = session.items.isNotEmpty() &&
+                            System.currentTimeMillis() - session.lastItemAt >= XHS_PAGE_QUIET_MS
+                        if (quiet || System.currentTimeMillis() - startedAt >= budgetMs) {
+                            Log.i(TAG, "xhs sniff 收口 items=${session.items.size} quiet=$quiet " +
+                                "log=${session.logs.toList().takeLast(3).joinToString(" ; ")}")
+                            finish()
+                            return
+                        }
+                        mainHandler.postDelayed(this, SNIFF_POLL_MS)
+                    }
+                }
+                try {
+                    val wv = getOrCreateWebView()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        cookieManager.setAcceptThirdPartyCookies(wv, true)
+                    }
+                    // 离屏 WebView 桌面级视口（同 sniffOnce，保证 SPA 正常布局渲染与滚动翻页）
+                    runCatching {
+                        wv.layoutParams = ViewGroup.LayoutParams(SNIFF_VIEW_W, SNIFF_VIEW_H)
+                        wv.measure(
+                            View.MeasureSpec.makeMeasureSpec(SNIFF_VIEW_W, View.MeasureSpec.EXACTLY),
+                            View.MeasureSpec.makeMeasureSpec(SNIFF_VIEW_H, View.MeasureSpec.EXACTLY)
+                        )
+                        wv.layout(0, 0, SNIFF_VIEW_W, SNIFF_VIEW_H)
+                    }
+                    wv.stopLoading()
+                    wv.webViewClient = object : WebViewClient() {
+                        override fun onPageStarted(view: WebView?, u: String?, favicon: android.graphics.Bitmap?) {
+                            // 小红书无需 DESKTOP_ENV_ASSET（那是抖音 navigator.platform 交叉校验补丁）
+                            injectJs(view, XHS_SNIFF_ASSET)
+                        }
+
+                        override fun onPageFinished(view: WebView?, u: String?) {
+                            // 幂等守卫（__xhsHomeSniff）保证重复注入无副作用
+                            injectJs(view, XHS_SNIFF_ASSET)
+                        }
+
+                        @RequiresApi(android.os.Build.VERSION_CODES.O)
+                        override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                            Log.w(TAG, "xhs sniff 渲染进程 gone，结束并重建 WebView")
+                            finish()
+                            runCatching { view?.stopLoading() }
+                            runCatching { view?.destroy() }
+                            if (webView === view) webView = null
+                            return true
+                        }
+                    }
+                    wv.loadUrl(url)
+                    Log.d(TAG, "xhs sniff loadUrl: $url")
+                    mainHandler.postDelayed(poll, SNIFF_POLL_MS)
+                    mainHandler.postDelayed({ finish() }, budgetMs + 1_000L)
+                } catch (e: Exception) {
+                    Log.w(TAG, "xhs sniff 异常: ${url.take(80)}", e)
+                    finish()
+                }
+            }
+        }
+    }
+
     /** 销毁 WebView（Service onDestroy 时调用；必须在主线程执行）。 */
     fun destroy() {
         mainHandler.post {
@@ -670,7 +866,11 @@ class BgWebViewParser(private val appContext: Context) {
                 onDone(null)
                 return@postDelayed
             }
-            val jsName = if (source == "douyin") "douyin_extractor.js" else "kuaishou_extractor.js"
+            val jsName = when (source) {
+                "kuaishou" -> "kuaishou_extractor.js"
+                "xhs" -> XHS_NOTE_EXTRACTOR_ASSET
+                else -> "douyin_extractor.js"
+            }
             val js = readAssetFile(jsName)
             if (js == null) {
                 Log.w(TAG, "extractor asset 缺失: $jsName")
@@ -826,6 +1026,15 @@ class BgWebViewParser(private val appContext: Context) {
 
         /** L2a 主页嗅探脚本资产名。 */
         const val SNIFF_ASSET = "douyin_home_sniff.js"
+
+        /** L2x-1 小红书主页嗅探脚本资产名（user_posted / user/other 旁路 hook）。 */
+        const val XHS_SNIFF_ASSET = "xhs_home_sniff.js"
+
+        /** 小红书单条笔记详情提取脚本（explore 页 __INITIAL_STATE__，输出契约同 douyin_extractor）。 */
+        const val XHS_NOTE_EXTRACTOR_ASSET = "xhs_note_extractor.js"
+
+        /** 小红书嗅探：连续无新增条目的收口静默窗（等滚动 cursor 翻页落地）。 */
+        private const val XHS_PAGE_QUIET_MS = 6_000L
 
         /**
          * 桌面环境自洽补丁资产（见 assets/douyin_desktop_env.js 头部说明）。

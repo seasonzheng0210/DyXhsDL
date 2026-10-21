@@ -815,6 +815,11 @@ class DownloadService : Service() {
             maybeStop()
             return
         }
+        // ★平台分流（v3.3.0）：小红书批次走 explore 逐条解析批（列表嗅探无直链）
+        if (batch.platform == "xhs") {
+            startXhsHomepageBatch(batch, taskIdExtra)
+            return
+        }
         val batchKey = batch.homepageUrl.ifBlank { batch.secUid }
         if (!activeUrls.add(batchKey)) return
 
@@ -953,6 +958,144 @@ class DownloadService : Service() {
             }.getOrElse { false }
         }
     }
+
+    // region 小红书主页批量（MODE_HOMEPAGE + platform=xhs，v3.3.0 P0）
+
+    private fun xhsExploreUrl(noteId: String, token: String?): String =
+        "https://www.xiaohongshu.com/explore/$noteId" +
+            if (token.isNullOrBlank()) "" else "?xsec_token=$token&xsec_source=pc_user"
+
+    /**
+     * 小红书主页批量：列表嗅探只有 xsec_token 无直链，**逐条 explore 页 WebView 解析**。
+     * 整批共用单个 [BgWebViewParser]（内部 Mutex + 单 WebView 串行 → 外层循环不并发，
+     * 避免模拟器多 WebView OOM 前科）；解析成功与否都记账（成功条入 HomeRepo，重试自动跳过）。
+     */
+    private fun startXhsHomepageBatch(batch: HomepageBatchStore.Batch, taskIdExtra: Long?) {
+        val batchKey = batch.homepageUrl.ifBlank { batch.secUid }
+        if (!activeUrls.add(batchKey)) return
+        val parser = BgWebViewParser(this@DownloadService)
+        scope.launch {
+            var myTaskId: Long = taskIdExtra ?: -1L
+            try {
+                val pendingItems = if (batch.skipDownloaded) {
+                    HomeRepo.filterNew(this@DownloadService, batch.secUid, batch.items)
+                } else batch.items
+                if (myTaskId < 0) {
+                    val label = if (pendingItems.size == batch.items.size) "${batch.items.size}"
+                    else "${pendingItems.size}(共${batch.items.size})"
+                    myTaskId = TaskManager.createTask(
+                        batchKey, "小红书主页·${batch.authorNickname.ifBlank { "作者" }}($label)",
+                        NoteType.VIDEO, pendingItems.size, source = "xhs"
+                    ).also { TaskManager.startTask(it) }
+                }
+                activeJobs[myTaskId] = coroutineContext[Job]!!
+                if (pendingItems.isEmpty()) {
+                    DownloadLogger.logInfo(this@DownloadService, "xhs", batchKey, "主页批量：全部作品已下载过，无新增")
+                    TaskManager.completeTask(myTaskId, true, null)
+                    updateNotification(getString(R.string.download_completed_notification_title), "主页作品无新增", false)
+                    return@launch
+                }
+
+                val myJob = coroutineContext[Job]
+                val completed = AtomicInteger(0)
+                val failed = AtomicInteger(0)
+                val successIds = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
+                val total = pendingItems.size
+
+                fun tickProgress() {
+                    TaskManager.updateProgress(myTaskId, completed.get(), failed.get(), 0f)
+                    updateNotification(getString(R.string.downloading_files),
+                        "小红书主页·${batch.authorNickname.ifBlank { "作者" }} ${completed.get() + failed.get()}/$total", true)
+                }
+
+                for ((index, post) in pendingItems.withIndex()) {
+                    if (myJob?.isActive == false) break
+                    val ok = downloadXhsHomepageItem(parser, post, batch.xhsTokens[post.id], index, myTaskId)
+                    val logUrl = xhsExploreUrl(post.id, batch.xhsTokens[post.id])
+                    if (ok) {
+                        completed.incrementAndGet()
+                        successIds.add(post.id)
+                        DownloadLogger.logInfo(this@DownloadService, "xhs", logUrl, "主页批量：单条完成(${post.type})")
+                    } else {
+                        failed.incrementAndGet()
+                        DownloadLogger.logFailure(this@DownloadService, "xhs", logUrl, "主页批量：单条失败(${post.type})")
+                    }
+                    tickProgress()
+                }
+
+                val success = completed.get() > 0 && failed.get() == 0
+                if (successIds.isNotEmpty()) {
+                    HomeRepo.recordBatch(this@DownloadService, batch.secUid, batch.authorNickname, successIds)
+                }
+                TaskManager.completeTask(myTaskId, success,
+                    when {
+                        success -> null
+                        completed.get() > 0 -> "部分小红书主页作品下载失败"
+                        else -> "小红书主页作品全部下载失败（可能需登录小红书后重试）"
+                    })
+                updateNotification(
+                    if (success) getString(R.string.download_completed_notification_title)
+                    else getString(R.string.download_failed_notification_title),
+                    "小红书主页作品：成功 ${completed.get()}，失败 ${failed.get()}",
+                    false
+                )
+            } catch (e: CancellationException) {
+                if (myTaskId > 0) TaskManager.failIfActive(myTaskId, getString(R.string.download_cancelled_by_user))
+            } catch (e: Exception) {
+                Log.e(TAG, "xhs homepage batch error", e)
+                if (myTaskId > 0) {
+                    DownloadLogger.logFailure(this@DownloadService, "xhs", batchKey, "小红书主页批量异常终止: ${e.message}")
+                    TaskManager.failIfActive(myTaskId, "小红书主页批量异常: ${e.message}")
+                }
+            } finally {
+                activeUrls.remove(batchKey)
+                if (myTaskId > 0) activeJobs.remove(myTaskId)
+                parser.destroy()
+                maybeStop()
+            }
+        }
+    }
+
+    /**
+     * 下载单条小红书作品：explore 页解析（视频→videoUrls 首条 mp4；图文→imageUrls 图集）。
+     * P0 不做解析级重试（失败多为登录墙/token 失效，重试同样失败）；UA/Referer 与解析
+     * WebView 桌面会话保持一致（直链来自同一会话，CDN 校验最稳）。
+     */
+    private suspend fun downloadXhsHomepageItem(
+        parser: BgWebViewParser,
+        post: DouyinPostItem,
+        token: String?,
+        index: Int,
+        taskId: Long
+    ): Boolean {
+        val fileName = "${index + 1}_${post.title}"
+        val result = runCatching {
+            parser.parse(xhsExploreUrl(post.id, token), "xhs")
+        }.getOrNull() ?: return false
+        val downloader = FileDownloader(this@DownloadService, createCallback(taskId))
+        val xhsReferer = "https://www.xiaohongshu.com/"
+        return when {
+            result.videoUrls.isNotEmpty() -> runCatching {
+                downloader.downloadFile(result.videoUrls.first(), "$fileName.mp4", xhsReferer, BgWebViewParser.DESKTOP_UA)
+            }.getOrElse { e ->
+                DownloadLogger.logFailure(this@DownloadService, "xhs", result.videoUrls.first(), "小红书视频下载异常: ${e.message}")
+                false
+            }
+            result.imageUrls.isNotEmpty() -> runCatching {
+                downloadImages(
+                    downloader,
+                    DouyinMediaInfo(DouyinMediaType.IMAGE, post.title, null, result.imageUrls, null, post.id, BgWebViewParser.DESKTOP_UA),
+                    taskId
+                )
+            }.getOrElse { e ->
+                DownloadLogger.logFailure(this@DownloadService, "xhs", result.imageUrls.firstOrNull() ?: post.id, "小红书图集下载异常: ${e.message}")
+                false
+            }
+            else -> false
+        }
+    }
+
+    // endregion
 
     // endregion
 
