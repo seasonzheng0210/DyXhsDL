@@ -22,6 +22,60 @@
     // ★优先读 script 文本解析岛：SPA 启动后会清空活对象 noteData.data（实证 p15 nDdata={}），
     // 读 window.__INITIAL_STATE__ 活对象会踩空；文本里保留完整 noteData.data.noteData。
     var note = null;
+    // SSR __INITIAL_STATE__ JSON 常中途截断（GitHub xiaohongshu-post-analyzer 实证）：
+    // 直接 JSON.parse 必炸 → 按逗号边界收缩 + 补闭合括号重试；仍失败走 og: 兜底。
+    var tryParseNote = function (raw) {
+      try {
+        var st = JSON.parse(raw);
+        return (st && st.noteData && st.noteData.data && st.noteData.data.noteData) || null;
+      } catch (e) { return null; }
+    };
+    var closeStack = function (s) {
+      var stack = [], inStr = false, esc = false;
+      for (var i = 0; i < s.length; i++) {
+        var ch = s.charAt(i);
+        if (inStr) {
+          if (esc) esc = false;
+          else if (ch === '\\') esc = true;
+          else if (ch === '"') inStr = false;
+        } else if (ch === '"') inStr = true;
+        else if (ch === '{') stack.push('}');
+        else if (ch === '[') stack.push(']');
+        else if (ch === '}' || ch === ']') stack.pop();
+      }
+      return stack.reverse().join('');
+    };
+    var parseIsland = function (raw) {
+      var hit = tryParseNote(raw);
+      if (hit) return hit;
+      // 截断修复：在字符串外的逗号处截断，丢弃不完整尾部成员，补闭合括号
+      var cuts = [], inStr = false, esc = false;
+      for (var i = 0; i < raw.length; i++) {
+        var ch = raw.charAt(i);
+        if (inStr) {
+          if (esc) esc = false;
+          else if (ch === '\\') esc = true;
+          else if (ch === '"') inStr = false;
+        } else if (ch === '"') inStr = true;
+        else if (ch === ',') cuts.push(i);
+      }
+      for (var c = cuts.length - 1; c >= 0 && c >= cuts.length - 40; c--) {
+        var prefix = raw.slice(0, cuts[c]).replace(/,\s*$/, '');
+        hit = tryParseNote(prefix + closeStack(prefix));
+        if (hit) return hit;
+      }
+      return null;
+    };
+    var ogTitle = '';
+    try {
+      var metas = document.getElementsByTagName('meta');
+      for (var m = 0; m < metas.length; m++) {
+        if ((metas[m].getAttribute('property') || '') === 'og:title') {
+          ogTitle = metas[m].getAttribute('content') || '';
+          break;
+        }
+      }
+    } catch (eog) {}
     try {
       var sc = document.scripts;
       for (var i = 0; i < sc.length; i++) {
@@ -33,8 +87,7 @@
         // JS 对象字面量非严格 JSON：sanitize 裸 undefined/NaN + 尾逗号
         body = body.replace(/:\s*undefined\b/g, ':null').replace(/:\s*NaN\b/g, ':null')
                    .replace(/,\s*([}\]])/g, '$1');
-        var st = JSON.parse(body);
-        note = st && st.noteData && st.noteData.data && st.noteData.data.noteData;
+        note = parseIsland(body);
         if (note) break;
       }
     } catch (e1) {}
@@ -42,7 +95,27 @@
       var s = window.__INITIAL_STATE__;
       note = s && s.noteData && s.noteData.data && s.noteData.data.noteData;
     }
-    if (!note) return EMPTY;
+    // og: 兜底（岛整体缺失时的最低保障：封面图 + 标题）
+    if (!note) {
+      var ogVideo = '', ogImage = '';
+      try {
+        var ms = document.getElementsByTagName('meta');
+        for (var q = 0; q < ms.length; q++) {
+          var prop = ms[q].getAttribute('property') || '';
+          var cnt = ms[q].getAttribute('content') || '';
+          if (!ogVideo && /^og:video(:url|:secure_url)?$/.test(prop) && /\.(mp4|m3u8)|video[-.]/.test(cnt)) ogVideo = cnt;
+          if (!ogImage && /^og:image(:url)?$/.test(prop) && !ogImage) ogImage = cnt;
+        }
+      } catch (eog2) {}
+      if (ogVideo || ogImage) {
+        return {
+          urls: ogVideo ? [ogVideo] : [],
+          image_urls: ogImage ? [ogImage] : [],
+          content: { content: ogTitle, title: ogTitle, desc: '' }
+        };
+      }
+      return EMPTY;
+    }
 
     var urls = [];
     // ---- 视频直链：video.media.stream 各编码档，优先 h264（兼容性最好）----
@@ -80,7 +153,7 @@
     } catch (e) {}
 
     // ---- 文案：title + desc + tagList（与 xhs_extractor.js 的 content 组装一致）----
-    var title = note.title || '';
+    var title = note.title || ogTitle || '';
     var desc = note.desc || '';
     var tags = '';
     try {
