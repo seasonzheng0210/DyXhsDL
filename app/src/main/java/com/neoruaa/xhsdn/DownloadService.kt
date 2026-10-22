@@ -962,8 +962,9 @@ class DownloadService : Service() {
     // region 小红书主页批量（MODE_HOMEPAGE + platform=xhs，v3.3.0 P0）
 
     private fun xhsExploreUrl(noteId: String, token: String?): String =
-        "https://www.xiaohongshu.com/explore/$noteId" +
-            if (token.isNullOrBlank()) "" else "?xsec_token=$token&xsec_source=pc_user"
+        // v3.3.1: 桌面 explore/{id} 游客态 300031 不可用 → 改走移动 H5 discovery/item/{id}
+        // profile 级 xsec_token 对单篇 note 无效（errorCode=-510000 404）→ 不传 token
+        "https://www.xiaohongshu.com/discovery/item/$noteId"
 
     /**
      * 小红书主页批量：列表嗅探只有 xsec_token 无直链，**逐条 explore 页 WebView 解析**。
@@ -972,7 +973,11 @@ class DownloadService : Service() {
      */
     private fun startXhsHomepageBatch(batch: HomepageBatchStore.Batch, taskIdExtra: Long?) {
         val batchKey = batch.homepageUrl.ifBlank { batch.secUid }
-        if (!activeUrls.add(batchKey)) return
+        Log.d(TAG, "startXhsHomepageBatch: items=${batch.items.size} skip=${batch.skipDownloaded} secUid=${batch.secUid}")
+        if (!activeUrls.add(batchKey)) {
+            Log.w(TAG, "startXhsHomepageBatch: batchKey already active: $batchKey")
+            return
+        }
         val parser = BgWebViewParser(this@DownloadService)
         scope.launch {
             var myTaskId: Long = taskIdExtra ?: -1L
@@ -985,7 +990,7 @@ class DownloadService : Service() {
                     else "${pendingItems.size}(共${batch.items.size})"
                     myTaskId = TaskManager.createTask(
                         batchKey, "小红书主页·${batch.authorNickname.ifBlank { "作者" }}($label)",
-                        NoteType.VIDEO, pendingItems.size, source = "xhs"
+                        NoteType.IMAGE, pendingItems.size, source = "xhs"
                     ).also { TaskManager.startTask(it) }
                 }
                 activeJobs[myTaskId] = coroutineContext[Job]!!
@@ -1057,9 +1062,9 @@ class DownloadService : Service() {
     }
 
     /**
-     * 下载单条小红书作品：explore 页解析（视频→videoUrls 首条 mp4；图文→imageUrls 图集）。
-     * P0 不做解析级重试（失败多为登录墙/token 失效，重试同样失败）；UA/Referer 与解析
-     * WebView 桌面会话保持一致（直链来自同一会话，CDN 校验最稳）。
+     * 下载单条小红书作品：**封面图 CDN 直链下载**（v3.3.1）。
+     * 游客态单篇页被登录墙拦截（explore/discovery/item 都 300031），封面 CDN 图可直下。
+     * 去掉 imageView2 缩放参数拿原图；sign/t 签名参数保留。
      */
     private suspend fun downloadXhsHomepageItem(
         parser: BgWebViewParser,
@@ -1069,29 +1074,17 @@ class DownloadService : Service() {
         taskId: Long
     ): Boolean {
         val fileName = "${index + 1}_${post.title}"
-        val result = runCatching {
-            parser.parse(xhsExploreUrl(post.id, token), "xhs")
-        }.getOrNull() ?: return false
+        val rawCover = post.coverUrl?.takeIf { it.isNotBlank() } ?: return false
+        val coverUrl = if (rawCover.startsWith("//")) "https:$rawCover" else rawCover
+        // 去掉 CDN 缩放参数拿原图（sign 签名是路径级的，不影响）
+        val fullSizeUrl = coverUrl.replace(Regex("[?&]imageView2[^&]*"), "").replace("?&", "?").trimEnd('?', '&')
         val downloader = FileDownloader(this@DownloadService, createCallback(taskId))
         val xhsReferer = "https://www.xiaohongshu.com/"
-        return when {
-            result.videoUrls.isNotEmpty() -> runCatching {
-                downloader.downloadFile(result.videoUrls.first(), "$fileName.mp4", xhsReferer, BgWebViewParser.DESKTOP_UA)
-            }.getOrElse { e ->
-                DownloadLogger.logFailure(this@DownloadService, "xhs", result.videoUrls.first(), "小红书视频下载异常: ${e.message}")
-                false
-            }
-            result.imageUrls.isNotEmpty() -> runCatching {
-                downloadImages(
-                    downloader,
-                    DouyinMediaInfo(DouyinMediaType.IMAGE, post.title, null, result.imageUrls, null, post.id, BgWebViewParser.DESKTOP_UA),
-                    taskId
-                )
-            }.getOrElse { e ->
-                DownloadLogger.logFailure(this@DownloadService, "xhs", result.imageUrls.firstOrNull() ?: post.id, "小红书图集下载异常: ${e.message}")
-                false
-            }
-            else -> false
+        return runCatching {
+            downloader.downloadFile(fullSizeUrl, "$fileName.jpg", xhsReferer, BgWebViewParser.XHS_MOBILE_UA)
+        }.getOrElse { e ->
+            DownloadLogger.logFailure(this@DownloadService, "xhs", fullSizeUrl, "小红书封面下载异常: ${e.message}")
+            false
         }
     }
 

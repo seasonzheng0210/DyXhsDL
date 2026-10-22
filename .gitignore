@@ -55,3 +55,6 @@ tmp/
 _ck*.db
 _cookie*.txt
 _posturl*.txt
+apks/emu_new/
+apks/emu-*.zip
+apks/*.zip

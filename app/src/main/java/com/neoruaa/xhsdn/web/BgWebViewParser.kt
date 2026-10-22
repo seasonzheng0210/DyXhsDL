@@ -316,6 +316,8 @@ class BgWebViewParser(private val appContext: Context) {
                                 if (cont.isActive) cont.resume(r)
                             }
                         }
+                        // 防污染：xhs 嗅探可能切过移动 UA；xhs note 页用移动 UA（桌面 explore 游客态 300031 封禁）
+                        wv.settings.userAgentString = if (source == "xhs") XHS_MOBILE_UA else DESKTOP_UA
                         wv.loadUrl(pageUrl)
                         Log.d(TAG, "loadUrl 已发起: $pageUrl")
 
@@ -431,8 +433,9 @@ class BgWebViewParser(private val appContext: Context) {
                                 if (pageFinishedAt == 0L) pageFinishedAt = System.currentTimeMillis()
                             }
                         }
-                        wv.loadUrl(url)
-                        // 轮询起点：不等 onPageFinished（慢机用户主页可能长时间不触发，旧实现因此空转）
+                wv.settings.userAgentString = DESKTOP_UA
+                wv.loadUrl(url)
+                // 轮询起点：不等 onPageFinished（慢机用户主页可能长时间不触发，旧实现因此空转）
                         mainHandler.postDelayed(poll, WARMUP_POLL_MS)
                         // 硬预算兜底（poll 内也判一次，双保险）
                         mainHandler.postDelayed({ finish(snapshotDouyinCookies()) }, budgetMs + 1_000L)
@@ -574,8 +577,9 @@ class BgWebViewParser(private val appContext: Context) {
                                 return true
                             }
                         }
-                        wv.loadUrl(url)
-                        Log.d(TAG, "sniff loadUrl: $url")
+                wv.settings.userAgentString = DESKTOP_UA
+                wv.loadUrl(url)
+                Log.d(TAG, "sniff loadUrl: $url")
                         mainHandler.postDelayed(poll, SNIFF_POLL_MS)
                         mainHandler.postDelayed({ finish() }, budgetMs + 1_000L)
                     } catch (e: Exception) {
@@ -600,14 +604,20 @@ class BgWebViewParser(private val appContext: Context) {
      *
      * @return 嗅探结果；预算内未嗅到任何作品返回**空结果**（items 为空，调用方判 isNotEmpty）。
      */
-    suspend fun sniffXhsHomepage(userId: String, budgetMs: Long = SNIFF_BUDGET_MS): XhsHomepageSniff {
+    suspend fun sniffXhsHomepage(
+        userId: String,
+        budgetMs: Long = SNIFF_BUDGET_MS,
+        /** 分享短链跟跳出的完整主页 URL（自带 xsec_token 时页面初始加载更稳）；空=规范长链。 */
+        startUrl: String? = null
+    ): XhsHomepageSniff {
         if (userId.isBlank()) return XhsHomepageSniff(emptyList(), null, 0, false, "")
-        return mutex.withLock { sniffXhsOnce(userId, budgetMs) }
+        return mutex.withLock { sniffXhsOnce(userId, budgetMs, startUrl) }
     }
 
     /** 小红书单轮嗅探（调用方需持有 [mutex]）。 */
-    private suspend fun sniffXhsOnce(userId: String, budgetMs: Long): XhsHomepageSniff {
-        val url = "https://www.xiaohongshu.com/user/profile/$userId"
+    private suspend fun sniffXhsOnce(userId: String, budgetMs: Long, startUrl: String?): XhsHomepageSniff {
+        val url = startUrl?.takeIf { it.contains("xiaohongshu.com/user/profile/") }
+            ?: "https://www.xiaohongshu.com/user/profile/$userId"
         return suspendCancellableCoroutine { cont ->
             mainHandler.post {
                 val session = XhsSniffSession()
@@ -664,8 +674,8 @@ class BgWebViewParser(private val appContext: Context) {
                     wv.stopLoading()
                     wv.webViewClient = object : WebViewClient() {
                         override fun onPageStarted(view: WebView?, u: String?, favicon: android.graphics.Bitmap?) {
-                            // 小红书无需 DESKTOP_ENV_ASSET（那是抖音 navigator.platform 交叉校验补丁）
-                            injectJs(view, XHS_SNIFF_ASSET)
+                            // 隔离实验：页面脚本前只注入被动探针（不 hook），验证 hook 是否破坏水合
+                            injectJs(view, "xhs_home_sniff_passive.js")
                         }
 
                         override fun onPageFinished(view: WebView?, u: String?) {
@@ -683,8 +693,11 @@ class BgWebViewParser(private val appContext: Context) {
                             return true
                         }
                     }
+                    // 移动 H5 试探：用移动 Chrome UA 打开分享落地页（= 手机用户看到的版本），
+                    // 看小红书是否对移动访客保留 noteId（桌面游客态已实测被去 id）
+                    wv.settings.userAgentString = XHS_MOBILE_UA
                     wv.loadUrl(url)
-                    Log.d(TAG, "xhs sniff loadUrl: $url")
+                    Log.d(TAG, "xhs sniff loadUrl(mobile): $url")
                     mainHandler.postDelayed(poll, SNIFF_POLL_MS)
                     mainHandler.postDelayed({ finish() }, budgetMs + 1_000L)
                 } catch (e: Exception) {
@@ -994,6 +1007,8 @@ class BgWebViewParser(private val appContext: Context) {
         private const val TAG = "BgWebViewParser"
         // 与 WebViewActivity 的桌面 UA 保持一致（桌面播放/图文页才有媒体数据）
         const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        /** 小红书移动 H5 试探用（模拟手机 Chrome 打开分享落地页）。 */
+        const val XHS_MOBILE_UA = "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
         /** onPageFinished 后开始轮询提取的等待时长（等 SPA 水合发出首个数据请求）。 */
         private const val PAGE_READY_DELAY_MS = 1200L
         /** 无结果时的轮询间隔。 */
@@ -1048,7 +1063,8 @@ class BgWebViewParser(private val appContext: Context) {
         /** L2a 嗅探轮询间隔。 */
         private const val SNIFF_POLL_MS = 500L
         /** L2a 嗅探总预算（页面加载 + SPA 水合 + 首个 post 请求）。 */
-        private const val SNIFF_BUDGET_MS = 35_000L
+        /** 嗅探总预算：小红书页面冷加载慢（未登录+无缓存实测 35s 内请求未发出），放宽到 90s。 */
+        private const val SNIFF_BUDGET_MS = 90_000L
         /** L2a 离屏 WebView 视口尺寸（桌面级，保证 SPA 正常布局渲染）。 */
         private const val SNIFF_VIEW_W = 1440
         private const val SNIFF_VIEW_H = 900

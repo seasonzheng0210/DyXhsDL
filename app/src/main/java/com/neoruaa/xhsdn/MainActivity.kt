@@ -1018,13 +1018,42 @@ class MainActivity : ComponentActivity() {
             showToast(getString(R.string.invalid_link_please_reenter))
             return
         }
-        // ★平台路由（v3.3.0）：小红书主页走独立链（user_posted 旁路嗅探 + explore 逐条详情），
-        // 与抖音 post API 链完全不同源，提前分流（xhslink 短链是单作品分享，不走此分支）
-        Regex("""xiaohongshu\.com/user/profile/([0-9A-Za-z]+)""")
-            .find(cleanUrl)?.groupValues?.getOrNull(1)?.let { xhsUserId ->
-                fetchXhsHomePreview(xhsUserId)
-                return
+        // ★平台路由（v3.3.1）：小红书系链接（含 xhslink 主页短链）先跟跳拿最终 URL 再提取 userId。
+        // 实测：xhslink.cn/o/xxx 302 → user/profile/{id}?xsec_token=…&xsec_source=app_share
+        // ★ensureStoragePermission 必须包住整条链：放在路由协程内部会让「跳设置授权」期间
+        // homePreview 悬挂 Loading（按钮禁用 → 用户无法重试，v3.3.1 实测假死 5 分钟）
+        if (UrlUtils.isXhsLink(cleanUrl)) {
+            ensureStoragePermission {
+                homeParseJob?.cancel()
+                homeParseStage = 0
+                homePreview = HomePreviewState.Loading
+                homeParseJob = lifecycleScope.launch {
+                    try {
+                        var xhsUrl = cleanUrl
+                        if (!xhsUrl.contains("xiaohongshu.com/user/profile/")) {
+                            xhsUrl = withContext(Dispatchers.IO) {
+                                runCatching { DouyinParser.resolveFinalUrl(cleanUrl) }.getOrNull() ?: cleanUrl
+                            }
+                        }
+                        val uid = Regex("""xiaohongshu\.com/user/profile/([0-9A-Za-z]+)""")
+                            .find(xhsUrl)?.groupValues?.getOrNull(1)
+                        if (uid != null) {
+                            fetchXhsHomePreview(uid, xhsUrl)
+                        } else {
+                            // xhs 单作品链接误入主页入口（主页入口只吃主页链接）
+                            homePreview = HomePreviewState.Error(getString(R.string.home_preview_bad_link), false)
+                        }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        homePreview = HomePreviewState.Error(
+                            getString(R.string.home_preview_failed, e.message ?: "unknown"), false
+                        )
+                    }
+                }
             }
+            return
+        }
         ensureStoragePermission {
             homeParseJob?.cancel()
             homeParseStage = 0
@@ -1156,19 +1185,20 @@ class MainActivity : ComponentActivity() {
      * 媒体直链由批量阶段逐条 explore 页解析（DownloadService.xhs 分支）。
      * HomeRepo 账本 key = "xhs_$userId"（与抖音 secUid 命名空间隔离，函数签名零改动）。
      */
-    private fun fetchXhsHomePreview(userId: String) {
+    private fun fetchXhsHomePreview(userId: String, startUrl: String) {
+        // 前置：调用方（xhs 路由）已过 ensureStoragePermission；此处直接跑嗅探，
+        // 不再自行 ensure —— 否则未授权时 homePreview 悬挂 Loading（v3.3.1 假死教训）
         val homepageUrl = "https://www.xiaohongshu.com/user/profile/$userId"
-        ensureStoragePermission {
-            homeParseJob?.cancel()
-            homeParseStage = 0
-            homePreview = HomePreviewState.Loading
-            homeParseJob = lifecycleScope.launch {
-                try {
-                    val repoKey = "xhs_$userId"
-                    homeParseStage = 1
-                    val sniff = withContext(Dispatchers.IO) {
-                        BgWebViewParser(applicationContext).sniffXhsHomepage(userId)
-                    }
+        homeParseJob?.cancel()
+        homeParseStage = 0
+        homePreview = HomePreviewState.Loading
+        homeParseJob = lifecycleScope.launch {
+            try {
+                val repoKey = "xhs_$userId"
+                homeParseStage = 1
+                val sniff = withContext(Dispatchers.IO) {
+                    BgWebViewParser(applicationContext).sniffXhsHomepage(userId, startUrl = startUrl)
+                }
                     val tokens = sniff.items.associate { it.id to it.xsecToken }
                     val items = sniff.items.map { x ->
                         DouyinPostItem(
@@ -1207,13 +1237,12 @@ class MainActivity : ComponentActivity() {
                         sniff.totalCount, lastSync,
                         platform = "xhs", xhsTokens = tokens
                     )
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    homePreview = HomePreviewState.Error(
-                        getString(R.string.home_preview_failed, e.message ?: "unknown"), false
-                    )
-                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                homePreview = HomePreviewState.Error(
+                    getString(R.string.home_preview_failed, e.message ?: "unknown"), false
+                )
             }
         }
     }
