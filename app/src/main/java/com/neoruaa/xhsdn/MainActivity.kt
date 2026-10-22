@@ -1180,9 +1180,10 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 小红书主页下载预览（v3.3.0 P0）：加载 xhs 作者主页，旁路嗅探 user_posted 列表
-     * （含 xsec_token，无直链），转 DouyinPostItem 复用预览 UI/批次结构；
-     * 媒体直链由批量阶段逐条 explore 页解析（DownloadService.xhs 分支）。
+     * 小红书主页下载预览（v3.3.0 P0；v3.3.3 加登录态协议直取）：
+     * 登录态优先 XhsApi.getUserPostedAll（Spider_XHS 内核签名，列表含 noteId+xsec_token，
+     * note_card 能提媒体直链就提）；失败/未登录回落 sniffXhsHomepage 游客岛嗅探（L2x 兜底）。
+     * 媒体不全的条目由批量阶段逐条补（登录态 feed / 游客 explore 页，见 DownloadService.xhs 分支）。
      * HomeRepo 账本 key = "xhs_$userId"（与抖音 secUid 命名空间隔离，函数签名零改动）。
      */
     private fun fetchXhsHomePreview(userId: String, startUrl: String) {
@@ -1196,11 +1197,52 @@ class MainActivity : ComponentActivity() {
             try {
                 val repoKey = "xhs_$userId"
                 homeParseStage = 1
-                val sniff = withContext(Dispatchers.IO) {
-                    BgWebViewParser(applicationContext).sniffXhsHomepage(userId, startUrl = startUrl)
+                var items: List<DouyinPostItem> = emptyList()
+                var tokens: Map<String, String> = emptyMap()
+                var nickname: String? = null
+                var totalCount = 0
+                var hasMore = false
+                var provider = "xhs_l2x"
+
+                // ---- L1x 协议直取（v3.3.3，登录态）：user_posted 翻页收齐 ----
+                if (com.neoruaa.xhsdn.web.XhsSession.get(applicationContext).hasLogin()) {
+                    val q = xsecQueryFrom(startUrl)
+                    val apiPage = withContext(Dispatchers.IO) {
+                        runCatching {
+                            com.neoruaa.xhsdn.web.XhsApi.get(applicationContext)
+                                .getUserPostedAll(userId, xsecToken = q.first, xsecSource = q.second)
+                        }.getOrNull()
+                    }
+                    if (apiPage != null && apiPage.notes.isNotEmpty()) {
+                        provider = "xhs_api"
+                        items = apiPage.notes.map { b ->
+                            DouyinPostItem(
+                                id = b.noteId,
+                                type = if (b.isVideo) DouyinMediaType.VIDEO else DouyinMediaType.IMAGE,
+                                title = b.title.ifBlank { "小红书笔记 ${b.noteId.take(12)}" },
+                                videoUrl = b.videoUrl,
+                                imageUrls = b.imageUrls,
+                                createTime = 0L,
+                                coverUrl = b.coverUrl
+                            )
+                        }
+                        tokens = apiPage.notes.associate { it.noteId to it.xsecToken }
+                        nickname = apiPage.nickname
+                        totalCount = apiPage.total
+                        hasMore = apiPage.hasMore
+                    } else {
+                        trackEvent("homepage_provider_result",
+                            mapOf("provider" to "xhs_api", "items" to "0", "fallback" to "1"))
+                    }
                 }
-                    val tokens = sniff.items.associate { it.id to it.xsecToken }
-                    val items = sniff.items.map { x ->
+
+                // ---- L2x 游客岛嗅探兜底（xhs_home_sniff.js，保留为未登录/协议失败通道）----
+                if (items.isEmpty()) {
+                    val sniff = withContext(Dispatchers.IO) {
+                        BgWebViewParser(applicationContext).sniffXhsHomepage(userId, startUrl = startUrl)
+                    }
+                    tokens = sniff.items.associate { it.id to it.xsecToken }
+                    items = sniff.items.map { x ->
                         DouyinPostItem(
                             id = x.id,
                             type = if (x.isVideo) DouyinMediaType.VIDEO else DouyinMediaType.IMAGE,
@@ -1213,30 +1255,35 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     if (items.isEmpty()) {
-                        trackEvent("homepage_provider_result", mapOf("provider" to "xhs_l2x", "items" to "0"))
+                        trackEvent("homepage_provider_result", mapOf("provider" to provider, "items" to "0"))
                         // 小红书未登录时主页作品列表可能被服务端截断为空 → 引导登录（与抖音同文案语义）
                         homePreview = HomePreviewState.Error(getString(R.string.home_preview_need_login), true)
                         return@launch
                     }
-                    val nickname = (sniff.nickname ?: HomeRepo.nickname(this@MainActivity, repoKey))
-                        ?: getString(R.string.home_preview_default_author)
-                    trackEvent(
-                        "homepage_provider_result",
-                        mapOf("provider" to "xhs_l2x", "items" to items.size.toString(),
-                            "total" to sniff.totalCount.toString(), "hasMore" to sniff.hasMore.toString())
-                    )
-                    if (sniff.totalCount > 0 && items.size < sniff.totalCount) {
-                        showToast(getString(R.string.home_preview_partial, items.size, sniff.totalCount))
-                    }
-                    val lastSync = HomeRepo.lastSync(this@MainActivity, repoKey)
-                    val newItems = HomeRepo.filterNew(this@MainActivity, repoKey, items)
-                    HomeRepo.touch(this@MainActivity, repoKey, sniff.nickname ?: "")
-                    homeParseStage = 2
-                    homePreview = HomePreviewState.Ready(
-                        repoKey, nickname, homepageUrl, items, newItems,
-                        sniff.totalCount, lastSync,
-                        platform = "xhs", xhsTokens = tokens
-                    )
+                    if (nickname == null) nickname = sniff.nickname
+                    totalCount = sniff.totalCount
+                    hasMore = sniff.hasMore
+                }
+
+                val displayNickname = (nickname ?: HomeRepo.nickname(this@MainActivity, repoKey))
+                    ?: getString(R.string.home_preview_default_author)
+                trackEvent(
+                    "homepage_provider_result",
+                    mapOf("provider" to provider, "items" to items.size.toString(),
+                        "total" to totalCount.toString(), "hasMore" to hasMore.toString())
+                )
+                if (totalCount > 0 && items.size < totalCount) {
+                    showToast(getString(R.string.home_preview_partial, items.size, totalCount))
+                }
+                val lastSync = HomeRepo.lastSync(this@MainActivity, repoKey)
+                val newItems = HomeRepo.filterNew(this@MainActivity, repoKey, items)
+                HomeRepo.touch(this@MainActivity, repoKey, nickname.orEmpty())
+                homeParseStage = 2
+                homePreview = HomePreviewState.Ready(
+                    repoKey, displayNickname, homepageUrl, items, newItems,
+                    totalCount, lastSync,
+                    platform = "xhs", xhsTokens = tokens
+                )
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1245,6 +1292,14 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    /** 从主页 URL query 提 xsec_token / xsec_source（Spider_XHS get_user_all_notes 同规则）。 */
+    private fun xsecQueryFrom(url: String): Pair<String, String> {
+        fun q(name: String): String? =
+            Regex("""[?&]$name=([^&]+)""").find(url)?.groupValues?.get(1)
+                ?.let { java.net.URLDecoder.decode(it, "UTF-8") }
+        return (q("xsec_token") ?: "") to (q("xsec_source") ?: "pc_search")
     }
 
     /**

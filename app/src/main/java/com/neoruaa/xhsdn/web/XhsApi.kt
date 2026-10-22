@@ -94,6 +94,62 @@ class XhsApi private constructor(context: Context) {
         return res
     }
 
+    /**
+     * 作者全部笔记（分页收齐，v3.3.3 批量链 L1）。
+     * 对齐 Spider_XHS `get_user_all_notes`：cursor 链翻页，has_more=false 或空页即停。
+     * 列表 note_card 只有元数据+封面（实测 user_posted 不带媒体直链）→ 媒体由 [getNoteFeedMedia] 补。
+     */
+    suspend fun getUserPostedAll(
+        userId: String,
+        xsecToken: String = "",
+        xsecSource: String = "",
+        maxPages: Int = 20,
+    ): XhsPostedPage {
+        val out = mutableListOf<XhsNoteBrief>()
+        val seen = HashSet<String>()
+        var cursor = ""
+        var hasMore = false
+        var nickname: String? = null
+        var total = 0
+        for (page in 0 until maxPages) {
+            val json = getUserPosted(userId, cursor, xsecToken, xsecSource)
+            val data = json.optJSONObject("data") ?: break
+            val notes = data.optJSONArray("notes") ?: break
+            for (i in 0 until notes.length()) {
+                val n = notes.optJSONObject(i) ?: continue
+                val brief = parseXhsPostedNote(n) ?: continue
+                if (nickname == null) {
+                    nickname = (n.optJSONObject("note_card") ?: n.optJSONObject("noteCard"))
+                        ?.optJSONObject("user")?.optString("nickname")
+                        ?.takeIf { it.isNotBlank() }
+                }
+                if (seen.add(brief.noteId)) out.add(brief)
+            }
+            if (total <= 0) total = data.optInt("total", 0)
+            hasMore = data.optBoolean("has_more", false)
+            val next = data.optString("cursor", "")
+            if (!hasMore || next.isBlank() || next == cursor) {
+                hasMore = false
+                break
+            }
+            cursor = next
+        }
+        return XhsPostedPage(out, nickname, total, hasMore)
+    }
+
+    /**
+     * 笔记详情媒体直链（v3.3.3 批量链 L2）：feed → `data.items[0].note_card`。
+     * 无媒体返回 null（调用方回退封面/游客链）。
+     */
+    suspend fun getNoteFeedMedia(
+        noteId: String,
+        xsecToken: String = "",
+        xsecSource: String = "pc_search",
+    ): XhsNoteMedia? {
+        val json = getNoteFeed(noteId, xsecToken, xsecSource)
+        return parseXhsFeedMedia(json)
+    }
+
     // ------------------------------------------------------------------
     // 请求装配（对齐 _request_params + build_pc_business_headers）
     // ------------------------------------------------------------------
@@ -197,7 +253,7 @@ class XhsApi private constructor(context: Context) {
         }
         val resp = http.newCall(rb.build()).execute()
         resp.use { r ->
-            val raw = r.body?.let { decodeBody(it.bytes(), r.header("Content-Encoding")) } ?: ByteArray(0)
+            val raw = decodeBody(r.body.bytes(), r.header("Content-Encoding"))
             val text = raw.toString(Charsets.UTF_8)
             val json = runCatching { JSONObject(text) }.getOrNull()
             return@withContext RawResult(r.code, json)

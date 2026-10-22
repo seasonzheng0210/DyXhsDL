@@ -1104,6 +1104,36 @@ class DownloadService : Service() {
                 false
             }
         }
+        // 2.4) 登录态 feed 协议直取（v3.3.3）：XhsApi.getNoteFeedMedia（Spider_XHS 内核签名，
+        //      RAP+xy 签全），比 WebView 逐条解析快一个量级；失败/未登录落 2.5 游客链。
+        if (com.neoruaa.xhsdn.web.XhsSession.get(this@DownloadService).hasLogin()) {
+            val feedMedia = runCatching {
+                com.neoruaa.xhsdn.web.XhsApi.get(this@DownloadService)
+                    .getNoteFeedMedia(post.id, token ?: "")
+            }.getOrNull()
+            if (feedMedia != null) {
+                feedMedia.videoUrl?.let { vUrl ->
+                    return runCatching {
+                        downloader.downloadFile(vUrl, "$fileName.mp4", xhsReferer, BgWebViewParser.XHS_MOBILE_UA)
+                    }.getOrElse { e ->
+                        DownloadLogger.logFailure(this@DownloadService, "xhs", vUrl, "小红书视频下载异常: ${e.message}")
+                        false
+                    }
+                }
+                if (feedMedia.imageUrls.isNotEmpty()) {
+                    return runCatching {
+                        downloadImages(
+                            downloader,
+                            DouyinMediaInfo(DouyinMediaType.IMAGE, post.title, null, feedMedia.imageUrls, null, post.id, BgWebViewParser.XHS_MOBILE_UA),
+                            taskId
+                        )
+                    }.getOrElse { e ->
+                        DownloadLogger.logFailure(this@DownloadService, "xhs", post.id, "小红书图集下载异常: ${e.message}")
+                        false
+                    }
+                }
+            }
+        }
         // 2.5) 笔记页解析（v3.3.2 定案）：带 note 级 xsec_token 的 discovery/item 游客可用，
         //      岛内 noteData.data.noteData 有全量媒体（video.media.stream.h264[].masterUrl / imageList[].url）。
         //      单 parser 串行（parse 内部 Mutex），整批共用一个 WebView 不并发。
