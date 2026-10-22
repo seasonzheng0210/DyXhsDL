@@ -117,7 +117,10 @@ class BgWebViewParser(private val appContext: Context) {
         val xsecToken: String,
         val title: String,
         val isVideo: Boolean,
-        val coverUrl: String?
+        val coverUrl: String?,
+        /** SPA feed API 截获的媒体直链（v3.3.2）；空=未取到。 */
+        val videoUrls: List<String> = emptyList(),
+        val imageUrls: List<String> = emptyList()
     )
 
     /** 小红书主页嗅探结果（L2x-1）。 */
@@ -254,11 +257,20 @@ class BgWebViewParser(private val appContext: Context) {
                 for (i in 0 until arr.length()) {
                     val n = arr.optJSONObject(i) ?: continue
                     val id = n.optString("id").takeIf { it.isNotBlank() } ?: continue
-                    if (s.items.any { it.id == id }) continue
+                    val tok = n.optString("xsec_token")
+                    val existingIdx = s.items.indexOfFirst { it.id == id }
+                    if (existingIdx >= 0) {
+                        // 岛路径先到时 token 为空；后到的 user_posted 条目带 note 级 xsec_token → 补进
+                        // （batch 下载要靠它拼 discovery/item?xsec_token=… 打开完整笔记页）
+                        if (tok.isNotBlank() && s.items[existingIdx].xsecToken.isBlank()) {
+                            s.items[existingIdx] = s.items[existingIdx].copy(xsecToken = tok)
+                        }
+                        continue
+                    }
                     s.items.add(
                         XhsPostItem(
                             id = id,
-                            xsecToken = n.optString("xsec_token"),
+                            xsecToken = tok,
                             title = n.optString("title"),
                             isVideo = n.optString("type") == "video",
                             coverUrl = n.optString("cover").takeIf { it.isNotBlank() }
@@ -280,6 +292,34 @@ class BgWebViewParser(private val appContext: Context) {
                 if (n != null) s.nickname = s.nickname ?: n
                 if (c > 0) s.totalCount = maxOf(s.totalCount, c)
             }.onFailure { Log.w(TAG, "xhs profile 解析失败: ${it.message}") }
+        }
+
+        /** SPA feed API 截获的媒体直链（v3.3.2）：{media:[{id,videoUrls,imageUrls}]}。 */
+        @JavascriptInterface
+        fun onXhsMedia(json: String) {
+            val s = xhsSniffSession ?: return
+            runCatching {
+                val o = JSONObject(json)
+                val arr = o.optJSONArray("media") ?: return
+                for (i in 0 until arr.length()) {
+                    val m = arr.optJSONObject(i) ?: continue
+                    val id = m.optString("id").takeIf { it.isNotBlank() } ?: continue
+                    val vUrls = mutableListOf<String>().apply {
+                        val va = m.optJSONArray("videoUrls")
+                        if (va != null) for (j in 0 until va.length()) add(va.optString(j))
+                    }
+                    val iUrls = mutableListOf<String>().apply {
+                        val ia = m.optJSONArray("imageUrls")
+                        if (ia != null) for (j in 0 until ia.length()) add(ia.optString(j))
+                    }
+                    // 更新已有 item（by id）
+                    val idx = s.items.indexOfFirst { it.id == id }
+                    if (idx >= 0) {
+                        s.items[idx] = s.items[idx].copy(videoUrls = vUrls, imageUrls = iUrls)
+                    }
+                }
+                Log.d(TAG, "onXhsMedia: updated ${arr.length()} items")
+            }.onFailure { Log.w(TAG, "xhs media 解析失败: ${it.message}") }
         }
     }
 

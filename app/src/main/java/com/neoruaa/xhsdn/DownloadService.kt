@@ -962,9 +962,15 @@ class DownloadService : Service() {
     // region 小红书主页批量（MODE_HOMEPAGE + platform=xhs，v3.3.0 P0）
 
     private fun xhsExploreUrl(noteId: String, token: String?): String =
-        // v3.3.1: 桌面 explore/{id} 游客态 300031 不可用 → 改走移动 H5 discovery/item/{id}
-        // profile 级 xsec_token 对单篇 note 无效（errorCode=-510000 404）→ 不传 token
-        "https://www.xiaohongshu.com/discovery/item/$noteId"
+        // ★v3.3.2 定案：note 级 xsec_token（列表嗅探/user_posted 拿到的）对 discovery/item 页有效——
+        // 带 token 游客态可打开完整笔记岛（noteData.data.noteData 含 video.media.stream/imageList 全量媒体）。
+        // 早前「单篇页全被墙」是误判：墙的是无 token 访问；profile 级 token 无效 ≠ note 级无效。
+        if (token.isNullOrBlank()) {
+            "https://www.xiaohongshu.com/discovery/item/$noteId"
+        } else {
+            "https://www.xiaohongshu.com/discovery/item/$noteId?xsec_token=" +
+                java.net.URLEncoder.encode(token, "UTF-8") + "&xsec_source=h5_feed"
+        }
 
     /**
      * 小红书主页批量：列表嗅探只有 xsec_token 无直链，**逐条 explore 页 WebView 解析**。
@@ -1062,9 +1068,8 @@ class DownloadService : Service() {
     }
 
     /**
-     * 下载单条小红书作品：**封面图 CDN 直链下载**（v3.3.1）。
-     * 游客态单篇页被登录墙拦截（explore/discovery/item 都 300031），封面 CDN 图可直下。
-     * 去掉 imageView2 缩放参数拿原图；sign/t 签名参数保留。
+     * 下载单条小红书作品（v3.3.2）：优先直链（SPA feed 截获/笔记页解析的视频/图集），
+     * 兜底封面 CDN 图。★笔记页解析带 note 级 xsec_token —— 无 token 才是登录墙。
      */
     private suspend fun downloadXhsHomepageItem(
         parser: BgWebViewParser,
@@ -1074,12 +1079,65 @@ class DownloadService : Service() {
         taskId: Long
     ): Boolean {
         val fileName = "${index + 1}_${post.title}"
-        val rawCover = post.coverUrl?.takeIf { it.isNotBlank() } ?: return false
-        val coverUrl = if (rawCover.startsWith("//")) "https:$rawCover" else rawCover
-        // 去掉 CDN 缩放参数拿原图（sign 签名是路径级的，不影响）
-        val fullSizeUrl = coverUrl.replace(Regex("[?&]imageView2[^&]*"), "").replace("?&", "?").trimEnd('?', '&')
         val downloader = FileDownloader(this@DownloadService, createCallback(taskId))
         val xhsReferer = "https://www.xiaohongshu.com/"
+        // 1) 视频直链
+        val videoUrl = post.videoUrl
+        if (!videoUrl.isNullOrBlank()) {
+            return runCatching {
+                downloader.downloadFile(videoUrl, "$fileName.mp4", xhsReferer, BgWebViewParser.XHS_MOBILE_UA)
+            }.getOrElse { e ->
+                DownloadLogger.logFailure(this@DownloadService, "xhs", videoUrl, "小红书视频下载异常: ${e.message}")
+                false
+            }
+        }
+        // 2) 图集
+        if (post.imageUrls.isNotEmpty()) {
+            return runCatching {
+                downloadImages(
+                    downloader,
+                    DouyinMediaInfo(DouyinMediaType.IMAGE, post.title, null, post.imageUrls, null, post.id, BgWebViewParser.XHS_MOBILE_UA),
+                    taskId
+                )
+            }.getOrElse { e ->
+                DownloadLogger.logFailure(this@DownloadService, "xhs", post.imageUrls.firstOrNull() ?: post.id, "小红书图集下载异常: ${e.message}")
+                false
+            }
+        }
+        // 2.5) 笔记页解析（v3.3.2 定案）：带 note 级 xsec_token 的 discovery/item 游客可用，
+        //      岛内 noteData.data.noteData 有全量媒体（video.media.stream.h264[].masterUrl / imageList[].url）。
+        //      单 parser 串行（parse 内部 Mutex），整批共用一个 WebView 不并发。
+        if (!token.isNullOrBlank()) {
+            val noteResult = runCatching {
+                parser.parse(xhsExploreUrl(post.id, token), "xhs")
+            }.getOrNull()
+            if (noteResult != null && noteResult.isNotEmpty) {
+                noteResult.videoUrls.firstOrNull()?.let { vUrl ->
+                    return runCatching {
+                        downloader.downloadFile(vUrl, "$fileName.mp4", xhsReferer, BgWebViewParser.XHS_MOBILE_UA)
+                    }.getOrElse { e ->
+                        DownloadLogger.logFailure(this@DownloadService, "xhs", vUrl, "小红书视频下载异常: ${e.message}")
+                        false
+                    }
+                }
+                if (noteResult.imageUrls.isNotEmpty()) {
+                    return runCatching {
+                        downloadImages(
+                            downloader,
+                            DouyinMediaInfo(DouyinMediaType.IMAGE, post.title, null, noteResult.imageUrls, null, post.id, BgWebViewParser.XHS_MOBILE_UA),
+                            taskId
+                        )
+                    }.getOrElse { e ->
+                        DownloadLogger.logFailure(this@DownloadService, "xhs", post.id, "小红书图集下载异常: ${e.message}")
+                        false
+                    }
+                }
+            }
+        }
+        // 3) 封面 CDN 兜底
+        val rawCover = post.coverUrl?.takeIf { it.isNotBlank() } ?: return false
+        val coverUrl = if (rawCover.startsWith("//")) "https:$rawCover" else rawCover
+        val fullSizeUrl = coverUrl.replace(Regex("[?&]imageView2[^&]*"), "").replace("?&", "?").trimEnd('?', '&')
         return runCatching {
             downloader.downloadFile(fullSizeUrl, "$fileName.jpg", xhsReferer, BgWebViewParser.XHS_MOBILE_UA)
         }.getOrElse { e ->

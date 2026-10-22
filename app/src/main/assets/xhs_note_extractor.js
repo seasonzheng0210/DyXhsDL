@@ -19,8 +19,29 @@
 (function () {
   var EMPTY = { urls: [], image_urls: [], content: { content: '', title: '', desc: '' } };
   try {
-    var s = window.__INITIAL_STATE__;
-    var note = s && s.noteData && s.noteData.data && s.noteData.data.noteData;
+    // ★优先读 script 文本解析岛：SPA 启动后会清空活对象 noteData.data（实证 p15 nDdata={}），
+    // 读 window.__INITIAL_STATE__ 活对象会踩空；文本里保留完整 noteData.data.noteData。
+    var note = null;
+    try {
+      var sc = document.scripts;
+      for (var i = 0; i < sc.length; i++) {
+        var tx = '';
+        try { tx = sc[i].textContent || ''; } catch (e0) {}
+        var eq = tx.indexOf('window.__INITIAL_STATE__=');
+        if (eq < 0) continue;
+        var body = tx.slice(eq + 'window.__INITIAL_STATE__='.length).replace(/;\s*$/, '');
+        // JS 对象字面量非严格 JSON：sanitize 裸 undefined/NaN + 尾逗号
+        body = body.replace(/:\s*undefined\b/g, ':null').replace(/:\s*NaN\b/g, ':null')
+                   .replace(/,\s*([}\]])/g, '$1');
+        var st = JSON.parse(body);
+        note = st && st.noteData && st.noteData.data && st.noteData.data.noteData;
+        if (note) break;
+      }
+    } catch (e1) {}
+    if (!note) {
+      var s = window.__INITIAL_STATE__;
+      note = s && s.noteData && s.noteData.data && s.noteData.data.noteData;
+    }
     if (!note) return EMPTY;
 
     var urls = [];

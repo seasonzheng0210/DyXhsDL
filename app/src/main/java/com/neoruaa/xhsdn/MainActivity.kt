@@ -1205,9 +1205,9 @@ class MainActivity : ComponentActivity() {
                             id = x.id,
                             type = if (x.isVideo) DouyinMediaType.VIDEO else DouyinMediaType.IMAGE,
                             title = x.title.ifBlank { "小红书笔记 ${x.id.take(12)}" },
-                            // 列表阶段无直链：批量阶段逐条 explore 页解析补齐
-                            videoUrl = null,
-                            imageUrls = emptyList(),
+                            // v3.3.2: SPA feed API 截获的媒体直链（视频/图集）
+                            videoUrl = x.videoUrls.firstOrNull(),
+                            imageUrls = x.imageUrls,
                             createTime = 0L,
                             coverUrl = x.coverUrl
                         )
@@ -3878,7 +3878,13 @@ private fun HomepagePage(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                link = "https://www.douyin.com/user/$recentSecUid"
+                                // ★key 命名空间分流：xhs_ 前缀 = 小红书作者（HomeRepo key = xhs_$userId），
+                                // 直接拼 douyin.com/user/$key 会被路由进抖音链路（v3.3.2 实测踩过）
+                                link = if (recentSecUid.startsWith("xhs_")) {
+                                    "https://www.xiaohongshu.com/user/profile/${recentSecUid.removePrefix("xhs_")}"
+                                } else {
+                                    "https://www.douyin.com/user/$recentSecUid"
+                                }
                                 onPreview(link)
                             },
                         cornerRadius = 14.dp,
@@ -3948,7 +3954,11 @@ private fun HomepagePage(
                                     // ★surface 暗色是「白@14%」覆盖层，copy(alpha=0.7) 会变成白 70% → 白板
                                     .background(glassSolid(0.70f))
                                     .clickable {
-                                        link = "https://www.douyin.com/user/$secUid"
+                                        link = if (secUid.startsWith("xhs_")) {
+                                            "https://www.xiaohongshu.com/user/profile/${secUid.removePrefix("xhs_")}"
+                                        } else {
+                                            "https://www.douyin.com/user/$secUid"
+                                        }
                                         onPreview(link)
                                     }
                                     .padding(horizontal = 12.dp, vertical = 8.dp),

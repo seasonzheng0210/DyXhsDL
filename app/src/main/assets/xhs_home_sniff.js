@@ -23,9 +23,11 @@
 
   var POSTED_RE = /\/api\/sns\/web\/v1\/user_posted/;
   var USER_RE = /\/api\/sns\/web\/v1\/user\/(?:other|selfinfo)/;
+  var FEED_RE = /\/api\/sns\/web\/v1\/feed/;   // 笔笔详情 API（SPA 点卡片触发）
   var profileRelayed = false;
   var MAX_PER_CHUNK = 30;
   var seen = {};   // noteId 去重（跨 cursor 翻页 / SSR）
+  var mediaMap = {};  // noteId → {videoUrls:[], imageUrls:[]}（SPA 点卡片截获）
 
   function log(msg) {
     try {
@@ -133,6 +135,63 @@
     log('profile nickname=' + (d.nickname || '') + ' total=' + (d.notes || 0));
   }
 
+  // ---- feed API 响应 → 提取媒体直链（SPA 点卡片截获） ----
+  function relayMedia(bodyText) {
+    if (!bodyText || bodyText.charAt(0) !== '{') { log('media_skip head=' + String(bodyText || '').slice(0, 40)); return; }
+    var j;
+    try { j = JSON.parse(bodyText); } catch (e) { log('media_json_err:' + e.message); return; }
+    log('media code=' + j.code + ' msg=' + String(j.msg || '').slice(0, 40) + ' items=' + ((j.data && j.data.items && j.data.items.length) || 0));
+    var items = (j.data && j.data.items) || [];
+    for (var i = 0; i < items.length; i++) {
+      var noteCard = items[i].note_card || items[i].noteCard || {};
+      var noteId = items[i].id || noteCard.noteId || noteCard.note_id || '';
+      if (!noteId) continue;
+      var videoUrls = [];
+      var imageUrls = [];
+      // 视频直链：video.media.stream 各编码档
+      try {
+        var st = noteCard.video && noteCard.video.media && noteCard.video.media.stream;
+        if (st) {
+          var encs = ['h264', 'h265', 'av1'];
+          for (var e = 0; e < encs.length; e++) {
+            var arr = st[encs[e]];
+            if (!arr || !arr.length) continue;
+            for (var k = 0; k < arr.length; k++) {
+              var it = arr[k];
+              var u = (typeof it === 'string') ? it : ((it && (it.masterUrl || it.url)) || '');
+              if (u && u.indexOf('http') === 0 && videoUrls.indexOf(u) < 0) videoUrls.push(u);
+            }
+          }
+        }
+      } catch (e) {}
+      // 图集图片
+      try {
+        var il = noteCard.imageList || noteCard.images || [];
+        for (var m = 0; m < il.length; m++) {
+          var img = il[m] || {};
+          var iu = img.urlDefault || img.url || '';
+          if (iu && imageUrls.indexOf(iu) < 0) imageUrls.push(iu);
+        }
+      } catch (e) {}
+      mediaMap[noteId] = { videoUrls: videoUrls, imageUrls: imageUrls };
+      log('media ' + noteId.slice(0, 12) + ' v=' + videoUrls.length + ' i=' + imageUrls.length);
+    }
+    // 通知 Kotlin 侧（如果已有 bridge 方法）
+    try {
+      if (window.AndroidVideoBridge && window.AndroidVideoBridge.onXhsMedia) {
+        var mediaPayload = [];
+        for (var mid in mediaMap) {
+          if (Object.prototype.hasOwnProperty.call(mediaMap, mid)) {
+            mediaPayload.push({ id: mid, videoUrls: mediaMap[mid].videoUrls, imageUrls: mediaMap[mid].imageUrls });
+          }
+        }
+        if (mediaPayload.length) {
+          window.AndroidVideoBridge.onXhsMedia(JSON.stringify({ media: mediaPayload }));
+        }
+      }
+    } catch (e) {}
+  }
+
   // ---- fetch 旁路 hook ----
   var _fetch = window.fetch;
   if (_fetch) {
@@ -151,6 +210,18 @@
         stats.fetchSeen++;
         return _fetch.apply(this, arguments).then(function (res) {
           try { res.clone().text().then(function (t) { relayProfile(t); }).catch(function (e) {}); } catch (e) {}
+          return res;
+        });
+      }
+      if (FEED_RE.test(u)) {
+        stats.fetchSeen++;
+        log('feed hit ' + u.slice(0, 120));
+        return _fetch.apply(this, arguments).then(function (res) {
+          log('feed res status=' + res.status + ' ok=' + res.ok);
+          try { res.clone().text().then(function (t) {
+            log('feed body len=' + (t ? t.length : 0) + ' head=' + String(t || '').slice(0, 60));
+            relayMedia(t);
+          }).catch(function (e) { log('feed_txt_err:' + e.message); }); } catch (e) {}
           return res;
         });
       }
@@ -187,6 +258,12 @@
         stats.xhrSeen++;
         xhr.addEventListener('load', function () {
           try { relayProfile(xhr.responseText); } catch (e) {}
+        });
+      } else if (FEED_RE.test(u)) {
+        stats.xhrSeen++;
+        log('xhr feed hit ' + u.slice(0, 120));
+        xhr.addEventListener('load', function () {
+          try { relayMedia(xhr.responseText); } catch (e) {}
         });
       }
     } catch (e) {}
@@ -323,6 +400,12 @@
   // 但 SPA 启动后会把运行时 state.noteData.data 清空 → 必须读文本而非活对象。
   // item 形状：{cover:{…}, id, likes, title, type:"video|normal", user:{id}}；
   // note 级 xsec_token 缺失 → 用 URL 上的 profile 级 token 兜底（explore 页共用）。
+  // ---- SPA 内点卡片截 API：直接调 feed API 拿媒体直链 ----
+  // ---- feed API 旁路 hook（保留）----
+  // 「SPA 内点卡片截 API」基建：SPA 任何时候自己调 /api/sns/web/v1/feed（带签名），
+  // hook 都能截获响应提媒体。★实测直调 feed 缺 X-s 必 500（jarvis-gateway），
+  // 批量媒体直链的主路径是「笔记页岛解析」（discovery/item?xsec_token=… + xhs_note_extractor.js）。
+
   function harvestIsland(tag) {
     try {
       var sc = document.scripts;
