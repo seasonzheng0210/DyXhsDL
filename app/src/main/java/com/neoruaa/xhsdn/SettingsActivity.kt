@@ -442,6 +442,27 @@ internal fun SettingsScreen(
                 Spacer(modifier = Modifier.size(12.dp))
             }
 
+            // ★v3.3.3：小红书账号 —— 扫码登录入口（WebView 官方登录页收割 cookie）。
+            item {
+                SettingsGroup(stringResource(R.string.xhs_account_group_title)) {
+                    val xhsLoggedIn = remember {
+                        com.neoruaa.xhsdn.web.XhsSession.get(context).hasLogin()
+                    }
+                    BasicComponent(
+                        title = stringResource(R.string.xhs_login_entry_title),
+                        summary = stringResource(
+                            if (xhsLoggedIn) R.string.xhs_login_entry_summary_logged_in
+                            else R.string.xhs_login_entry_summary_logged_out
+                        ),
+                        onClick = {
+                            context.startActivity(
+                                Intent(context, XhsLoginActivity::class.java)
+                            )
+                        }
+                    )
+                }
+            }
+
             // ★v3.2.2：主题分组 —— 五套配色可直接切换。
             // 旧版「暖砂」是写死在 GlassTokens 里的单一配色，用户不喜欢也没有退路。
             item {

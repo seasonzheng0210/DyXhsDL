@@ -305,4 +305,16 @@
     <string name="package_log_share">分享日志</string>
     <string name="package_log_success">日志已打包：%1$s</string>
     <string name="redownload">重新下载</string>
+    <string name="xhs_account_group_title">小红书账号</string>
+    <string name="xhs_login_entry_title">小红书登录</string>
+    <string name="xhs_login_entry_summary_logged_in">已登录 · 作者主页批量下载可用</string>
+    <string name="xhs_login_entry_summary_logged_out">未登录 · 扫码登录后解锁主页批量下载</string>
+    <string name="xhs_login_page_title">登录小红书</string>
+    <string name="xhs_login_hint">在下方页面完成登录：若未自动弹出二维码，请点页面右上角「登录」。用小红书 App 扫码并确认后，点下方「我已扫码登录」。</string>
+    <string name="xhs_login_detected">检测到登录 cookie，请点「我已扫码登录」完成校验。</string>
+    <string name="xhs_login_confirm">我已扫码登录</string>
+    <string name="xhs_login_reload">刷新页面</string>
+    <string name="xhs_login_success">登录成功：%1$s</string>
+    <string name="xhs_login_verify_failed">登录校验失败：%1$s</string>
+    <string name="xhs_login_no_cookie">未检测到登录 cookie，请先在页面完成扫码登录</string>
 </resources>
