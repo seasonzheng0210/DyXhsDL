@@ -720,6 +720,10 @@ global.XhsSign = __exports;
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   fs.writeFileSync(OUT, out);
   console.log('bundle written:', OUT, out.length, 'bytes');
+  // Kotlin 侧（XhsSession）需要同一份设备画像 → 同步到 assets
+  const profileOut = path.join(path.dirname(OUT), 'xhs_reference_profile.json');
+  fs.copyFileSync(path.join(SRC, 'reference_profile.json'), profileOut);
+  console.log('profile synced:', profileOut);
 }
 
 function test() {
