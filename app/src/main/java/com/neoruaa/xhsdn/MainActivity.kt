@@ -3,6 +3,7 @@ package com.neoruaa.xhsdn
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import androidx.compose.material3.MaterialTheme
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.res.Configuration
@@ -372,6 +373,15 @@ class MainActivity : ComponentActivity() {
                             return@checkClipboard
                         }
 
+                        // 0b. 小红书主页链接 → 同样走主页下载
+                        if (UrlUtils.isXhsHomepageLink(clipText)) {
+                            lastHandledUrl = dedupeKey
+                            openHomepage(clipText, HOMEPAGE_FROM_CLIPBOARD)
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("", ""))
+                            detectedXhsLink = null
+                            return@checkClipboard
+                        }
+
                         if (currentAutoRead && UrlUtils.detectPlatform(clipText) == "douyin") {
                             trackEvent("auto_download", mapOf("platform" to "douyin"))
                             // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
@@ -536,6 +546,11 @@ class MainActivity : ComponentActivity() {
                                     openHomepage(clipText, HOMEPAGE_FROM_CLIPBOARD)
                                     return@ensureStoragePermission
                                 }
+                                // 小红书主页链接 → 同样走主页下载
+                                if (UrlUtils.isXhsHomepageLink(clipText)) {
+                                    openHomepage(clipText, HOMEPAGE_FROM_CLIPBOARD)
+                                    return@ensureStoragePermission
+                                }
                                 // 提取有效链接
                                 val platform = UrlUtils.detectPlatform(clipText)
                                 if (platform == "douyin") {
@@ -587,6 +602,11 @@ class MainActivity : ComponentActivity() {
                             if (cleanUrl != null) {
                                 // 主页链接：走主页下载，反查作者并批量下载
                                 if (UrlUtils.isDouyinHomepageLink(clipText)) {
+                                    openHomepage(clipText, HOMEPAGE_FROM_BUBBLE)
+                                    detectedXhsLink = null
+                                    return@homepageGuard
+                                }
+                                if (UrlUtils.isXhsHomepageLink(clipText)) {
                                     openHomepage(clipText, HOMEPAGE_FROM_BUBBLE)
                                     detectedXhsLink = null
                                     return@homepageGuard
@@ -703,6 +723,11 @@ class MainActivity : ComponentActivity() {
                     onManualInputDownload = homepageGuard@{ inputLink ->
                         // 抖音主页链接（分享文案 / /user/{sec_uid}）：走主页下载，反查作者并批量下载
                         if (UrlUtils.isDouyinHomepageLink(inputLink)) {
+                            openHomepage(inputLink, HOMEPAGE_FROM_MANUAL)
+                            return@homepageGuard
+                        }
+                        // 小红书主页链接 → 同样走主页下载
+                        if (UrlUtils.isXhsHomepageLink(inputLink)) {
                             openHomepage(inputLink, HOMEPAGE_FROM_MANUAL)
                             return@homepageGuard
                         }
@@ -1778,6 +1803,10 @@ private fun MainScreen(
                             parseStage = parseStage,
                             onCancelPreview = onCancelPreview,
                             activeLink = activeLink,
+                            onXhsLogin = {
+                                val act = ctx as? android.app.Activity
+                                act?.startActivity(Intent(ctx, XhsLoginActivity::class.java))
+                            },
                             modifier = Modifier.fillMaxSize()
                         )
                         // 2=我的：内嵌设置页（UI v2 S3 分组；原 SettingsActivity 保留独立入口）
@@ -3575,10 +3604,14 @@ private fun HomepagePage(
     onCancelPreview: () -> Unit = {},
     /** 当前正在解析的链接（回填输入框）。 */
     activeLink: String = "",
+    /** 打开小红书登录页。 */
+    onXhsLogin: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val ctx = LocalContext.current
     var link by remember { mutableStateOf("") }
+    // 平台选择：抖音 / 小红书（v3.3.4 分离）
+    var homePlatform by remember { mutableStateOf(if (activeLink.contains("xiaohongshu") || activeLink.contains("xhslink")) "xhs" else "douyin") }
     // 外部入口（剪贴板/任务详情/任务卡）触发的解析：把实际链接回填进输入框，
     // 否则来源条说了"从哪来"却没说"在解析谁"，用户无从核对。
     LaunchedEffect(activeLink) {
@@ -3658,10 +3691,67 @@ private fun HomepagePage(
             HomepageSourceBar(entryFrom = entryFrom, onReturn = onReturn)
         }
         Spacer(modifier = Modifier.height(8.dp))
+        // ── 平台选择器（v3.3.4）：抖音 / 小红书 ──
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("douyin" to stringResource(R.string.home_platform_douyin),
+                   "xhs" to stringResource(R.string.home_platform_xhs)).forEach { (key, label) ->
+                val selected = homePlatform == key
+                Button(
+                    onClick = { homePlatform = key },
+                    enabled = !parsing,
+                    modifier = Modifier.weight(1f).height(40.dp),
+                    cornerRadius = 20.dp
+                ) {
+                    Text(
+                        text = label,
+                        fontSize = 13.sp,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+        // ── 小红书登录态（仅 xhs 平台显示）──
+        if (homePlatform == "xhs") {
+            val xhsLoggedIn = remember {
+                com.neoruaa.xhsdn.web.XhsSession.get(ctx).hasLogin()
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (xhsLoggedIn) stringResource(R.string.home_xhs_logged_in)
+                    else stringResource(R.string.home_xhs_logged_out),
+                    fontSize = 12.sp,
+                    color = if (xhsLoggedIn) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                if (!xhsLoggedIn) {
+                    Button(
+                        onClick = onXhsLogin,
+                        enabled = !parsing,
+                        modifier = Modifier.height(32.dp),
+                        cornerRadius = 16.dp
+                    ) {
+                        Text(
+                            text = stringResource(R.string.home_xhs_login_action),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
         TextField(
             value = link,
             onValueChange = { link = it },
-            label = stringResource(R.string.homepage_input_hint),
+            label = if (homePlatform == "xhs") stringResource(R.string.homepage_input_hint_xhs)
+                    else stringResource(R.string.homepage_input_hint),
             singleLine = true,
             // 解析中不禁用输入框：禁用会让回填的链接变灰不可读（用户反而核对不了）。
             // 解析已捕获入参，此处编辑不影响进行中的任务；重复触发由下方按钮禁用拦住。

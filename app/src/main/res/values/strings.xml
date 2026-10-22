@@ -252,6 +252,13 @@
     <string name="home_preview_none_new">该作者作品都已下载过，无新增（如需重下，请关闭「自动跳过已下载」后选全部作品）</string>
     <string name="home_preview_started">已开始下载 %1$d 条作品</string>
     <string name="home_preview_default_author">抖音作者</string>
+    <string name="home_platform_douyin">抖音</string>
+    <string name="home_platform_xhs">小红书</string>
+    <string name="home_xhs_logged_in">已登录 · 主页批量下载可用</string>
+    <string name="home_xhs_logged_out">未登录 · 仅可预览 8 条，登录后解锁全量</string>
+    <string name="home_xhs_login_action">登录</string>
+    <string name="homepage_input_hint_xhs">小红书主页链接</string>
+    <string name="home_preview_need_login_xhs">小红书未登录时作品列表可能被截断。点上方「登录」扫码/验证码登录后可下载全量</string>
     <string name="home_preview_recommend">推荐</string>
     <string name="home_stat_new">新增</string>
     <string name="home_stat_downloaded">已下载</string>

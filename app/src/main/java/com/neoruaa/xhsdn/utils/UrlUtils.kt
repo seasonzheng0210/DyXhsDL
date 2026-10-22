@@ -61,6 +61,21 @@ object UrlUtils {
     }
 
     /**
+     * 判断文本是否为「小红书主页链接」。
+     * 命中场景：
+     *  - 链接含 xiaohongshu.com/user/profile/{id}（主页直链）；
+     *  - xhslink.cn/o/xxx 短链（302 跳主页）。
+     * 单笔记链接（/discovery/item/）不命中。
+     */
+    fun isXhsHomepageLink(text: String?): Boolean {
+        if (text.isNullOrBlank()) return false
+        val url = extractFirstUrl(text) ?: text
+        if (Regex("""xiaohongshu\.com/user/profile/[0-9A-Za-z]+""").containsMatchIn(url)) return true
+        if (Regex("""xhslink\.(?:cn|com)/o/""").containsMatchIn(url)) return true
+        return false
+    }
+
+    /**
      * 从文本中提取抖音主页链接（主页分享文案或 /user/{sec_uid} 直链）。
      * 非主页链接返回 null。
      */
