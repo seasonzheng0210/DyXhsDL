@@ -43,15 +43,19 @@ class XhsSigner(private val appContext: Context) {
                     if (!bundleLoaded.get()) {
                         val src = appContext.assets.open(BUNDLE_ASSET)
                             .bufferedReader(Charsets.UTF_8).use { it.readText() }
-                        wv.evaluateJavascript(src) { raw ->
-                            val ok = raw != null && raw != "null"
-                            if (ok) {
-                                bundleLoaded.set(true)
-                                if (cont.isActive) cont.resume(Unit)
-                            } else if (cont.isActive) {
-                                cont.resumeWithException(
-                                    IllegalStateException("xhs_sign_bundle 载入失败 (raw=$raw)")
-                                )
+                        // ★bundle 是 IIFE 无 return → evaluateJavascript 返回 null/undefined
+                        // 是正常的。验证方式：eval 后检查 global.XhsSign 是否存在。
+                        wv.evaluateJavascript(src) {
+                            wv.evaluateJavascript("typeof XhsSign") { probe ->
+                                val ok = probe != null && probe.contains("object")
+                                if (ok) {
+                                    bundleLoaded.set(true)
+                                    if (cont.isActive) cont.resume(Unit)
+                                } else if (cont.isActive) {
+                                    cont.resumeWithException(
+                                        IllegalStateException("xhs_sign_bundle 载入失败 (probe=$probe)")
+                                    )
+                                }
                             }
                         }
                     } else if (cont.isActive) cont.resume(Unit)

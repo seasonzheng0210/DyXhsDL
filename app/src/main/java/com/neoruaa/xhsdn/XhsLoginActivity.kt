@@ -150,6 +150,9 @@ private fun XhsLoginScreen(
 
     // 轮询 CookieManager：web_session 出现后提示用户收割（不自动收割——访客也拿
     // web_session，必须由用户确认扫码完成后再校验）。
+    // ★cookieSeen 只做「初始提示」：把 status 从默认 hint 换成 detected 提示一次，
+    // 之后 confirmLogin 的 after 回调可自由覆盖 status（v3.3.3 E2E 发现 cookieSeen
+    // 恒 true 会盖住成功/失败消息）。
     DisposableEffect(Unit) {
         val job = scope.launch {
             while (true) {
@@ -157,7 +160,13 @@ private fun XhsLoginScreen(
                 val raw = runCatching {
                     CookieManager.getInstance().getCookie("https://www.xiaohongshu.com")
                 }.getOrNull()
-                if (raw != null && raw.contains("web_session=")) cookieSeen = true
+                if (raw != null && raw.contains("web_session=") && !cookieSeen) {
+                    cookieSeen = true
+                    // 只在 status 仍是默认 hint 时替换，不覆盖 confirmLogin 回调消息
+                    if (status == context.getString(R.string.xhs_login_hint)) {
+                        status = context.getString(R.string.xhs_login_detected)
+                    }
+                }
             }
         }
         onDispose { job.cancel() }
@@ -174,8 +183,7 @@ private fun XhsLoginScreen(
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Text(
-            text = if (cookieSeen) context.getString(R.string.xhs_login_detected)
-            else status,
+            text = status,
             fontSize = 13.sp,
             modifier = Modifier.padding(bottom = 8.dp)
         )

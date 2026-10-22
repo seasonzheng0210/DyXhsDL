@@ -1231,6 +1231,8 @@ class MainActivity : ComponentActivity() {
                         totalCount = apiPage.total
                         hasMore = apiPage.hasMore
                     } else {
+                        val err = apiPage?.let { "notes=${it.notes.size}" } ?: "null(异常被吞)"
+                        Log.w("XhsHome", "L1x getUserPostedAll 失败 → 降级 L2x: $err userId=$userId token=${q.first.take(12)}…")
                         trackEvent("homepage_provider_result",
                             mapOf("provider" to "xhs_api", "items" to "0", "fallback" to "1"))
                     }

@@ -1,6 +1,7 @@
 package com.neoruaa.xhsdn.web
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -112,9 +113,22 @@ class XhsApi private constructor(context: Context) {
         var nickname: String? = null
         var total = 0
         for (page in 0 until maxPages) {
-            val json = getUserPosted(userId, cursor, xsecToken, xsecSource)
-            val data = json.optJSONObject("data") ?: break
-            val notes = data.optJSONArray("notes") ?: break
+            val json = try {
+                getUserPosted(userId, cursor, xsecToken, xsecSource)
+            } catch (e: Exception) {
+                Log.w("XhsApi", "getUserPostedAll p$page 异常: ${e.message}", e)
+                break
+            }
+            val data = json.optJSONObject("data")
+            if (data == null) {
+                Log.w("XhsApi", "getUserPostedAll p$page 无 data: code=${json.optInt("code")} msg=${json.optString("msg")} success=${json.optBoolean("success")}")
+                break
+            }
+            val notes = data.optJSONArray("notes")
+            if (notes == null) {
+                Log.w("XhsApi", "getUserPostedAll p$page 无 notes: keys=${data.keys().asSequence().toList()}")
+                break
+            }
             for (i in 0 until notes.length()) {
                 val n = notes.optJSONObject(i) ?: continue
                 val brief = parseXhsPostedNote(n) ?: continue
@@ -134,6 +148,7 @@ class XhsApi private constructor(context: Context) {
             }
             cursor = next
         }
+        Log.i("XhsApi", "getUserPostedAll 收齐: notes=${out.size} total=$total hasMore=$hasMore nickname=$nickname")
         return XhsPostedPage(out, nickname, total, hasMore)
     }
 
@@ -256,6 +271,9 @@ class XhsApi private constructor(context: Context) {
             val raw = decodeBody(r.body.bytes(), r.header("Content-Encoding"))
             val text = raw.toString(Charsets.UTF_8)
             val json = runCatching { JSONObject(text) }.getOrNull()
+            if (json == null || r.code != 200 || json.optInt("code", 0) != 0) {
+                Log.w("XhsApi", "executeSigned $method $api → HTTP ${r.code} body=${text.take(200)}")
+            }
             return@withContext RawResult(r.code, json)
         }
     }
