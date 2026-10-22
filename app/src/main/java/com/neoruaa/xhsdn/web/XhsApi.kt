@@ -112,6 +112,7 @@ class XhsApi private constructor(context: Context) {
         var hasMore = false
         var nickname: String? = null
         var total = 0
+        var lastData: JSONObject? = null
         for (page in 0 until maxPages) {
             val json = try {
                 getUserPosted(userId, cursor, xsecToken, xsecSource)
@@ -124,6 +125,7 @@ class XhsApi private constructor(context: Context) {
                 Log.w("XhsApi", "getUserPostedAll p$page 无 data: code=${json.optInt("code")} msg=${json.optString("msg")} success=${json.optBoolean("success")}")
                 break
             }
+            lastData = data
             val notes = data.optJSONArray("notes")
             if (notes == null) {
                 Log.w("XhsApi", "getUserPostedAll p$page 无 notes: keys=${data.keys().asSequence().toList()}")
@@ -133,9 +135,14 @@ class XhsApi private constructor(context: Context) {
                 val n = notes.optJSONObject(i) ?: continue
                 val brief = parseXhsPostedNote(n) ?: continue
                 if (nickname == null) {
-                    nickname = (n.optJSONObject("note_card") ?: n.optJSONObject("noteCard"))
-                        ?.optJSONObject("user")?.optString("nickname")
-                        ?.takeIf { it.isNotBlank() }
+                    // 多层探测 nickname：note_card.user / user / user_info 等
+                    val card = n.optJSONObject("note_card") ?: n.optJSONObject("noteCard") ?: n
+                    val user = card.optJSONObject("user") ?: n.optJSONObject("user")
+                        ?: n.optJSONObject("user_info") ?: card.optJSONObject("user_info")
+                    nickname = user?.let { u ->
+                        u.optString("nickname").ifBlank { u.optString("nick_name") }
+                            .ifBlank { u.optString("nickName") }
+                    }?.takeIf { it.isNotBlank() }
                 }
                 if (seen.add(brief.noteId)) out.add(brief)
             }
@@ -147,6 +154,16 @@ class XhsApi private constructor(context: Context) {
                 break
             }
             cursor = next
+        }
+        // ★user_posted 响应可能无 total 字段 → 用收齐条数兜底
+        if (total <= 0) total = out.size
+        // nickname 兜底：data 顶层 user / user_info
+        if (nickname == null) {
+            val du = lastData?.optJSONObject("user") ?: lastData?.optJSONObject("user_info")
+            nickname = du?.let { u ->
+                u.optString("nickname").ifBlank { u.optString("nick_name") }
+                    .ifBlank { u.optString("nickName") }
+            }?.takeIf { it.isNotBlank() }
         }
         Log.i("XhsApi", "getUserPostedAll 收齐: notes=${out.size} total=$total hasMore=$hasMore nickname=$nickname")
         return XhsPostedPage(out, nickname, total, hasMore)
