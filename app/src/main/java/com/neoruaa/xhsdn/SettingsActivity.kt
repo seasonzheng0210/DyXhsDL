@@ -445,8 +445,10 @@ internal fun SettingsScreen(
             // ★v3.3.3：小红书账号 —— 扫码登录入口（WebView 官方登录页收割 cookie）。
             item {
                 SettingsGroup(stringResource(R.string.xhs_account_group_title)) {
-                    val xhsLoggedIn = remember {
-                        com.neoruaa.xhsdn.web.XhsSession.get(context).hasLogin()
+                    // 订阅登录态版本号：登录页返回 / 退出登录 / 被风控判定失效后都能立刻刷新
+                    val sessionEpoch = com.neoruaa.xhsdn.web.XhsSession.epochState.intValue
+                    var xhsLoggedIn by remember(sessionEpoch) {
+                        mutableStateOf(com.neoruaa.xhsdn.web.XhsSession.get(context).hasLogin())
                     }
                     BasicComponent(
                         title = stringResource(R.string.xhs_login_entry_title),
@@ -460,6 +462,22 @@ internal fun SettingsScreen(
                             )
                         }
                     )
+                    // ★v3.3.10：退出登录（换号 / 让主页下载回到「需登录」状态）。
+                    //   原来 App 没有任何登出入口，换号只能清数据。
+                    if (xhsLoggedIn) {
+                        BasicComponent(
+                            title = stringResource(R.string.xhs_logout_title),
+                            summary = stringResource(R.string.xhs_logout_summary),
+                            onClick = {
+                                com.neoruaa.xhsdn.web.XhsSession.get(context).clearLogin()
+                                android.widget.Toast.makeText(
+                                    context,
+                                    context.getString(R.string.xhs_logout_done),
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        )
+                    }
                 }
             }
 

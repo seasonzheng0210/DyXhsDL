@@ -324,6 +324,9 @@
     <string name="xhs_login_entry_title">小红书登录</string>
     <string name="xhs_login_entry_summary_logged_in">已登录 · 作者主页批量下载可用</string>
     <string name="xhs_login_entry_summary_logged_out">未登录 · 扫码登录后解锁主页批量下载</string>
+    <string name="xhs_logout_title">退出登录</string>
+    <string name="xhs_logout_summary">清除本机保存的小红书 cookie（换号用）；退出后主页批量下载需重新登录</string>
+    <string name="xhs_logout_done">已退出小红书登录</string>
     <string name="xhs_login_page_title">登录小红书</string>
     <string name="xhs_login_hint">在下方页面完成登录：若未自动弹出二维码，请点页面右上角「登录」。用小红书 App 扫码并确认后，点下方「我已扫码登录」。</string>
     <string name="xhs_login_detected">页面已写入 cookie（访客态也会有）。请确认已用手机号/扫码完成登录，再点「我已扫码登录」。</string>

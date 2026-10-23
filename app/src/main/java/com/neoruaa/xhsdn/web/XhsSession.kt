@@ -98,6 +98,19 @@ class XhsSession private constructor(context: Context) {
     @Synchronized
     fun isRejected(): Boolean = prefs.getBoolean(KEY_REJECTED, false)
 
+    /**
+     * 退出登录 / 换号（v3.3.10）：清空 cookie 罐与「被拒」标记。
+     * UI 用 [epochState] 订阅，退出后登录态行会立刻翻成「未登录」，
+     * 小红书主页下载随之走强制登录闸门。
+     */
+    @Synchronized
+    fun clearLogin() {
+        cookieMap.clear()
+        prefs.edit().putBoolean(KEY_REJECTED, false).apply()
+        bumpEpoch()
+        persistCookies()
+    }
+
     @Synchronized
     fun hasLogin(): Boolean = !isRejected() && !cookieMap["web_session"].isNullOrEmpty()
 
