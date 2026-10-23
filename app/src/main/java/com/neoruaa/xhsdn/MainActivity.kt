@@ -208,6 +208,8 @@ class MainActivity : ComponentActivity() {
      * 阶段（composition 未就绪）直接发起解析。
      */
     private val _pendingHomepage = mutableStateOf<Pair<String, String>?>(null)
+    /** 平台页签中转（0=抖音/1=小红书/2=快手）：类级函数想切任务页平台子 tab 时用。 */
+    private val _pendingTaskTab = mutableStateOf<Int?>(null)
     private var context: Context =  this
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -302,6 +304,15 @@ class MainActivity : ComponentActivity() {
                 if (pendingHome != null) {
                     _pendingHomepage.value = null
                     openHomepage(pendingHome.first, pendingHome.second)
+                }
+            }
+
+            // 平台页签中转消费：类级函数（如短链判定为单笔记时）切到对应平台子 tab
+            val pendingTab = _pendingTaskTab.value
+            LaunchedEffect(pendingTab) {
+                if (pendingTab != null) {
+                    _pendingTaskTab.value = null
+                    taskTab = pendingTab
                 }
             }
 
@@ -1064,8 +1075,18 @@ class MainActivity : ComponentActivity() {
                             .find(xhsUrl)?.groupValues?.getOrNull(1)
                         if (uid != null) {
                             fetchXhsHomePreview(uid, xhsUrl)
+                        } else if (Regex("""xiaohongshu\.com/(?:discovery/item|explore)/[0-9a-zA-Z]+""").containsMatchIn(xhsUrl)) {
+                            // ★短链两种目标都可能（实测 xhslink.cn/o/{code} 大多指向用户主页，
+                            // 少数指向单笔记）：跟跳后不是主页而是笔记页 → 回落单笔记下载，
+                            // 不再报「请粘贴主页链接」（v3.3.4 前的死路：短链被当笔记下载 → 0 文件）
+                            homePreview = HomePreviewState.Idle
+                            trackEvent("shortlink_note_fallback")
+                            showToast(getString(R.string.home_preview_note_fallback))
+                            mainTab = 1
+                            _pendingTaskTab.value = platformTabIndex("xhs")
+                            DownloadService.startDownload(this@MainActivity, xhsUrl, "xhs")
                         } else {
-                            // xhs 单作品链接误入主页入口（主页入口只吃主页链接）
+                            // 既非主页也非笔记（如纯 profile 外链/已失效短链）
                             homePreview = HomePreviewState.Error(getString(R.string.home_preview_bad_link), false)
                         }
                     } catch (e: kotlinx.coroutines.CancellationException) {
@@ -3715,7 +3736,17 @@ private fun HomepagePage(
         }
         // ── 小红书登录态（仅 xhs 平台显示）──
         if (homePlatform == "xhs") {
-            val xhsLoggedIn = remember {
+            // 登录态必须在「登录页返回」后刷新：remember{} 无 key 会一直显示旧值（未登录）
+            val loginLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
+            var loginTick by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+            DisposableEffect(loginLifecycle) {
+                val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+                    if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) loginTick++
+                }
+                loginLifecycle.lifecycle.addObserver(obs)
+                onDispose { loginLifecycle.lifecycle.removeObserver(obs) }
+            }
+            val xhsLoggedIn = remember(loginTick) {
                 com.neoruaa.xhsdn.web.XhsSession.get(ctx).hasLogin()
             }
             Row(
@@ -3735,12 +3766,17 @@ private fun HomepagePage(
                     Button(
                         onClick = onXhsLogin,
                         enabled = !parsing,
-                        modifier = Modifier.height(32.dp),
-                        cornerRadius = 16.dp
+                        // ★必须给显式宽度：左侧 Text 带 weight(1f)，不给宽时按钮被挤成「登…」
+                        // ★insideMargin 竖向必须为 0：默认上下内边距会把这 32dp 高度吃光，文字被裁成一条
+                        modifier = Modifier.height(32.dp).width(72.dp),
+                        cornerRadius = 16.dp,
+                        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                     ) {
                         Text(
                             text = stringResource(R.string.home_xhs_login_action),
-                            fontSize = 12.sp
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }

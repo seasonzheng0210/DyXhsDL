@@ -456,22 +456,30 @@ class DownloadService : Service() {
      * 逐张下载图集图片，复用 createCallback 统计进度。
      * 全部成功返回 true，任一张失败返回 false（失败项已落日志）。
      */
-    private fun downloadImages(downloader: FileDownloader, info: DouyinMediaInfo, taskId: Long): Boolean {
+    private fun downloadImages(
+        downloader: FileDownloader,
+        info: DouyinMediaInfo,
+        taskId: Long,
+        // 平台化：小红书图集必须用自家 Referer + "xhs_" 前缀（否则 xhs CDN 403、文件名归到 douyin_）
+        referer: String = DouyinParser.REFERER,
+        prefix: String = "douyin_",
+        source: String = "douyin"
+    ): Boolean {
         var okAll = true
         info.imageUrls.forEachIndexed { index, url ->
             val ext = DouyinParser.mediaExtension(url)
             val fileName = "${info.title}_${index + 1}.$ext"
             val ok = runCatching {
                 // 抖音图床（douyinpic.com）必须带抖音 Referer，否则返回 403 导致图片下载失败
-                downloader.downloadFile(url, fileName, DouyinParser.REFERER, info.userAgent)
+                downloader.downloadFile(url, fileName, referer, info.userAgent, prefix)
             }.getOrElse { e ->
-                DownloadLogger.logFailure(this@DownloadService, "douyin", url, "下载图片异常: ${e.message}")
+                DownloadLogger.logFailure(this@DownloadService, source, url, "下载图片异常: ${e.message}")
                 false
             }
             if (!ok) {
                 okAll = false
                 DownloadLogger.logFailure(
-                    this@DownloadService, "douyin", url,
+                    this@DownloadService, source, url,
                     "图片下载失败(返回false)：${downloader.lastError.ifBlank { "未取到响应码" }}"
                 )
             }
@@ -1050,6 +1058,16 @@ class DownloadService : Service() {
                     "小红书主页作品：成功 ${completed.get()}，失败 ${failed.get()}",
                     false
                 )
+                // 未登录时只能落封面 CDN：明确告知用户拿到的是封面图，不然会以为下到了原片
+                if (!com.neoruaa.xhsdn.web.XhsSession.get(this@DownloadService).hasLogin() && completed.get() > 0) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        android.widget.Toast.makeText(
+                            this@DownloadService,
+                            getString(R.string.home_xhs_guest_cover_only),
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
             } catch (e: CancellationException) {
                 if (myTaskId > 0) TaskManager.failIfActive(myTaskId, getString(R.string.download_cancelled_by_user))
             } catch (e: Exception) {
@@ -1085,7 +1103,7 @@ class DownloadService : Service() {
         val videoUrl = post.videoUrl
         if (!videoUrl.isNullOrBlank()) {
             return runCatching {
-                downloader.downloadFile(videoUrl, "$fileName.mp4", xhsReferer, BgWebViewParser.XHS_MOBILE_UA)
+                downloader.downloadFile(videoUrl, "$fileName.mp4", xhsReferer, BgWebViewParser.XHS_MOBILE_UA, "xhs_")
             }.getOrElse { e ->
                 DownloadLogger.logFailure(this@DownloadService, "xhs", videoUrl, "小红书视频下载异常: ${e.message}")
                 false
@@ -1097,7 +1115,7 @@ class DownloadService : Service() {
                 downloadImages(
                     downloader,
                     DouyinMediaInfo(DouyinMediaType.IMAGE, post.title, null, post.imageUrls, null, post.id, BgWebViewParser.XHS_MOBILE_UA),
-                    taskId
+                    taskId, xhsReferer, "xhs_", "xhs"
                 )
             }.getOrElse { e ->
                 DownloadLogger.logFailure(this@DownloadService, "xhs", post.imageUrls.firstOrNull() ?: post.id, "小红书图集下载异常: ${e.message}")
@@ -1114,7 +1132,7 @@ class DownloadService : Service() {
             if (feedMedia != null) {
                 feedMedia.videoUrl?.let { vUrl ->
                     return runCatching {
-                        downloader.downloadFile(vUrl, "$fileName.mp4", xhsReferer, BgWebViewParser.XHS_MOBILE_UA)
+                        downloader.downloadFile(vUrl, "$fileName.mp4", xhsReferer, BgWebViewParser.XHS_MOBILE_UA, "xhs_")
                     }.getOrElse { e ->
                         DownloadLogger.logFailure(this@DownloadService, "xhs", vUrl, "小红书视频下载异常: ${e.message}")
                         false
@@ -1125,7 +1143,7 @@ class DownloadService : Service() {
                         downloadImages(
                             downloader,
                             DouyinMediaInfo(DouyinMediaType.IMAGE, post.title, null, feedMedia.imageUrls, null, post.id, BgWebViewParser.XHS_MOBILE_UA),
-                            taskId
+                            taskId, xhsReferer, "xhs_", "xhs"
                         )
                     }.getOrElse { e ->
                         DownloadLogger.logFailure(this@DownloadService, "xhs", post.id, "小红书图集下载异常: ${e.message}")
@@ -1141,10 +1159,11 @@ class DownloadService : Service() {
             val noteResult = runCatching {
                 parser.parse(xhsExploreUrl(post.id, token), "xhs")
             }.getOrNull()
+            Log.d(TAG, "xhs item#${index + 1} ${post.id} token=${token.take(10)}… 笔记页媒体=${noteResult?.videoUrls?.size ?: 0}v/${noteResult?.imageUrls?.size ?: 0}i")
             if (noteResult != null && noteResult.isNotEmpty) {
                 noteResult.videoUrls.firstOrNull()?.let { vUrl ->
                     return runCatching {
-                        downloader.downloadFile(vUrl, "$fileName.mp4", xhsReferer, BgWebViewParser.XHS_MOBILE_UA)
+                        downloader.downloadFile(vUrl, "$fileName.mp4", xhsReferer, BgWebViewParser.XHS_MOBILE_UA, "xhs_")
                     }.getOrElse { e ->
                         DownloadLogger.logFailure(this@DownloadService, "xhs", vUrl, "小红书视频下载异常: ${e.message}")
                         false
@@ -1155,7 +1174,7 @@ class DownloadService : Service() {
                         downloadImages(
                             downloader,
                             DouyinMediaInfo(DouyinMediaType.IMAGE, post.title, null, noteResult.imageUrls, null, post.id, BgWebViewParser.XHS_MOBILE_UA),
-                            taskId
+                            taskId, xhsReferer, "xhs_", "xhs"
                         )
                     }.getOrElse { e ->
                         DownloadLogger.logFailure(this@DownloadService, "xhs", post.id, "小红书图集下载异常: ${e.message}")
@@ -1163,17 +1182,38 @@ class DownloadService : Service() {
                     }
                 }
             }
+        } else {
+            Log.w(TAG, "xhs item#${index + 1} ${post.id} 无 note token → 跳过笔记页解析，落封面兜底")
         }
         // 3) 封面 CDN 兜底
-        val rawCover = post.coverUrl?.takeIf { it.isNotBlank() } ?: return false
-        val coverUrl = if (rawCover.startsWith("//")) "https:$rawCover" else rawCover
-        val fullSizeUrl = coverUrl.replace(Regex("[?&]imageView2[^&]*"), "").replace("?&", "?").trimEnd('?', '&')
+        val rawCover = post.coverUrl?.takeIf { it.isNotBlank() } ?: run {
+            Log.w(TAG, "xhs item#${index + 1} ${post.id} 连封面都没有 → 失败")
+            return false
+        }
+        val fullSizeUrl = xhsCdnFullSize(rawCover)
+        Log.w(TAG, "xhs item#${index + 1} ${post.id} 封面兜底 url=$fullSizeUrl")
         return runCatching {
-            downloader.downloadFile(fullSizeUrl, "$fileName.jpg", xhsReferer, BgWebViewParser.XHS_MOBILE_UA)
+            downloader.downloadFile(fullSizeUrl, "$fileName.jpg", xhsReferer, BgWebViewParser.XHS_MOBILE_UA, "xhs_")
         }.getOrElse { e ->
             DownloadLogger.logFailure(this@DownloadService, "xhs", fullSizeUrl, "小红书封面下载异常: ${e.message}")
             false
         }
+    }
+
+    /**
+     * 小红书 CDN 直链「去缩放参数」。
+     * 实链形如 `//sns-na-i4.xhscdn.com/{uuid}?imageView2%2F2%2Fw%2F1080%2Fformat%2Fjpg&sign=…&t=…`，
+     * `sign`/`t` 是签名必须保留。★v3.3.5 根因：原实现 `replace("[?&]imageView2[^&]*","")` 把开头的 `?`
+     * 一并删掉 → `…/{uuid}&sign=…`（无 query 起始符）→ CDN **恒定 404**（未登录批量 100% 失败的真因，curl 已验证）。
+     * 正确做法：拆 query 逐项剔除 imageView2，再把剩下的拼回 `?a&b`（实测 200 且拿到原图，体积 ×1.8）。
+     */
+    private fun xhsCdnFullSize(raw: String): String {
+        val abs = if (raw.startsWith("//")) "https:$raw" else raw
+        if (!abs.contains('?')) return abs
+        val base = abs.substringBefore('?')
+        val kept = abs.substringAfter('?').split('&')
+            .filter { it.isNotBlank() && !it.startsWith("imageView2") }
+        return if (kept.isEmpty()) base else "$base?" + kept.joinToString("&")
     }
 
     // endregion

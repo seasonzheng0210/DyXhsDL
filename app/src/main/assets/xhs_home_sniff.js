@@ -455,23 +455,41 @@
           var mt = location.href.match(/xsec_token=([^&]+)/);
           if (mt) urlTok = decodeURIComponent(mt[1]);
         } catch (e3) {}
+        // ★v3.3.5 根因修复：岛内 item 通常不带 xsec_token，早前这里硬写 ''，
+        //   导致「笔记页解析」整段被 `if (!token.isNullOrBlank())` 跳过 → 游客批量 100% 落封面兜底（实测全 404）。
+        //   note 级 token 在**渲染后的 DOM 链接**里（/explore/{id}?xsec_token=… / /discovery/item/{id}?xsec_token=…），
+        //   以 id 为 join key 合并回来即可。注意：profile 级 token 对单篇页无效(-510000)，只能取链接自带的。
+        var domById = {};
+        try {
+          var dm = harvestDom(tag + 'i');
+          for (var dk in dm) {
+            try {
+              var dv = dm[dk];
+              if (dv && dv.id && dv.xsec_token) domById[dv.id] = dv;
+            } catch (e6) {}
+          }
+        } catch (e7) {}
         var mapped = [];
+        var tokN = 0;
         for (var q = 0; q < island.length; q++) {
           var it = island[q] || {};
           var cov = it.cover || {};
-          // 诊断：首条 item 的全部 keys（看有没有视频/图片直链字段）
-          if (q === 0) {
-            // 诊断已清（v3.3.1）：itemKeys/coverKeys/coverVal
-          }
+          var nid = String(it.id);
+          var tok = it.xsec_token || it.xsecToken || '';
+          var dd = domById[nid];
+          if (!tok && dd) tok = dd.xsec_token || '';
+          var covUrl = cov.url_default || cov.url || cov.urlPre || cov.url_pre || '';
+          if (!covUrl && dd) covUrl = dd.cover || '';
+          if (tok) tokN++;
           mapped.push({
-            id: String(it.id),
-            // ★profile 级 token 对单篇 explore 页无效（errorCode=-510000 404）→ 不传
-            xsec_token: '',
+            id: nid,
+            xsec_token: tok,
             title: String(it.title || '').slice(0, 120),
             type: it.type === 'video' ? 'video' : 'normal',
-            cover: cov.url_default || cov.url || cov.urlPre || cov.url_pre || ''
+            cover: covUrl
           });
         }
+        log(tag + ' islandTok=' + tokN + '/' + mapped.length + ' domTok=' + Object.keys(domById).length);
         relayNotes(mapped, tag);
         // 昵称兜底：移动 profile 分支
         if (!profileRelayed) {
