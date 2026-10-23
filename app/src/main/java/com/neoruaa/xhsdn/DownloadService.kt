@@ -988,6 +988,24 @@ class DownloadService : Service() {
     private fun startXhsHomepageBatch(batch: HomepageBatchStore.Batch, taskIdExtra: Long?) {
         val batchKey = batch.homepageUrl.ifBlank { batch.secUid }
         Log.d(TAG, "startXhsHomepageBatch: items=${batch.items.size} skip=${batch.skipDownloaded} secUid=${batch.secUid}")
+        // ★v3.3.6 强制登录兜底：UI 已在「确认下载」处弹窗拦截，这里再挡一次，
+        //   防止通知栏重试 / 旧批次恢复 / 深链等旁路绕过（未登录只能下封面图，等于白跑）。
+        if (!com.neoruaa.xhsdn.web.XhsSession.get(this@DownloadService).hasLogin()) {
+            Log.w(TAG, "startXhsHomepageBatch: 未登录小红书 → 拒绝执行")
+            DownloadLogger.logFailure(this, "xhs", batchKey, "主页批量：未登录小红书，已拦截（登录后可下载原片）")
+            TaskManager.createTask(
+                batchKey, "小红书主页 · 需登录", NoteType.IMAGE, batch.items.size, source = "xhs"
+            ).also {
+                TaskManager.startTask(it)
+                TaskManager.completeTask(it, false, getString(R.string.xhs_login_required_short))
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                android.widget.Toast.makeText(
+                    this@DownloadService, getString(R.string.xhs_login_required_short), android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+            return
+        }
         if (!activeUrls.add(batchKey)) {
             Log.w(TAG, "startXhsHomepageBatch: batchKey already active: $batchKey")
             return
@@ -1058,16 +1076,7 @@ class DownloadService : Service() {
                     "小红书主页作品：成功 ${completed.get()}，失败 ${failed.get()}",
                     false
                 )
-                // 未登录时只能落封面 CDN：明确告知用户拿到的是封面图，不然会以为下到了原片
-                if (!com.neoruaa.xhsdn.web.XhsSession.get(this@DownloadService).hasLogin() && completed.get() > 0) {
-                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        android.widget.Toast.makeText(
-                            this@DownloadService,
-                            getString(R.string.home_xhs_guest_cover_only),
-                            android.widget.Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
+                // v3.3.6 起未登录批次在入口就被拦下，这里不再需要「只下了封面」的 Toast
             } catch (e: CancellationException) {
                 if (myTaskId > 0) TaskManager.failIfActive(myTaskId, getString(R.string.download_cancelled_by_user))
             } catch (e: Exception) {

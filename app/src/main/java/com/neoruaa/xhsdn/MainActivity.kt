@@ -210,6 +210,13 @@ class MainActivity : ComponentActivity() {
     private val _pendingHomepage = mutableStateOf<Pair<String, String>?>(null)
     /** 平台页签中转（0=抖音/1=小红书/2=快手）：类级函数想切任务页平台子 tab 时用。 */
     private val _pendingTaskTab = mutableStateOf<Int?>(null)
+    /**
+     * 小红书主页批量「强制登录」闸门（v3.3.6）。
+     * 实测未登录只能拿到前 8 条且没有 note 级 xsec_token → 只能下封面图（等于没下到东西），
+     * 所以在「确认下载」这一步拦下来要求登录，而不是让用户拿到 8 张封面才发现不对。
+     * 类级函数（confirmHomepageDownload）置 true → composition 里渲染 GlassDialog。
+     */
+    private val _xhsLoginGate = mutableStateOf(false)
     private var context: Context =  this
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -850,6 +857,27 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
+                // ★小红书主页批量强制登录（v3.3.6）：未登录只能下封面图 → 在确认下载处拦截
+                if (_xhsLoginGate.value) {
+                    GlassDialog(
+                        title = stringResource(R.string.xhs_login_required_title),
+                        summary = stringResource(R.string.xhs_login_required_message),
+                        confirmText = stringResource(R.string.home_xhs_login_action),
+                        cancelText = stringResource(R.string.cancel),
+                        onConfirm = {
+                            _xhsLoginGate.value = false
+                            trackEvent("xhs_home_login_gate_go")
+                            startActivity(
+                                android.content.Intent(this@MainActivity, XhsLoginActivity::class.java)
+                            )
+                        },
+                        onDismiss = {
+                            _xhsLoginGate.value = false
+                            trackEvent("xhs_home_login_gate_cancel")
+                        }
+                    )
+                }
+
                 // UI v2 S5：引导页浮于主界面之上（首启仅一次；完成后进入主界面）
                 if (showOnboarding) {
                     OnboardingScreen(
@@ -1370,6 +1398,16 @@ class MainActivity : ComponentActivity() {
         skipDownloaded: Boolean,
         selectedIds: Set<String> = emptySet()
     ) {
+        // ★v3.3.6 强制登录：小红书主页批量下载必须登录。
+        //   未登录时服务端只给前 8 条、且没有 note 级 xsec_token → 拿不到原片，只能下封面图，
+        //   与其让用户收 8 张封面后才发现，不如在点「确认下载」这一刻就拦住并引导登录。
+        if (state.platform == "xhs" &&
+            !com.neoruaa.xhsdn.web.XhsSession.get(this).hasLogin()
+        ) {
+            trackEvent("homepage_blocked_need_login", mapOf("platform" to "xhs"))
+            _xhsLoginGate.value = true
+            return
+        }
         val chosen = scopeHomepageItems(state, range, latestN, includeImages, skipDownloaded, selectedIds)
         if (chosen.isEmpty()) {
             showToast(getString(R.string.home_preview_none_new))
@@ -3940,11 +3978,19 @@ private fun HomepagePage(
                                 (p.totalCount > p.allItems.size || (p.totalCount == 0 && p.allItems.size <= 21))
                             if (truncated) {
                                 Spacer(modifier = Modifier.height(4.dp))
+                                // 文案按平台分流：原来小红书也显示「登录抖音后可下载更多」
+                                val isXhs = p.platform == "xhs"
                                 Text(
-                                    text = if (p.totalCount > p.allItems.size)
-                                        stringResource(R.string.home_preview_truncated_hint, p.totalCount, p.allItems.size)
-                                    else
-                                        stringResource(R.string.home_preview_truncated_hint_unknown, p.allItems.size),
+                                    text = when {
+                                        isXhs && p.totalCount > p.allItems.size ->
+                                            stringResource(R.string.home_preview_truncated_hint_xhs, p.totalCount, p.allItems.size)
+                                        isXhs ->
+                                            stringResource(R.string.home_preview_truncated_hint_xhs_unknown, p.allItems.size)
+                                        p.totalCount > p.allItems.size ->
+                                            stringResource(R.string.home_preview_truncated_hint, p.totalCount, p.allItems.size)
+                                        else ->
+                                            stringResource(R.string.home_preview_truncated_hint_unknown, p.allItems.size)
+                                    },
                                     fontSize = 11.sp,
                                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                                 )

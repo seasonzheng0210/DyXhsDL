@@ -247,6 +247,8 @@
     <!-- 常驻截断提示：作者卡下方，比 toast 更持久，避免用户误以为作者只有这 N 个作品 -->
     <string name="home_preview_truncated_hint">该账号共 %1$d 条作品，当前仅取到最近 %2$d 条（匿名上限）；登录抖音后可下载更多</string>
     <string name="home_preview_truncated_hint_unknown">该作者作品更多，当前仅取到最近 %1$d 条（匿名上限）；登录抖音后可下载更多</string>
+    <string name="home_preview_truncated_hint_xhs">该账号共 %1$d 条作品，当前仅取到最近 %2$d 条（未登录上限）；登录小红书后可下载全量</string>
+    <string name="home_preview_truncated_hint_xhs_unknown">该作者作品更多，当前仅取到最近 %1$d 条（未登录上限）；登录小红书后可下载全量</string>
     <string name="home_preview_need_login">接口被抖音风控拦截，备用通道也未能取到作品。可稍后重试，或在「视频下载」页粘贴任意抖音链接进入网页登录后再试</string>
     <string name="home_preview_failed">主页解析失败：%1$s</string>
     <string name="home_preview_none_new">该作者作品都已下载过，无新增（如需重下，请关闭「自动跳过已下载」后选全部作品）</string>
@@ -255,8 +257,10 @@
     <string name="home_platform_douyin">抖音</string>
     <string name="home_platform_xhs">小红书</string>
     <string name="home_xhs_logged_in">已登录 · 可下载原片全量</string>
-    <string name="home_xhs_logged_out">未登录 · 仅 8 条，且只能下封面图</string>
-    <string name="home_xhs_guest_cover_only">未登录：本次只下载了封面图，登录小红书后可下载原片</string>
+    <string name="home_xhs_logged_out">未登录 · 仅可预览 8 条，下载需先登录</string>
+    <string name="xhs_login_required_title">需要登录小红书</string>
+    <string name="xhs_login_required_message">主页批量下载需要登录后才能拿到原片。未登录只能读取前 8 条，而且只有封面图。</string>
+    <string name="xhs_login_required_short">需先登录小红书才能下载主页作品</string>
     <string name="home_xhs_login_action">登录</string>
     <string name="homepage_input_hint_xhs">小红书主页链接</string>
     <string name="home_preview_need_login_xhs">小红书未登录时作品列表可能被截断。点上方「登录」扫码/验证码登录后可下载全量</string>
@@ -320,7 +324,7 @@
     <string name="xhs_login_entry_summary_logged_out">未登录 · 扫码登录后解锁主页批量下载</string>
     <string name="xhs_login_page_title">登录小红书</string>
     <string name="xhs_login_hint">在下方页面完成登录：若未自动弹出二维码，请点页面右上角「登录」。用小红书 App 扫码并确认后，点下方「我已扫码登录」。</string>
-    <string name="xhs_login_detected">检测到登录 cookie，请点「我已扫码登录」完成校验。</string>
+    <string name="xhs_login_detected">页面已写入 cookie（访客态也会有）。请确认已用手机号/扫码完成登录，再点「我已扫码登录」。</string>
     <string name="xhs_login_confirm">我已扫码登录</string>
     <string name="xhs_login_reload">刷新页面</string>
     <string name="xhs_login_success">登录成功：%1$s</string>
