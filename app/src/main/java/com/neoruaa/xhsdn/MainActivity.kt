@@ -1287,6 +1287,14 @@ class MainActivity : ComponentActivity() {
                                 .getUserPostedAll(userId, xsecToken = q.first, xsecSource = q.second)
                         }.getOrNull()
                     }
+                    // ★v3.3.7：cookie 还在但被风控拒（HTTP 461，body 是 data:{} 空壳）→ 标记登录失效。
+                    //   否则界面显示「已登录」、实际只拿到游客 8 条，用户会以为「登录了却只有 8 条」是 bug。
+                    if (apiPage != null && apiPage.riskStatus == 461) {
+                        com.neoruaa.xhsdn.web.XhsSession.get(applicationContext).markRejected()
+                        Log.w("XhsHome", "L1x 风控 461 → 已标记登录态失效，降级 L2x 游客链")
+                        trackEvent("xhs_login_rejected", mapOf("http" to "461"))
+                        showToast(getString(R.string.xhs_login_expired))
+                    }
                     if (apiPage != null && apiPage.notes.isNotEmpty()) {
                         provider = "xhs_api"
                         items = apiPage.notes.map { b ->
@@ -3784,7 +3792,9 @@ private fun HomepagePage(
                 loginLifecycle.lifecycle.addObserver(obs)
                 onDispose { loginLifecycle.lifecycle.removeObserver(obs) }
             }
-            val xhsLoggedIn = remember(loginTick) {
+            // 订阅登录态版本号：停在页面时被风控判定失效（461）也能立刻翻成「未登录」
+            val sessionEpoch = com.neoruaa.xhsdn.web.XhsSession.epochState.intValue
+            val xhsLoggedIn = remember(loginTick, sessionEpoch) {
                 com.neoruaa.xhsdn.web.XhsSession.get(ctx).hasLogin()
             }
             Row(

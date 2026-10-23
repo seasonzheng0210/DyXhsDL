@@ -43,7 +43,9 @@ data class XhsPostedPage(
     val notes: List<XhsNoteBrief>,
     val nickname: String?,
     val total: Int,
-    val hasMore: Boolean
+    val hasMore: Boolean,
+    /** 风控拒绝的 HTTP 码（实测 461）；0 = 正常。上层据此提示「登录失效」而不是「没有作品」。 */
+    val riskStatus: Int = 0
 )
 
 /**

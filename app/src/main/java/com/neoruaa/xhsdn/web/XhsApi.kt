@@ -112,10 +112,15 @@ class XhsApi private constructor(context: Context) {
         var hasMore = false
         var nickname: String? = null
         var total = 0
+        var riskStatus = 0
         var lastData: JSONObject? = null
         for (page in 0 until maxPages) {
             val json = try {
                 getUserPosted(userId, cursor, xsecToken, xsecSource)
+            } catch (e: RiskBlockedException) {
+                riskStatus = e.httpCode
+                Log.w("XhsApi", "getUserPostedAll p$page 风控拒绝 HTTP ${e.httpCode}（登录态可能已失效）")
+                break
             } catch (e: Exception) {
                 Log.w("XhsApi", "getUserPostedAll p$page 异常: ${e.message}", e)
                 break
@@ -165,8 +170,8 @@ class XhsApi private constructor(context: Context) {
                     .ifBlank { u.optString("nickName") }
             }?.takeIf { it.isNotBlank() }
         }
-        Log.i("XhsApi", "getUserPostedAll 收齐: notes=${out.size} total=$total hasMore=$hasMore nickname=$nickname")
-        return XhsPostedPage(out, nickname, total, hasMore)
+        Log.i("XhsApi", "getUserPostedAll 收齐: notes=${out.size} total=$total hasMore=$hasMore nickname=$nickname risk=$riskStatus")
+        return XhsPostedPage(out, nickname, total, hasMore, riskStatus)
     }
 
     /**
@@ -203,17 +208,29 @@ class XhsApi private constructor(context: Context) {
             attempt++
             val result = executeSigned(api, data, method, needsRap, needsXy, tierOverride)
             val json = result.json
-            val gateHit = result.httpCode == 406 || json?.optInt("code", 0) == -1
+            // 406 / code=-1：概率闸门；461：风控明确拒绝（body 是 {"code":0,"success":true,"data":{}} 空壳，
+            // 不识别的话上层会当成「该作者 0 个作品」。461 同样值得换 0301 档重签一次。
+            val gateHit = result.httpCode == 406 || result.httpCode == 461 ||
+                json?.optInt("code", 0) == -1
             if (gateHit && attempt < 2) {
                 // 406 概率闸门：浏览器冷启动 0101 被打时升档 0301 重签重试
                 tierOverride = "0301"
                 continue
             }
+            if (result.httpCode == 461) throw RiskBlockedException(result.httpCode)
             return json ?: throw IOException("xhs api $api 返回非 JSON (HTTP ${result.httpCode})")
         }
     }
 
     private data class RawResult(val httpCode: Int, val json: JSONObject?)
+
+    /**
+     * 小红书风控明确拒绝（HTTP 461）。真机实测（Redmi K60U，v3.3.6）：
+     * 登录 cookie 还在、`hasLogin()` 为 true，但 `user_posted` 恒返回 461 +
+     * `{"code":0,"success":true,"data":{}}`。必须与「该作者真的没作品」区分开，
+     * 否则 UI 会显示「已登录」却只出 8 条游客数据。
+     */
+    class RiskBlockedException(val httpCode: Int) : IOException("xhs 风控拒绝 HTTP $httpCode")
 
     private suspend fun executeSigned(
         api: String,

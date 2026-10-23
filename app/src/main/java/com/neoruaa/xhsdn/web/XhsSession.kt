@@ -75,11 +75,31 @@ class XhsSession private constructor(context: Context) {
         values.forEach { (k, v) ->
             if (v.isEmpty()) cookieMap.remove(k) else cookieMap[k] = v
         }
+        // 重新登录/补 cookie → 之前的「被拒」标记作废
+        prefs.edit().putBoolean(KEY_REJECTED, false).apply()
+        bumpEpoch()
         persistCookies()
     }
 
+    /**
+     * 服务端明确拒绝当前登录态（HTTP 461 风控 / code=-100）。
+     * ★v3.3.7：此前 hasLogin() 只看 `web_session` 是否存在 → cookie 已失效时
+     * 首页仍显示「已登录」，而 user_posted 返回 461 空数据、静默降级到游客 8 条，
+     * 用户会以为「登录了却只有 8 条」是 bug。标记后 hasLogin() 返回 false，
+     * 登录态行与强制登录闸门才会给出正确引导。
+     */
     @Synchronized
-    fun hasLogin(): Boolean = !cookieMap["web_session"].isNullOrEmpty()
+    fun markRejected() {
+        if (prefs.getBoolean(KEY_REJECTED, false)) return
+        prefs.edit().putBoolean(KEY_REJECTED, true).apply()
+        bumpEpoch()
+    }
+
+    @Synchronized
+    fun isRejected(): Boolean = prefs.getBoolean(KEY_REJECTED, false)
+
+    @Synchronized
+    fun hasLogin(): Boolean = !isRejected() && !cookieMap["web_session"].isNullOrEmpty()
 
     // ------------------------------------------------------------------
     // dsl_pair
@@ -330,6 +350,7 @@ class XhsSession private constructor(context: Context) {
     companion object {
         private const val PREFS = "xhs_pc_session"
         private const val KEY_COOKIES = "cookies_json"
+        private const val KEY_REJECTED = "session_rejected"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_LOADTS = "loadts"
         private const val KEY_SEQ = "seq"
@@ -350,6 +371,16 @@ class XhsSession private constructor(context: Context) {
 
         private val GETDSS_RE =
             Regex("function\\s+getdss\\s*\\(\\s*\\)\\s*\\{\\s*return\\s+'(\\d+)'")
+
+        /**
+         * 登录态版本号（Compose 可订阅）。登录/失效时 +1，
+         * 让停在主页下载页的用户不用切页也能看到「已登录 ↔ 需登录」变化。
+         */
+        val epochState = androidx.compose.runtime.mutableIntStateOf(0)
+
+        private fun bumpEpoch() {
+            epochState.intValue = epochState.intValue + 1
+        }
 
         @Volatile
         private var instance: XhsSession? = null
