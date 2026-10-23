@@ -278,8 +278,11 @@
     <string name="home_preview_recent_sub">%1$d 个已下载 · 点击重新解析</string>
     <string name="home_recent_authors_title">最近作者</string>
     <string name="homepage_supported_short">支持：抖音作品链接 / 主页分享文案 / www.douyin.com/user/xxx</string>
+    <!-- v3.3.12：切到小红书平台时换成对应文案（原来写死抖音，用户看到文不对题） -->
+    <string name="homepage_supported_short_xhs">支持：小红书笔记链接 / 主页分享文案 / www.xiaohongshu.com/user/profile/xxx</string>
     <string name="home_howto_title">怎么用</string>
     <string name="home_howto_1">在抖音复制作品链接，或博主主页的分享文案</string>
+    <string name="home_howto_1_xhs">在小红书复制笔记链接，或博主主页的分享文案</string>
     <string name="home_howto_2">回到本 App 会自动识别；也可以在此页直接粘贴</string>
     <string name="home_howto_3">核对要下载的作品 → 一键批量保存到本机</string>
     <!-- ══ 入口层（v2 交互重构）：来源条 + 常驻操作条 + 三阶段解析 ══ -->

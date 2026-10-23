@@ -4285,13 +4285,17 @@ private fun HomepagePage(
         // 原 Idle 态只有 3 行灰字（对比度不足）+ 中下部一大片留白，既不像"完成态"也没告诉
         // 用户下一步做什么。补一张三步「怎么用」卡，把留白变成有效信息。
         if (preview is HomePreviewState.Idle) {
-            HomepageHowToCard()
+            HomepageHowToCard(homePlatform)
             Spacer(modifier = Modifier.height(12.dp))
         }
         // 支持范围：折叠为一行（完整说明收进「怎么用」卡），并把 Color.Gray 换成
         // 主题次级字色 —— 灰字压在暖色壁纸上对比度只有 ~2.5:1，暗光下看不清
+        // ★文案必须跟当前平台走：小红书页显示「支持抖音作品链接」等于告诉用户选错了平台
         Text(
-            text = stringResource(R.string.homepage_supported_short),
+            text = stringResource(
+                if (homePlatform == "xhs") R.string.homepage_supported_short_xhs
+                else R.string.homepage_supported_short
+            ),
             fontSize = 11.5.sp,
             color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.48f),
             modifier = Modifier.padding(horizontal = 4.dp)
@@ -4372,7 +4376,7 @@ private fun HomepagePage(
  * 这里把留白换成三步指引 + 支持范围，一次性把「入口在哪 / 怎么触发 / 结果在哪」讲清。
  */
 @Composable
-private fun HomepageHowToCard() {
+private fun HomepageHowToCard(platform: String = "douyin") {
     Card(
         modifier = Modifier.fillMaxWidth(),
         // 与页内其它卡（作者卡 / 范围卡 / 开关卡）统一 14dp 圆角
@@ -4388,7 +4392,9 @@ private fun HomepageHowToCard() {
             )
             Spacer(modifier = Modifier.height(10.dp))
             listOf(
-                stringResource(R.string.home_howto_1),
+                stringResource(
+                    if (platform == "xhs") R.string.home_howto_1_xhs else R.string.home_howto_1
+                ),
                 stringResource(R.string.home_howto_2),
                 stringResource(R.string.home_howto_3)
             ).forEachIndexed { i, step ->
