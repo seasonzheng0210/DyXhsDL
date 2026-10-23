@@ -70,6 +70,7 @@ import com.neoruaa.xhsdn.ui.glass.GlassDialog
 import com.neoruaa.xhsdn.ui.glass.GlassLogBody
 import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
 import com.neoruaa.xhsdn.ui.glass.GlassTokens
+import com.neoruaa.xhsdn.ui.glass.GlassTonalButton
 import com.neoruaa.xhsdn.ui.glass.accentBg
 import com.neoruaa.xhsdn.ui.glass.accentFg
 import com.neoruaa.xhsdn.ui.glass.WallpaperLayer
@@ -794,24 +795,45 @@ private fun CompletedCard(
             }
             Spacer(Modifier.height(22.dp))
             if (task.filePaths.isNotEmpty()) {
+                // ★v3.3.13 按钮阶梯：一个视图只能有一个 L1 主操作 —— 原来「打开」「查看文件」
+                //   都是紫渐变实底且等权（各 weight 1f），用户看不出该点哪个。
+                //   现在「打开」保留主 CTA，「查看文件」降为 tinted 次级（accent 14% 底 + 主文字色，
+                //   与主按钮同族但明显更弱；文字不用 accentFg 是为了守住 4.5:1）。
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     GlassPrimaryWrap(Modifier.weight(1f).height(GlassSpec.BtnHeight), cornerRadius = GlassSpec.BtnCornerRadius) {
                         Button(onClick = onOpenFirst, modifier = Modifier.fillMaxWidth().height(GlassSpec.BtnHeight), colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White), insideMargin = PaddingValues(horizontal = GlassSpec.BtnBarPadH, vertical = 0.dp)) {
                             Text("打开", color = fg, fontSize = GlassSpec.BtnFontSize, fontWeight = GlassSpec.BtnFontWeight, letterSpacing = GlassSpec.BtnLetterSpacing)
                         }
                     }
-                    GlassPrimaryWrap(Modifier.weight(1f).height(GlassSpec.BtnHeight), cornerRadius = GlassSpec.BtnCornerRadius) {
-                        Button(onClick = onBrowseFiles, modifier = Modifier.fillMaxWidth().height(GlassSpec.BtnHeight), colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White), insideMargin = PaddingValues(horizontal = GlassSpec.BtnBarPadH, vertical = 0.dp)) {
-                            Text("查看文件", color = fg, fontSize = GlassSpec.BtnFontSize, fontWeight = GlassSpec.BtnFontWeight, letterSpacing = GlassSpec.BtnLetterSpacing)
-                        }
-                    }
+                    GlassTonalButton(
+                        text = "查看文件",
+                        onClick = onBrowseFiles,
+                        background = accentBg(lightAlpha = 0.14f),
+                        contentColor = tp,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             } else {
                 Text(text = "本任务未保存文件（可能是网页爬取/批量任务）", color = ts, fontSize = 12.5.sp)
             }
             Spacer(Modifier.height(14.dp))
+            // ★v3.3.13：原来用 Miuix TextButton —— 默认是**浅灰底 + 中性字**，看起来像禁用态，
+            //   而它恰恰是不可逆的破坏性操作。改成「红字 plain 按钮」：语义正确，且与上方
+            //   两个填充按钮形成明显层级（危险操作不该抢主视觉，但必须一眼看出能点）。
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                TextButton(text = "删除任务", onClick = onDelete)
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClick = onDelete)
+                        .padding(horizontal = 20.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = "删除任务",
+                        color = if (dark) GlassTokens.FailRedDark else GlassTokens.FailRed,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
     }

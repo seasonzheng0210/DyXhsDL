@@ -159,6 +159,7 @@ import com.neoruaa.xhsdn.ui.glass.GlassLogBody
 import com.neoruaa.xhsdn.ui.glass.GlassBtnTier
 import com.neoruaa.xhsdn.ui.glass.GlassPrimaryButton
 import com.neoruaa.xhsdn.ui.glass.GlassPrimaryWrap
+import com.neoruaa.xhsdn.ui.glass.GlassTonalButton
 import com.neoruaa.xhsdn.ui.glass.GlassTokens
 import com.neoruaa.xhsdn.ui.glass.GlassSpec
 import com.neoruaa.xhsdn.ui.glass.accentBg
@@ -3097,6 +3098,27 @@ private fun TaskCell(
                 }
             }
 
+            // ★v3.3.13：失败卡原来只有一枚「下载失败」胶囊 + 一个重试按钮，**不说为什么失败** ——
+            //   用户要么盲点重试、要么点进详情翻日志。这里把末因直接显示在卡上（最多 2 行）。
+            //   取 errorMessage 第一行非空内容：异常堆栈常常第一行就是最有信息量的那句。
+            if (task.status == com.neoruaa.xhsdn.data.TaskStatus.FAILED) {
+                val reason = task.errorMessage
+                    ?.lineSequence()?.map { it.trim() }?.firstOrNull { it.isNotBlank() }
+                if (!reason.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(5.dp))
+                    // 用中性色而不是 FailRed：失败语义已由「下载失败」胶囊 + 左上红点表达，
+                    // 原因再刷红会让整页变成"报警墙"（实测一屏 4 条红字非常吵）。
+                    Text(
+                        text = reason,
+                        fontSize = 11.5.sp,
+                        lineHeight = 16.sp,
+                        color = tSecondary,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+            }
+
             // 进度条（仅下载中显示；mockup .prog: h5/r3/浅灰底+橙→珊瑚渐变，无文本行）
             if (task.totalFiles > 0 && task.status == com.neoruaa.xhsdn.data.TaskStatus.DOWNLOADING) {
                 Box(
@@ -3246,27 +3268,19 @@ private fun TaskCell(
                         }
                     }
                 } else {
-                    // 重试按钮（仅失败任务显示）v3.1.5：统一 .btn 规格
+                    // 重试按钮（仅失败任务显示）
+                    // ★v3.3.13 降级为 L2 次级：原来用 GlassPrimaryWrap 紫渐变实底 + 全宽，
+                    //   一屏 4~5 张失败卡就是 4~5 个 L1 主 CTA 并排（实测截图整页紫），
+                    //   既违背「每视图唯一主操作」，也让"失败"这一状态显得比"完成"更张扬。
+                    //   改 tinted 次级后仍是本卡唯一可点区域，层级回到「这张卡能做一件事」。
                     if (task.status == com.neoruaa.xhsdn.data.TaskStatus.FAILED) {
-                        GlassPrimaryWrap(
-                            modifier = Modifier.weight(1f).height(BtnHeight),
-                            cornerRadius = BtnCornerRadius
-                        ) {
-                            Button(
-                                onClick = onRetry,
-                                modifier = Modifier.fillMaxWidth().height(BtnHeight),
-                                colors = ButtonDefaults.buttonColors(Color.Transparent, Color.White),
-                                insideMargin = PaddingValues(horizontal = BtnBarPadH, vertical = 0.dp)
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.retry),
-                                    color = Color.White,
-                                    fontSize = BtnFontSize,
-                                    fontWeight = BtnFontWeight,
-                                    letterSpacing = BtnLetterSpacing
-                                )
-                            }
-                        }
+                        GlassTonalButton(
+                            text = stringResource(R.string.retry),
+                            onClick = onRetry,
+                            background = accentBg(lightAlpha = 0.14f),
+                            contentColor = if (dark) GlassTokens.TextPrimaryDark else GlassTokens.TextPrimaryLight,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
@@ -3807,6 +3821,9 @@ private fun HomepagePage(
         }
         Spacer(modifier = Modifier.height(8.dp))
         // ── 平台选择器（v3.3.4）：抖音 / 小红书 ──
+        // ★v3.3.13 补选中态：原来两个按钮只差字重（SemiBold / Normal），填充完全一样 →
+        //   用户看不出当前在哪个平台（实测截图两枚按钮像素级近似）。改用任务页 TabRow
+        //   同一套语言（渐变实底 + 白字），让"平台切换"在全 App 只有一个视觉含义。
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -3814,17 +3831,37 @@ private fun HomepagePage(
             listOf("douyin" to stringResource(R.string.home_platform_douyin),
                    "xhs" to stringResource(R.string.home_platform_xhs)).forEach { (key, label) ->
                 val selected = homePlatform == key
-                Button(
-                    onClick = { homePlatform = key },
-                    enabled = !parsing,
-                    modifier = Modifier.weight(1f).height(40.dp),
-                    cornerRadius = 20.dp
-                ) {
-                    Text(
-                        text = label,
-                        fontSize = 13.sp,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
-                    )
+                if (selected) {
+                    GlassPrimaryWrap(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(40.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .clickable(enabled = !parsing) { homePlatform = key },
+                        cornerRadius = 20.dp
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = label,
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = { homePlatform = key },
+                        enabled = !parsing,
+                        modifier = Modifier.weight(1f).height(40.dp),
+                        cornerRadius = 20.dp
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Normal
+                        )
+                    }
                 }
             }
         }
@@ -5135,7 +5172,10 @@ private fun HomepagePickerPage(
     onConfirm: () -> Unit
 ) {
     // 0=全部 / 1=新增 / 2=已下载（`.seg` 三段）
-    var seg by remember { mutableStateOf(1) }
+    // ★v3.3.13：原来恒为 1（新增）。同一个作者重复解析时「新增」恒 0 →
+    //   打开挑选页就是空白「这一档没有作品」，用户得自己发现要先切到「全部」。
+    //   改成「真有新增才落新增，否则直接落全部」。
+    var seg by remember { mutableStateOf(if (items.any { it.id in newIdSet }) 1 else 0) }
     // null=全部类型 / true=仅视频 / false=仅图集（`.filters`）
     var typeFilter by remember { mutableStateOf<Boolean?>(null) }
     val newItems = items.filter { it.id in newIdSet }
@@ -5249,8 +5289,10 @@ private fun HomepagePickerPage(
                     .padding(horizontal = 16.dp)
             ) {
                 if (shownItems.isEmpty()) {
+                    // 空态要给出路：告诉用户切哪一档能看见作品，而不是一句「没有」就完了
                     Text(
-                        text = "这一档没有作品",
+                        text = if (seg == 1) "这一档没有作品，切到「全部」或「已下载」可以挑选"
+                               else "这一档没有作品",
                         fontSize = 13.sp,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                         modifier = Modifier.padding(vertical = 24.dp)

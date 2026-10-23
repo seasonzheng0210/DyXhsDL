@@ -630,20 +630,26 @@ internal fun SettingsScreen(
 
             item {
                 SettingsGroup(stringResource(R.string.diagnostics_group_title)) {
+                    // ★v3.3.13：这三行本来就可点，但右侧空白、没有 `›`，与「下载该作者的主页」
+                    //   （有箭头）不一致 → 用户不知道能点。统一补上中性箭头（不是 accent：
+                    //   箭头表示"进入下一层"，不是主行动，不该抢强调色）。
                     BasicComponent(
                         title = stringResource(R.string.failure_log_title),
                         summary = stringResource(R.string.failure_log_settings_desc),
-                        onClick = { showFailureLogDialog = true }
+                        onClick = { showFailureLogDialog = true },
+                        endActions = { NavChevron() }
                     )
                     BasicComponent(
                         title = stringResource(R.string.normal_log_title),
                         summary = stringResource(R.string.normal_log_settings_desc),
-                        onClick = { showNormalLogDialog = true }
+                        onClick = { showNormalLogDialog = true },
+                        endActions = { NavChevron() }
                     )
                     BasicComponent(
                         title = stringResource(R.string.events_log_title),
                         summary = stringResource(R.string.events_log_settings_desc),
-                        onClick = { showEventsLogDialog = true }
+                        onClick = { showEventsLogDialog = true },
+                        endActions = { NavChevron() }
                     )
                 }
             }
@@ -664,7 +670,9 @@ internal fun SettingsScreen(
                                     Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/seasonzheng0210/DyXhsDL"))
                                 )
                             }
-                        }
+                        },
+                        // 它同样是「跳到页外」的可点行，跟上面三行日志统一给箭头
+                        endActions = { NavChevron() }
                     )
                 }
             }
@@ -885,6 +893,17 @@ private fun ThemeSwatch(
             color = if (selected) accentFg() else MiuixTheme.colorScheme.onSurfaceVariantSummary
         )
     }
+}
+
+/** 可点行的「进入下一层」箭头。中性色，与 TaskDetail 的作者主页入口保持同一语言。 */
+@Composable
+private fun NavChevron() {
+    Text(
+        text = "›",
+        fontSize = 20.sp,
+        fontWeight = FontWeight.Medium,
+        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+    )
 }
 
 @Composable
