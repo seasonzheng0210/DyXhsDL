@@ -97,6 +97,9 @@ class XhsLoginActivity : ComponentActivity() {
                             getString(R.string.xhs_login_success, name),
                             Toast.LENGTH_LONG
                         ).show()
+                        // ★v3.3.8：告知调用方「登录成功」，主界面据此自动跳回
+                        // 首页下载·小红书并重新解析（否则用户还得自己切页签重来一遍）
+                        setResult(RESULT_OK)
                         finish()
                     } else {
                         after(

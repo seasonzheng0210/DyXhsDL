@@ -262,6 +262,7 @@
     <string name="xhs_login_required_message">主页批量下载需要登录后才能拿到原片。未登录只能读取前 8 条，而且只有封面图。</string>
     <string name="xhs_login_required_short">需先登录小红书才能下载主页作品</string>
     <string name="xhs_login_expired">小红书登录已失效（风控 461），请重新登录后再下载</string>
+    <string name="xhs_login_ok_reparse">登录成功，正在重新解析该作者作品…</string>
     <string name="home_xhs_login_action">登录</string>
     <string name="homepage_input_hint_xhs">小红书主页链接</string>
     <string name="home_preview_need_login_xhs">小红书未登录时作品列表可能被截断。点上方「登录」扫码/验证码登录后可下载全量</string>

@@ -217,6 +217,42 @@ class MainActivity : ComponentActivity() {
      * 类级函数（confirmHomepageDownload）置 true → composition 里渲染 GlassDialog。
      */
     private val _xhsLoginGate = mutableStateOf(false)
+
+    /**
+     * 登录页结果回调（v3.3.8）：登录成功后自动跳回「首页下载 · 小红书」并重新解析，
+     * 省掉「登录 → 自己切页签 → 重新粘链接 → 再点解析」这一串动作。
+     */
+    private val xhsLoginLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { res -> onXhsLoginFinished(res.resultCode == android.app.Activity.RESULT_OK) }
+
+    /** 最近一次解析过的小红书主页链接：登录回来后拿它重解析。 */
+    private var lastXhsHomeLink: String = ""
+
+    internal fun launchXhsLogin() {
+        val intent = android.content.Intent(this, XhsLoginActivity::class.java)
+        runCatching { xhsLoginLauncher.launch(intent) }.onFailure {
+            // launcher 未就绪（理论上不会）时退化成直接 startActivity，至少不卡死用户
+            Log.w(TAG, "xhs login launcher 失败，降级 startActivity: ${it.message}")
+            runCatching { startActivity(intent) }
+        }
+    }
+
+    private fun onXhsLoginFinished(ok: Boolean) {
+        val logged = ok || com.neoruaa.xhsdn.web.XhsSession.get(this).hasLogin()
+        trackEvent(
+            "xhs_login_back",
+            mapOf("ok" to logged.toString(), "hasLink" to lastXhsHomeLink.isNotBlank().toString())
+        )
+        if (!logged) return
+        val link = lastXhsHomeLink
+        if (link.isBlank()) return  // 从设置页登录、没解析过主页 → 不跳，停留在原处
+        showToast(getString(R.string.xhs_login_ok_reparse))
+        // 走统一外部入口：切到首页下载 tab → openHomepage → 重新 fetch 预览
+        // 平台选择器在 HomepagePage 内由链接判定（remember(activeLink) 键控），会自动落到「小红书」
+        _pendingHomepage.value = link to HOMEPAGE_FROM_MANUAL
+    }
+
     private var context: Context =  this
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -867,9 +903,7 @@ class MainActivity : ComponentActivity() {
                         onConfirm = {
                             _xhsLoginGate.value = false
                             trackEvent("xhs_home_login_gate_go")
-                            startActivity(
-                                android.content.Intent(this@MainActivity, XhsLoginActivity::class.java)
-                            )
+                            launchXhsLogin()
                         },
                         onDismiss = {
                             _xhsLoginGate.value = false
@@ -1082,6 +1116,8 @@ class MainActivity : ComponentActivity() {
             showToast(getString(R.string.invalid_link_please_reenter))
             return
         }
+        // 记住最近解析的小红书主页链接：登录页返回后用它自动重解析（v3.3.8）
+        if (UrlUtils.isXhsHomepageLink(cleanUrl)) lastXhsHomeLink = input
         // ★平台路由（v3.3.1）：小红书系链接（含 xhslink 主页短链）先跟跳拿最终 URL 再提取 userId。
         // 实测：xhslink.cn/o/xxx 302 → user/profile/{id}?xsec_token=…&xsec_source=app_share
         // ★ensureStoragePermission 必须包住整条链：放在路由协程内部会让「跳设置授权」期间
@@ -1422,10 +1458,14 @@ class MainActivity : ComponentActivity() {
             return
         }
         trackEvent("homepage_confirm", mapOf("range" to range.name, "count" to chosen.size.toString()))
+        // ★v3.3.8：手动挑选（SELECTED）必须无视「自动跳过已下载」——用户已经逐条勾过了，
+        //   再被 HomeRepo.filterNew 过滤一遍就会出现「选了 2 条、提示已开始、实际什么都没下」。
+        //   scopeHomepageItems 对 SELECTED 本来就是「勾了就下」，这里把批次标记也对齐。
+        val effectiveSkip = if (range == HomepageBatchStore.Range.SELECTED) false else skipDownloaded
         val token = HomepageBatchStore.put(
             HomepageBatchStore.Batch(
                 state.secUid, state.nickname, state.homepageUrl, range, latestN,
-                includeImages, skipDownloaded, chosen,
+                includeImages, effectiveSkip, chosen,
                 platform = state.platform, xhsTokens = state.xhsTokens
             )
         )
@@ -1870,10 +1910,8 @@ private fun MainScreen(
                             parseStage = parseStage,
                             onCancelPreview = onCancelPreview,
                             activeLink = activeLink,
-                            onXhsLogin = {
-                                val act = ctx as? android.app.Activity
-                                act?.startActivity(Intent(ctx, XhsLoginActivity::class.java))
-                            },
+                            // MainScreen 是文件级 Composable，取不到 Activity 私有方法 → 走 ctx 强转
+                            onXhsLogin = { (ctx as? MainActivity)?.launchXhsLogin() },
                             modifier = Modifier.fillMaxSize()
                         )
                         // 2=我的：内嵌设置页（UI v2 S3 分组；原 SettingsActivity 保留独立入口）
@@ -3678,7 +3716,17 @@ private fun HomepagePage(
     val ctx = LocalContext.current
     var link by remember { mutableStateOf("") }
     // 平台选择：抖音 / 小红书（v3.3.4 分离）
-    var homePlatform by remember { mutableStateOf(if (activeLink.contains("xiaohongshu") || activeLink.contains("xhslink")) "xhs" else "douyin") }
+    // ★v3.3.8：改成按「解析目标链接所属平台」键控 —— 原来是无 key 的 remember，
+    //   外部入口（剪贴板/任务卡/登录后自动重解析）把 activeLink 换成小红书链接时，
+    //   平台选择器仍停在「抖音」，用户得手动点一下才对。
+    val platformKey = when {
+        activeLink.isBlank() -> ""
+        activeLink.contains("xiaohongshu") || activeLink.contains("xhslink") -> "xhs"
+        else -> "douyin"
+    }
+    var homePlatform by remember(platformKey) {
+        mutableStateOf(if (platformKey == "xhs") "xhs" else "douyin")
+    }
     // 外部入口（剪贴板/任务详情/任务卡）触发的解析：把实际链接回填进输入框，
     // 否则来源条说了"从哪来"却没说"在解析谁"，用户无从核对。
     LaunchedEffect(activeLink) {
