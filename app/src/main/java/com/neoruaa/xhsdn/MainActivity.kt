@@ -389,7 +389,8 @@ class MainActivity : ComponentActivity() {
             val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
             // 提取核心检测逻辑为可复用函数
-            fun checkClipboard() {
+            // ★v3.3.14：改为 suspend —— 短链歧义时要在**不切页**的前提下先跟跳判类型
+            suspend fun checkClipboard() {
                 // 1. Refresh Preferences
                 val currentAutoRead = prefs.getBoolean("auto_read_clipboard", false)
                 val currentShowBubble = prefs.getBoolean("show_clipboard_bubble", true)
@@ -417,21 +418,26 @@ class MainActivity : ComponentActivity() {
                         if (UrlUtils.detectPlatform(clipText) != null) {
                         // 3. Logic Branching
 
-                        // 0. 主页链接优先：抖音主页分享文案 / /user/{sec_uid} → 直接下载主页全部视频
-                        if (UrlUtils.isDouyinHomepageLink(clipText)) {
+                        // 0. 主页判定（★v3.3.14 先判定、再导航）
+                        // 旧实现：抖音主页文案 / xhslink 的 /o/ 短链都"猜"成主页 → 先切到「主页下载」页，
+                        // 跟跳后才发现是单篇笔记/单条视频 → 又切回任务页 → 用户看到两次跳页（观感极差）。
+                        // 现在：确定主页立刻转主页下载；确定单作品直接走下面的单作品分支（绝不经过主页页）；
+                        //       只有短链歧义才跟跳一次，且跟跳期间界面不动。
+                        val entryTarget = UrlUtils.entryTarget(clipText, url)
+                        val homepageLink: String? = when (entryTarget) {
+                            UrlUtils.EntryTarget.HOMEPAGE -> url ?: clipText
+                            UrlUtils.EntryTarget.SINGLE -> null
+                            UrlUtils.EntryTarget.AMBIGUOUS -> url?.let { u ->
+                                val finalUrl = resolveEntryFinalUrl(u)
+                                if (UrlUtils.isCertainHomepageUrl(finalUrl)) finalUrl else null
+                            }
+                        }
+                        if (homepageLink != null) {
+                            Log.d(TAG, "checkClipboard: $entryTarget → 主页下载 $homepageLink")
                             lastHandledUrl = dedupeKey
                             // ★入口层修复：先切到首页下载 tab 再解析，否则解析白跑且用户看不到
-                            openHomepage(clipText, HOMEPAGE_FROM_CLIPBOARD)
+                            openHomepage(homepageLink, HOMEPAGE_FROM_CLIPBOARD)
                             // 读取后清空剪贴板，避免同链接被反复读取
-                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("", ""))
-                            detectedXhsLink = null
-                            return@checkClipboard
-                        }
-
-                        // 0b. 小红书主页链接 → 同样走主页下载
-                        if (UrlUtils.isXhsHomepageLink(clipText)) {
-                            lastHandledUrl = dedupeKey
-                            openHomepage(clipText, HOMEPAGE_FROM_CLIPBOARD)
                             clipboard.setPrimaryClip(android.content.ClipData.newPlainText("", ""))
                             detectedXhsLink = null
                             return@checkClipboard
@@ -596,42 +602,33 @@ class MainActivity : ComponentActivity() {
                                 // 先读取剪贴板
                                 val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                 val clipText = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
-                                // 主页链接：走主页下载，反查作者并批量下载
-                                if (UrlUtils.isDouyinHomepageLink(clipText)) {
-                                    openHomepage(clipText, HOMEPAGE_FROM_CLIPBOARD)
-                                    return@ensureStoragePermission
-                                }
-                                // 小红书主页链接 → 同样走主页下载
-                                if (UrlUtils.isXhsHomepageLink(clipText)) {
-                                    openHomepage(clipText, HOMEPAGE_FROM_CLIPBOARD)
-                                    return@ensureStoragePermission
-                                }
-                                // 提取有效链接
-                                val platform = UrlUtils.detectPlatform(clipText)
-                                if (platform == "douyin") {
-                                    // 抖音：HTTP 直解已被风控拦截（空响应/安全页），改用 WebView 真浏览器解析
-                                    trackEvent("entry_button", mapOf("platform" to "douyin"))
-                                    taskTab = platformTabIndex(platform)
-                                    launchDouyinWebView(clipText)
-                                } else if (platform == "kuaishou") {
-                                    // 快手：HTTP 直解不稳定（匿名 GraphQL 偶被风控），改用 WebView 真浏览器解析（与抖音一致）
-                                    trackEvent("entry_button", mapOf("platform" to "kuaishou"))
-                                    taskTab = platformTabIndex(platform)
-                                    launchKuaishouWebView(clipText)
-                                } else if (platform == "xhs") {
-                                    trackEvent("entry_button", mapOf("platform" to "xhs"))
-                                    taskTab = platformTabIndex(platform)
-                                    viewModel.updateUrl(clipText)
+                                // ★v3.3.14：主页 / 单作品交给统一闸门判定（先判定再导航，消除两次跳页）
+                                routeUnknownLink(clipText, HOMEPAGE_FROM_CLIPBOARD) { cleanUrl, platform ->
+                                    if (platform == "douyin") {
+                                        // 抖音：HTTP 直解已被风控拦截（空响应/安全页），改用服务内 WebView 真浏览器解析
+                                        trackEvent("entry_button", mapOf("platform" to "douyin"))
+                                        taskTab = platformTabIndex(platform)
+                                        launchDouyinWebView(cleanUrl)
+                                    } else if (platform == "kuaishou") {
+                                        // 快手：HTTP 直解不稳定（匿名 GraphQL 偶被风控），改用 WebView 真浏览器解析（与抖音一致）
+                                        trackEvent("entry_button", mapOf("platform" to "kuaishou"))
+                                        taskTab = platformTabIndex(platform)
+                                        launchKuaishouWebView(cleanUrl)
+                                    } else if (platform == "xhs") {
+                                        trackEvent("entry_button", mapOf("platform" to "xhs"))
+                                        taskTab = platformTabIndex(platform)
+                                        viewModel.updateUrl(cleanUrl)
 
-                                    if (selectiveDownload) {
-                                        trackEvent("selective_start")
-                                        viewModel.startSelectiveDownload { showToast(it) }
+                                        if (selectiveDownload) {
+                                            trackEvent("selective_start")
+                                            viewModel.startSelectiveDownload { showToast(it) }
+                                        } else {
+                                            // 派发到前台服务下载（普通模式）
+                                            dispatchDownload(cleanUrl, "xhs")
+                                        }
                                     } else {
-                                        // 派发到前台服务下载（普通模式）
-                                        dispatchDownload(clipText, "xhs")
+                                        showToast(getString(R.string.link_not_recognized))
                                     }
-                                } else {
-                                    showToast(getString(R.string.link_not_recognized))
                                 }
                             }
                         }
@@ -647,26 +644,14 @@ class MainActivity : ComponentActivity() {
                         ensureStoragePermission { viewModel.copyDescription({ showToast(getString(R.string.copied_description)) }, { showToast(it) }) } 
                     },
                     onOpenSettings = { trackEvent("settings_open"); startActivity(Intent(this, SettingsActivity::class.java)) },
-                    onWebCrawlFromClipboard = homepageGuard@{
+                    onWebCrawlFromClipboard = {
                         // 先读取剪贴板
                         val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
                         val clipText = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
                         if (clipText.isNotEmpty()) {
-                            // Clean the URL using the same method as other places
-                            val cleanUrl = UrlUtils.extractFirstUrl(clipText)
-                            if (cleanUrl != null) {
-                                // 主页链接：走主页下载，反查作者并批量下载
-                                if (UrlUtils.isDouyinHomepageLink(clipText)) {
-                                    openHomepage(clipText, HOMEPAGE_FROM_BUBBLE)
-                                    detectedXhsLink = null
-                                    return@homepageGuard
-                                }
-                                if (UrlUtils.isXhsHomepageLink(clipText)) {
-                                    openHomepage(clipText, HOMEPAGE_FROM_BUBBLE)
-                                    detectedXhsLink = null
-                                    return@homepageGuard
-                                }
-                                val platform = UrlUtils.detectPlatform(cleanUrl)
+                            // ★v3.3.14：统一闸门（先判定、再导航）。顺带补上旧实现缺的「小红书主页链接」
+                            //   判定 —— 原来这里只判抖音主页，小红书主页链接会被当单笔记塞进 WebView。
+                            routeUnknownLink(clipText, HOMEPAGE_FROM_BUBBLE) { cleanUrl, platform ->
                                 if (platform == "kuaishou") {
                                     // 快手链接走专用 WebView 入口（kuaishou_extractor 兜底）
                                     trackEvent("entry_webcrawl", mapOf("platform" to "kuaishou"))
@@ -689,10 +674,10 @@ class MainActivity : ComponentActivity() {
                                 } else {
                                     showToast(getString(R.string.link_not_recognized))
                                 }
-                                detectedXhsLink = null
-                            } else {
-                                showToast(getString(R.string.invalid_link_please_reenter))
                             }
+                            // 气泡点过即消失（含走主页下载的分支，旧实现是在各分支里逐个清的）
+                            detectedXhsLink = null
+                            detectedPlatform = null
                         }
                     },
                     onMediaClick = {
@@ -775,41 +760,34 @@ class MainActivity : ComponentActivity() {
                          com.neoruaa.xhsdn.DownloadService.stopTask(this, task.id)
                     },
                     onClearHistory = { trackEvent("clear_history"); viewModel.clearHistory() },
-                    onManualInputDownload = homepageGuard@{ inputLink ->
-                        // 抖音主页链接（分享文案 / /user/{sec_uid}）：走主页下载，反查作者并批量下载
-                        if (UrlUtils.isDouyinHomepageLink(inputLink)) {
-                            openHomepage(inputLink, HOMEPAGE_FROM_MANUAL)
-                            return@homepageGuard
-                        }
-                        // 小红书主页链接 → 同样走主页下载
-                        if (UrlUtils.isXhsHomepageLink(inputLink)) {
-                            openHomepage(inputLink, HOMEPAGE_FROM_MANUAL)
-                            return@homepageGuard
-                        }
+                    onManualInputDownload = { inputLink ->
                         ensureStoragePermission {
-                            val plat = UrlUtils.detectPlatform(inputLink)
-                            if (plat == "douyin") {
-                                // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
-                                trackEvent("entry_manual", mapOf("platform" to "douyin"))
-                                taskTab = platformTabIndex(plat)
-                                launchDouyinWebView(inputLink)
-                            } else if (plat == "kuaishou") {
-                                trackEvent("entry_manual", mapOf("platform" to "kuaishou"))
-                                taskTab = platformTabIndex(plat)
-                                launchKuaishouWebView(inputLink)
-                            } else if (plat == "xhs") {
-                                trackEvent("entry_manual", mapOf("platform" to "xhs"))
-                                taskTab = platformTabIndex(plat)
-                                viewModel.updateUrl(inputLink)
-                                if (selectiveDownload) {
-                                    trackEvent("selective_start")
-                                    viewModel.startSelectiveDownload { showToast(it) }
+                            // ★v3.3.14：统一闸门（先判定、再导航）——主页直接转主页下载，
+                            //   单作品直接下单作品通道，短链歧义先静默跟跳，全程最多一次跳页。
+                            routeUnknownLink(inputLink, HOMEPAGE_FROM_MANUAL) { cleanUrl, platform ->
+                                if (platform == "douyin") {
+                                    // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
+                                    trackEvent("entry_manual", mapOf("platform" to "douyin"))
+                                    taskTab = platformTabIndex(platform)
+                                    launchDouyinWebView(cleanUrl)
+                                } else if (platform == "kuaishou") {
+                                    trackEvent("entry_manual", mapOf("platform" to "kuaishou"))
+                                    taskTab = platformTabIndex(platform)
+                                    launchKuaishouWebView(cleanUrl)
+                                } else if (platform == "xhs") {
+                                    trackEvent("entry_manual", mapOf("platform" to "xhs"))
+                                    taskTab = platformTabIndex(platform)
+                                    viewModel.updateUrl(cleanUrl)
+                                    if (selectiveDownload) {
+                                        trackEvent("selective_start")
+                                        viewModel.startSelectiveDownload { showToast(it) }
+                                    } else {
+                                        dispatchDownload(cleanUrl, "xhs")
+                                    }
                                 } else {
-                                    dispatchDownload(inputLink, "xhs")
+                                    // 既非抖音/快手/小红书任一：提示链接暂不可识别
+                                    showToast(getString(R.string.link_not_recognized))
                                 }
-                            } else {
-                                // 既非抖音/快手/小红书任一：提示链接暂不可识别
-                                showToast(getString(R.string.link_not_recognized))
                             }
                         }
                     },
@@ -820,43 +798,42 @@ class MainActivity : ComponentActivity() {
                         trackEvent("tab_switch", mapOf("tab" to tabNameOf(it)))
                         taskTab = it
                     },
-                    onClipboardBubbleActivate = homepageGuard@{
+                    onClipboardBubbleActivate = {
                         val link = detectedXhsLink
                         if (!link.isNullOrBlank()) {
-                                val bubblePlatform = when {
-                                    UrlUtils.isDouyinHomepageLink(link) -> "douyin_home"
-                                    else -> UrlUtils.detectPlatform(link) ?: "unknown"
-                                }
-                                trackEvent("entry_bubble", mapOf("platform" to bubblePlatform))
-                                // 主页链接：走主页下载，反查作者并批量下载
-                                if (UrlUtils.isDouyinHomepageLink(link)) {
-                                    openHomepage(link, HOMEPAGE_FROM_BUBBLE)
-                                    detectedXhsLink = null
-                                    detectedPlatform = null
-                                    return@homepageGuard
-                                }
-                                // 平台判定：以当前链接实时识别为准（域名/关键词双保险）；
-                                // detectedPlatform 仅作兜底——否则残留的小红书平台会把快手/抖音链接派错通道
-                                val platform = UrlUtils.detectPlatform(link) ?: detectedPlatform
+                            val bubblePlatform = when {
+                                UrlUtils.isDouyinHomepageLink(link) -> "douyin_home"
+                                else -> UrlUtils.detectPlatform(link) ?: "unknown"
+                            }
+                            trackEvent("entry_bubble", mapOf("platform" to bubblePlatform))
+                            // 气泡点过即消失（旧实现是在各分支里逐个清的，容易漏）
+                            detectedXhsLink = null
+                            // 平台判定：以当前链接实时识别为准（域名/关键词双保险）；
+                            // detectedPlatform 仅作兜底——否则残留的小红书平台会把快手/抖音链接派错通道
+                            val platformHint = detectedPlatform
+                            detectedPlatform = null
                             ensureStoragePermission {
-                                // 识别到平台后自动跳到对应任务页签
-                                taskTab = platformTabIndex(platform)
-                                if (platform == "douyin") {
-                                    // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
-                                    launchDouyinWebView(link)
-                                } else if (platform == "kuaishou") {
-                                    launchKuaishouWebView(link)
-                                } else {
-                                    viewModel.updateUrl(link)
-                                    if (selectiveDownload) {
-                                        trackEvent("selective_start")
-                                        viewModel.startSelectiveDownload { showToast(it) }
+                                // ★v3.3.14：统一闸门（先判定、再导航）。旧实现只判「抖音主页」，
+                                //   小红书主页链接会被当单笔记下载（0 文件的死路）。
+                                routeUnknownLink(link, HOMEPAGE_FROM_BUBBLE) { cleanUrl, platform ->
+                                    val plat = platform ?: platformHint
+                                    // 识别到平台后自动跳到对应任务页签
+                                    taskTab = platformTabIndex(plat)
+                                    if (plat == "douyin") {
+                                        // 抖音：HTTP 直解已被风控拦截，改用 WebView 真浏览器解析
+                                        launchDouyinWebView(cleanUrl)
+                                    } else if (plat == "kuaishou") {
+                                        launchKuaishouWebView(cleanUrl)
                                     } else {
-                                        dispatchDownload(link, "xhs")
+                                        viewModel.updateUrl(cleanUrl)
+                                        if (selectiveDownload) {
+                                            trackEvent("selective_start")
+                                            viewModel.startSelectiveDownload { showToast(it) }
+                                        } else {
+                                            dispatchDownload(cleanUrl, "xhs")
+                                        }
                                     }
                                 }
-                                detectedXhsLink = null
-                                detectedPlatform = null
                             }
                         }
                     },
@@ -1105,6 +1082,71 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
+     * 短链跟跳归一化（v3.3.14）。`resolveFinalUrl` 内部已 `runCatching` + IO，失败原样返回。
+     * 只读：不切 tab、不写 homePreview、不 toast —— 入口层判定专用。
+     */
+    private suspend fun resolveEntryFinalUrl(url: String): String =
+        runCatching { DouyinParser.resolveFinalUrl(url) }.getOrDefault(url)
+
+    /**
+     * ★v3.3.14：统一入口分流 —— **先判定、再导航**。
+     *
+     * 旧实现的病根是「猜主页 → 先切页 → 跟跳发现猜错 → 再切回来」：
+     * `isXhsHomepageLink` 把 `xhslink.cn|com /o/{code}` 一律当主页，于是
+     * 复制**单篇笔记/单条视频**（小红书分享出来的正是这类 `/o/` 短链）时会先跳到
+     * 「主页下载」页、解析出来才发现是单作品，再跳回任务页下载 —— 用户看到两次跳页
+     * （2026-10-24 反馈："先跳一下主页下载，再跳到单个下载，观感很不好"）。
+     *
+     * 现在：
+     *  - 确定主页（`/user/{sec_uid}`、`/user/profile/{id}`、分享文案带「更多作品」）→ 直接 [openHomepage]；
+     *  - 确定单作品（`/video/{id}`、`/note/{id}`、`/discovery/item/{id}`…）→ 直接单作品通道，**永不经过主页下载页**；
+     *  - 短链歧义（`v.douyin.com` / `xhslink` / `v.kuaishou.com`）→ 静默跟跳一次再二分，跟跳期间界面**不动**。
+     *
+     * @param onSingle 判定为单作品时执行；入参为跟跳归一化后的 URL 与平台标识
+     */
+    private fun routeUnknownLink(
+        rawText: String,
+        from: String,
+        onSingle: (resolvedUrl: String, platform: String?) -> Unit
+    ) {
+        val cleanUrl = UrlUtils.extractFirstUrl(rawText)
+        if (cleanUrl == null) {
+            showToast(getString(R.string.link_not_recognized))
+            return
+        }
+        val platform = UrlUtils.detectPlatform(rawText) ?: UrlUtils.detectPlatform(cleanUrl)
+        val target = UrlUtils.entryTarget(rawText, cleanUrl)
+        // 入口分流取证：闪跳类问题看这一行就能定位是哪条入口、判成了什么
+        Log.d(TAG, "routeUnknownLink($from): $cleanUrl · $target · platform=$platform")
+        when (target) {
+            UrlUtils.EntryTarget.HOMEPAGE -> {
+                trackEvent("entry_route", mapOf("target" to "homepage", "from" to from))
+                openHomepage(cleanUrl, from)
+            }
+            UrlUtils.EntryTarget.SINGLE -> {
+                trackEvent("entry_route", mapOf("target" to "single", "from" to from))
+                onSingle(cleanUrl, platform)
+            }
+            UrlUtils.EntryTarget.AMBIGUOUS -> lifecycleScope.launch {
+                // 跟跳耗时 0.3~1.5s：期间**不切页**，用户不会看到中间态页面
+                val finalUrl = resolveEntryFinalUrl(cleanUrl)
+                val isHome = UrlUtils.isCertainHomepageUrl(finalUrl)
+                trackEvent(
+                    "entry_route",
+                    mapOf("target" to "ambiguous", "homepage" to isHome.toString(), "from" to from)
+                )
+                Log.d(TAG, "routeUnknownLink: $cleanUrl → $finalUrl · homepage=$isHome")
+                if (isHome) {
+                    // 用跟跳后的直链导航：下游不再重复跟跳，且天然带上 xsec_token/xsec_source
+                    openHomepage(finalUrl, from)
+                } else {
+                    onSingle(finalUrl, platform)
+                }
+            }
+        }
+    }
+
+    /**
      * 主页下载 v2 入口：输入主页链接/视频链接 → post API 拉作品列表 → 预览卡（昵称/总数/新增）。
      * L1 直取 403 → BgWebViewParser 预热一次重试；仍风控 → 提示先登录。
      */
@@ -1139,6 +1181,9 @@ class MainActivity : ComponentActivity() {
                         val uid = Regex("""xiaohongshu\.com/user/profile/([0-9A-Za-z]+)""")
                             .find(xhsUrl)?.groupValues?.getOrNull(1)
                         if (uid != null) {
+                            // 记录「已经跟跳归一化」的主页直链：登录返回后拿它重解析最稳
+                            // （短链 /o/ 原样存下来，登录后还得再跟一次，且可能已失效）
+                            lastXhsHomeLink = xhsUrl
                             fetchXhsHomePreview(uid, xhsUrl)
                         } else if (Regex("""xiaohongshu\.com/(?:discovery/item|explore)/[0-9a-zA-Z]+""").containsMatchIn(xhsUrl)) {
                             // ★短链两种目标都可能（实测 xhslink.cn/o/{code} 大多指向用户主页，
