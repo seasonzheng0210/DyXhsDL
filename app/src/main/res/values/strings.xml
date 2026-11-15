@@ -335,4 +335,18 @@
     <string name="xhs_login_success">登录成功：%1$s</string>
     <string name="xhs_login_verify_failed">登录校验失败：%1$s</string>
     <string name="xhs_login_no_cookie">未检测到登录 cookie，请先在页面完成扫码登录</string>
+
+    <!-- 抖音登录（v3.3.15）：主页作品列表对游客有硬上限（首屏 21 条），未登录拿不到全量 -->
+    <string name="douyin_login_gate_title">抖音未登录</string>
+    <string name="douyin_login_gate_message">当前未登录，抖音对游客只返回该作者最近 %1$d 条作品（匿名上限）。登录抖音后可解析并下载全部作品。</string>
+    <string name="douyin_login_gate_go">去登录抖音</string>
+    <string name="douyin_login_gate_continue">仅下载这 %1$d 条</string>
+    <string name="douyin_login_page_title">登录抖音</string>
+    <string name="douyin_login_hint">请在下方页面完成登录：点页面右上角「登录」，用手机号验证码或扫码登录。登录成功后会自动返回。</string>
+    <string name="douyin_login_detected">已检测到抖音登录凭据，正在返回…</string>
+    <string name="douyin_login_confirm">我已登录</string>
+    <string name="douyin_login_reload">刷新页面</string>
+    <string name="douyin_login_success">抖音登录成功</string>
+    <string name="douyin_login_no_cookie">未检测到登录凭据，请先在页面完成登录</string>
+    <string name="douyin_login_ok_reparse">抖音登录成功，正在重新解析该作者作品…</string>
 </resources>

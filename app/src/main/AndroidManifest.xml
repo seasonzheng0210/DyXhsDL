@@ -46,6 +46,10 @@
             android:theme="@style/Theme.MiuixCompatActionBar"
             android:exported="false" />
         <activity
+            android:name=".DouyinLoginActivity"
+            android:theme="@style/Theme.MiuixCompatActionBar"
+            android:exported="false" />
+        <activity
             android:name=".DetailActivity"
             android:theme="@style/Theme.MiuixCompatActionBar"
             android:exported="false" />

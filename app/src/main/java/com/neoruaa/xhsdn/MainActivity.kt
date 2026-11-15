@@ -220,6 +220,52 @@ class MainActivity : ComponentActivity() {
     private val _xhsLoginGate = mutableStateOf(false)
 
     /**
+     * 抖音主页批量「登录提示」闸门（v3.3.15）。
+     * ★与小红书的强制登录不同：抖音游客态**仍能拿到首屏一页（实测 18~21 条）**（服务端匿名上限），
+     *   硬拦会把一个能用的功能变成不可用。所以这里只提示「只能取到 N 条」并给两条路：
+     *   去登录（拿全量）/ 仅下载这 N 条（保持原行为）。
+     * 类级函数（confirmHomepageDownload）置 true → composition 里渲染 GlassDialog。
+     */
+    private val _douyinLoginGate = mutableStateOf(false)
+    /** 闸门文案里的条数 = 用户若选「仅下载」实际会下的条数。 */
+    private var douyinGateCount: Int = 0
+    /** 用户选「仅下载这 N 条」时重放的那次确认（已跳过闸门）。 */
+    private var pendingHomepageConfirm: (() -> Unit)? = null
+
+    /**
+     * 抖音登录页结果回调（v3.3.15）：登录成功后自动重新解析该作者主页，
+     * 省掉「登录 → 自己切页签 → 重新粘链接 → 再点解析」。
+     */
+    private val douyinLoginLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { res -> onDouyinLoginFinished(res.resultCode == android.app.Activity.RESULT_OK) }
+
+    /** 最近一次解析过的抖音主页链接：登录回来后拿它重解析。 */
+    private var lastDouyinHomeLink: String = ""
+
+    internal fun launchDouyinLogin() {
+        val intent = android.content.Intent(this, DouyinLoginActivity::class.java)
+        runCatching { douyinLoginLauncher.launch(intent) }.onFailure {
+            Log.w(TAG, "douyin login launcher 失败，降级 startActivity: ${it.message}")
+            runCatching { startActivity(intent) }
+        }
+    }
+
+    private fun onDouyinLoginFinished(confirmedByUser: Boolean) {
+        val logged = com.neoruaa.xhsdn.web.DouyinSession.hasLogin()
+        trackEvent("douyin_login_back", mapOf("ok" to logged.toString(), "confirmed" to confirmedByUser.toString()))
+        if (!logged) {
+            // ★只在用户主动点了「我已登录」时提示失败；纯按返回键 = 放弃登录，静默退出
+            if (confirmedByUser) showToast(getString(R.string.douyin_login_no_cookie))
+            return
+        }
+        val link = lastDouyinHomeLink
+        if (link.isBlank()) return  // 从别处进的登录页、没解析过主页 → 不跳
+        showToast(getString(R.string.douyin_login_ok_reparse))
+        fetchHomepagePreview(link)
+    }
+
+    /**
      * 登录页结果回调（v3.3.8）：登录成功后自动跳回「首页下载 · 小红书」并重新解析，
      * 省掉「登录 → 自己切页签 → 重新粘链接 → 再点解析」这一串动作。
      */
@@ -890,6 +936,49 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
+                // ★抖音主页下载登录提示（v3.3.15）：不硬拦——游客仍可下首屏，只是拿不到全量。
+                //   主按钮 = 去登录（拿全量）；次按钮 = 仅下载这 N 条（保持原行为）。
+                if (_douyinLoginGate.value) {
+                    GlassDialog(
+                        title = stringResource(R.string.douyin_login_gate_title),
+                        summary = stringResource(R.string.douyin_login_gate_message, douyinGateCount),
+                        confirmText = stringResource(R.string.douyin_login_gate_go),
+                        cancelText = null,
+                        onConfirm = {
+                            _douyinLoginGate.value = false
+                            // 保留 pending：登录回来重解析后用户会再点一次确认
+                            pendingHomepageConfirm = null
+                            trackEvent("douyin_home_login_gate_go")
+                            launchDouyinLogin()
+                        },
+                        onDismiss = {
+                            // 点遮罩/返回 = 纯取消，绝不隐式触发批量下载
+                            _douyinLoginGate.value = false
+                            pendingHomepageConfirm = null
+                            trackEvent("douyin_home_login_gate_dismiss")
+                        },
+                        content = {
+                            androidx.compose.material3.TextButton(
+                                onClick = {
+                                    _douyinLoginGate.value = false
+                                    trackEvent("douyin_home_login_gate_continue")
+                                    val act = pendingHomepageConfirm
+                                    pendingHomepageConfirm = null
+                                    act?.invoke()
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                androidx.compose.material3.Text(
+                                    text = stringResource(
+                                        R.string.douyin_login_gate_continue, douyinGateCount
+                                    ),
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    )
+                }
+
                 // UI v2 S5：引导页浮于主界面之上（首启仅一次；完成后进入主界面）
                 if (showOnboarding) {
                     OnboardingScreen(
@@ -1249,6 +1338,9 @@ class MainActivity : ComponentActivity() {
                     // 已定位到作者 → 进入「解析作者主页」阶段
                     homeParseStage = 1
                     val homepageUrl = "https://www.douyin.com/user/$secUid"
+                    // 记录归一化后的主页直链：抖音登录返回后拿它重解析最稳
+                    // （短链原样存下来，登录后还得再跟一次，且可能已失效）
+                    lastDouyinHomeLink = homepageUrl
                     val items = mutableListOf<DouyinPostItem>()
                     var nickname: String? = HomeRepo.nickname(this@MainActivity, secUid)
                     var totalCount = 0
@@ -1486,7 +1578,8 @@ class MainActivity : ComponentActivity() {
         latestN: Int,
         includeImages: Boolean,
         skipDownloaded: Boolean,
-        selectedIds: Set<String> = emptySet()
+        selectedIds: Set<String> = emptySet(),
+        skipLoginGate: Boolean = false
     ) {
         // ★v3.3.6 强制登录：小红书主页批量下载必须登录。
         //   未登录时服务端只给前 8 条、且没有 note 级 xsec_token → 拿不到原片，只能下封面图，
@@ -1501,6 +1594,22 @@ class MainActivity : ComponentActivity() {
         val chosen = scopeHomepageItems(state, range, latestN, includeImages, skipDownloaded, selectedIds)
         if (chosen.isEmpty()) {
             showToast(getString(R.string.home_preview_none_new))
+            return
+        }
+        // ★v3.3.15 抖音登录提示（不硬拦）：游客态服务端只返回首屏一页（实测 18~21 条），
+        //   登录后才给全量。用户若只是想下眼前这批，选「仅下载这 N 条」即可原样继续。
+        if (!skipLoginGate && state.platform == "douyin" &&
+            !com.neoruaa.xhsdn.web.DouyinSession.hasLogin()
+        ) {
+            trackEvent("homepage_blocked_need_login", mapOf("platform" to "douyin"))
+            douyinGateCount = chosen.size
+            pendingHomepageConfirm = {
+                confirmHomepageDownload(
+                    state, range, latestN, includeImages, skipDownloaded, selectedIds,
+                    skipLoginGate = true
+                )
+            }
+            _douyinLoginGate.value = true
             return
         }
         trackEvent("homepage_confirm", mapOf("range" to range.name, "count" to chosen.size.toString()))
