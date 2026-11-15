@@ -349,4 +349,13 @@
     <string name="douyin_login_success">抖音登录成功</string>
     <string name="douyin_login_no_cookie">未检测到登录凭据，请先在页面完成登录</string>
     <string name="douyin_login_ok_reparse">抖音登录成功，正在重新解析该作者作品…</string>
+
+    <!-- 抖音登录入口（设置页账号行 + 主页下载页状态行，v3.3.16 对齐小红书） -->
+    <string name="account_group_title">账号</string>
+    <string name="douyin_login_entry_title">抖音登录</string>
+    <string name="douyin_login_entry_summary_logged_in">已登录 · 主页批量可下载全量作品</string>
+    <string name="douyin_login_entry_summary_logged_out">未登录 · 主页只能取首屏一页（约 18 条）</string>
+    <string name="home_dy_logged_in">抖音已登录 · 可下载该作者全部作品</string>
+    <string name="home_dy_logged_out">抖音未登录 · 只能取首屏一页，登录后下全量</string>
+    <string name="home_dy_login_action">登录</string>
 </resources>

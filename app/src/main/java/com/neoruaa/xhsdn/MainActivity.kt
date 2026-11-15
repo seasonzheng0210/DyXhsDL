@@ -2067,6 +2067,7 @@ private fun MainScreen(
                             activeLink = activeLink,
                             // MainScreen 是文件级 Composable，取不到 Activity 私有方法 → 走 ctx 强转
                             onXhsLogin = { (ctx as? MainActivity)?.launchXhsLogin() },
+                            onDouyinLogin = { (ctx as? MainActivity)?.launchDouyinLogin() },
                             modifier = Modifier.fillMaxSize()
                         )
                         // 2=我的：内嵌设置页（UI v2 S3 分组；原 SettingsActivity 保留独立入口）
@@ -3879,6 +3880,8 @@ private fun HomepagePage(
     activeLink: String = "",
     /** 打开小红书登录页。 */
     onXhsLogin: () -> Unit = {},
+    /** 打开抖音登录页（v3.3.16：抖音主页作品列表对游客只给首屏一页）。 */
+    onDouyinLogin: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val ctx = LocalContext.current
@@ -4019,8 +4022,8 @@ private fun HomepagePage(
                 }
             }
         }
-        // ── 小红书登录态（仅 xhs 平台显示）──
-        if (homePlatform == "xhs") {
+        // ── 登录态行（v3.3.16：xhs 与 douyin 都显示，此前只有 xhs）──
+        if (homePlatform == "xhs" || homePlatform == "douyin") {
             // 登录态必须在「登录页返回」后刷新：remember{} 无 key 会一直显示旧值（未登录）
             val loginLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
             var loginTick by remember { androidx.compose.runtime.mutableIntStateOf(0) }
@@ -4033,8 +4036,10 @@ private fun HomepagePage(
             }
             // 订阅登录态版本号：停在页面时被风控判定失效（461）也能立刻翻成「未登录」
             val sessionEpoch = com.neoruaa.xhsdn.web.XhsSession.epochState.intValue
-            val xhsLoggedIn = remember(loginTick, sessionEpoch) {
-                com.neoruaa.xhsdn.web.XhsSession.get(ctx).hasLogin()
+            val isXhsRow = homePlatform == "xhs"
+            val loggedIn = remember(loginTick, sessionEpoch, homePlatform) {
+                if (isXhsRow) com.neoruaa.xhsdn.web.XhsSession.get(ctx).hasLogin()
+                else com.neoruaa.xhsdn.web.DouyinSession.hasLogin()
             }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -4042,16 +4047,21 @@ private fun HomepagePage(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (xhsLoggedIn) stringResource(R.string.home_xhs_logged_in)
-                    else stringResource(R.string.home_xhs_logged_out),
+                    text = if (isXhsRow) {
+                        if (loggedIn) stringResource(R.string.home_xhs_logged_in)
+                        else stringResource(R.string.home_xhs_logged_out)
+                    } else {
+                        if (loggedIn) stringResource(R.string.home_dy_logged_in)
+                        else stringResource(R.string.home_dy_logged_out)
+                    },
                     fontSize = 12.sp,
-                    color = if (xhsLoggedIn) MaterialTheme.colorScheme.primary
+                    color = if (loggedIn) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f)
                 )
-                if (!xhsLoggedIn) {
+                if (!loggedIn) {
                     Button(
-                        onClick = onXhsLogin,
+                        onClick = if (isXhsRow) onXhsLogin else onDouyinLogin,
                         enabled = !parsing,
                         // ★必须给显式宽度：左侧 Text 带 weight(1f)，不给宽时按钮被挤成「登…」
                         // ★insideMargin 竖向必须为 0：默认上下内边距会把这 32dp 高度吃光，文字被裁成一条
@@ -4060,7 +4070,8 @@ private fun HomepagePage(
                         insideMargin = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                     ) {
                         Text(
-                            text = stringResource(R.string.home_xhs_login_action),
+                            text = if (isXhsRow) stringResource(R.string.home_xhs_login_action)
+                            else stringResource(R.string.home_dy_login_action),
                             fontSize = 12.sp,
                             maxLines = 1,
                             softWrap = false

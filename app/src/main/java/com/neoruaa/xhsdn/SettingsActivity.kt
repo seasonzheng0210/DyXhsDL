@@ -443,11 +443,22 @@ internal fun SettingsScreen(
             }
 
             // ★v3.3.3：小红书账号 —— 扫码登录入口（WebView 官方登录页收割 cookie）。
+            // ★v3.3.16：抖音登录并入同一「账号」分组（此前只有确认下载时的闸门，用户找不到入口）。
             item {
-                SettingsGroup(stringResource(R.string.xhs_account_group_title)) {
+                SettingsGroup(stringResource(R.string.account_group_title)) {
+                    // 登录态必须在「从登录页返回」后刷新：remember{} 无 key 会一直显示旧值（未登录）
+                    val loginLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
+                    var loginTick by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+                    androidx.compose.runtime.DisposableEffect(loginLifecycle) {
+                        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+                            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) loginTick++
+                        }
+                        loginLifecycle.lifecycle.addObserver(obs)
+                        onDispose { loginLifecycle.lifecycle.removeObserver(obs) }
+                    }
                     // 订阅登录态版本号：登录页返回 / 被风控判定失效后都能立刻刷新
                     val sessionEpoch = com.neoruaa.xhsdn.web.XhsSession.epochState.intValue
-                    val xhsLoggedIn = remember(sessionEpoch) {
+                    val xhsLoggedIn = remember(loginTick, sessionEpoch) {
                         com.neoruaa.xhsdn.web.XhsSession.get(context).hasLogin()
                     }
                     BasicComponent(
@@ -459,6 +470,22 @@ internal fun SettingsScreen(
                         onClick = {
                             context.startActivity(
                                 Intent(context, XhsLoginActivity::class.java)
+                            )
+                        }
+                    )
+                    // 抖音登录：无登录态时主页作品列表只有首屏一页（实测 18/2065 条）
+                    val dyLoggedIn = remember(loginTick) {
+                        com.neoruaa.xhsdn.web.DouyinSession.hasLogin()
+                    }
+                    BasicComponent(
+                        title = stringResource(R.string.douyin_login_entry_title),
+                        summary = stringResource(
+                            if (dyLoggedIn) R.string.douyin_login_entry_summary_logged_in
+                            else R.string.douyin_login_entry_summary_logged_out
+                        ),
+                        onClick = {
+                            context.startActivity(
+                                Intent(context, DouyinLoginActivity::class.java)
                             )
                         }
                     )
