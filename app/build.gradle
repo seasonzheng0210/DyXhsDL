@@ -20,8 +20,8 @@ android {
         applicationId "com.neoruaa.douyinxhs"
         minSdk 24
         targetSdk 37
-        versionCode 142
-        versionName "3.3.16"
+        versionCode 143
+        versionName "3.3.17"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

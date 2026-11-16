@@ -342,7 +342,7 @@
     <string name="douyin_login_gate_go">去登录抖音</string>
     <string name="douyin_login_gate_continue">仅下载这 %1$d 条</string>
     <string name="douyin_login_page_title">登录抖音</string>
-    <string name="douyin_login_hint">请在下方页面完成登录：点页面右上角「登录」，用手机号验证码或扫码登录。登录成功后会自动返回。</string>
+    <string name="douyin_login_hint">页面会自动缩小到整页可见。点右上角红色「登录」（字小可双指放大后再点），用手机号验证码或扫码登录，成功后会自动返回。按系统返回键可随时退出本页。</string>
     <string name="douyin_login_detected">已检测到抖音登录凭据，正在返回…</string>
     <string name="douyin_login_confirm">我已登录</string>
     <string name="douyin_login_reload">刷新页面</string>
