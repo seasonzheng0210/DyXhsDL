@@ -179,8 +179,25 @@ private fun DouyinLoginScreen(
                     // 页面自己的 viewport meta 无视，移动 UA 也是 PC 版 → 只能在页面加载完
                     // 后用 CSS zoom 把 ~1600px 的 PC 布局缩进 720px 视口（0.45），
                     // 右上角「登录」才点得到；配合 setSupportZoom 双指放大操作。
+                    // ★v3.3.18 消除「打开黑屏」：抖音页面重 + 模拟器软渲染慢，
+                    // 加载的 4~10s 里黑底只有个「加载中」，用户会误判卡死。
+                    // 先把 WebView 透明化，页面渲染完（onPageFinished + 首帧）再显示。
+                    alpha = 0f
+                    // 加载进度实时上屏：白屏期间用户看进度而不是一片黑
+                    webChromeClient = object : android.webkit.WebChromeClient() {
+                        override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                            status = if (newProgress >= 90) {
+                                context.getString(R.string.douyin_login_loaded)
+                            } else {
+                                context.getString(R.string.douyin_login_loading, newProgress)
+                            }
+                        }
+                    }
                     webViewClient = object : WebViewClient() {
                         override fun onPageFinished(view: WebView, url: String) {
+                            view.animate().alpha(1f).setDuration(250).start()
+                            // 状态行更新：提示文案是「整页可见后点登录」，
+                            // 此刻起才是准确状态（之前显示的加载提示留给 status）
                             // 按「CSS 视口宽 / 页面实际宽」动态算 zoom：
                             // 720 屏（density 2.0 → CSS 宽 360）与 1080 屏（density 2.625 → 411）
                             // 各自适应，不再硬编码 0.45。
